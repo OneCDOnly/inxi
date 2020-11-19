@@ -24,25 +24,39 @@
 # this program. If not, see http://www.gnu.org/licenses/.
 ############################################################################
 
-TARGETBIN_PATHFILE=/usr/bin/inxi
+readonly LAUNCHER_PATHFILE=$(/sbin/getcfg inxi Install_Path -f /etc/config/qpkg.conf)/inxi.pl
+readonly USERLINK_PATHFILE=/usr/bin/inxi
 
 case "$1" in
     start)
         if ! command -v perl; then
             echo "'inxi' requires a Perl interpreter to be installed."
+            /sbin/write_log "[inxi] requires a Perl interpreter to be installed" 1
             exit 1
         fi
-        [[ ! -e $TARGETBIN_PATHFILE ]] && ln -s $(/sbin/getcfg inxi Install_Path -f /etc/config/qpkg.conf)/inxi.pl "$TARGETBIN_PATHFILE"
+
+        [[ ! -L $USERLINK_PATHFILE && -e $LAUNCHER_PATHFILE ]] && ln -s "$LAUNCHER_PATHFILE" "$USERLINK_PATHFILE"
+
+        if [[ -L $USERLINK_PATHFILE ]]; then
+            echo "symlink created: $USERLINK_PATHFILE"
+        else
+            echo "error: unable to create symlink to 'inxi' launcher!"
+        fi
+
         ;;
     stop)
-        [[ -L $TARGETBIN_PATHFILE ]] && rm -f "$TARGETBIN_PATHFILE"
+        if [[ -L $USERLINK_PATHFILE ]]; then
+            rm -f "$USERLINK_PATHFILE"
+            echo "symlink removed: $USERLINK_PATHFILE"
+        fi
+
         ;;
     restart)
         $0 stop
         $0 start
         ;;
     *)
-        echo "run init as: $0 {start|stop|restart}"
+        echo "run service script as: $0 {start|stop|restart}"
         echo "to see everything: inxi -Fxxxm"
         ;;
 esac
