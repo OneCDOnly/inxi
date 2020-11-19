@@ -29,12 +29,6 @@ readonly USERLINK_PATHFILE=/usr/bin/inxi
 
 case "$1" in
     start)
-        if ! command -v perl; then
-            echo "'inxi' requires a Perl interpreter to be installed."
-            /sbin/write_log "[inxi] requires a Perl interpreter to be installed" 1
-            exit 1
-        fi
-
         [[ ! -L $USERLINK_PATHFILE && -e $LAUNCHER_PATHFILE ]] && ln -s "$LAUNCHER_PATHFILE" "$USERLINK_PATHFILE"
 
         if [[ -L $USERLINK_PATHFILE ]]; then
@@ -43,6 +37,11 @@ case "$1" in
             echo "error: unable to create symlink to 'inxi' launcher!"
         fi
 
+        if ! command -v perl; then
+            echo "Note: 'inxi' requires a Perl interpreter to be installed."
+            /sbin/write_log "[inxi] requires a Perl interpreter to be installed" 1
+            exit 1
+        fi
         ;;
     stop)
         if [[ -L $USERLINK_PATHFILE ]]; then
