@@ -1,4 +1,605 @@
 ================================================================================
+Version: 3.3.23
+Patch: 00
+Date: 2022-10-31
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+This release fixes another very long standing bug, which I was not sure was an 
+inxi or a Konversation bug, which made tracking it down very difficult. Special 
+thanks to argonel of Konversation for helping solve this problem, or at least, 
+for directing my attention towards the likely cause area, and away from wrong 
+ideas. The bug was that inxi simply did not run in Konversation, it would exit 
+with error when run with /cmd or /inxi via symbolic links.
+
+This may not seem like a huge deal to many of you, but the actual history of 
+inxi was directly linked to user support in mainly Konversation, so this feature 
+not working I have alwyas found extremely annoying, but I could never figure out 
+why it wasn't workiing, and didn't really know where to start until Argonel 
+helped narrow it down to a specific Konversation function in inxi. At which 
+point tracking down the real bug was fairly easy. Since testing in IRC is always
+a key test point for inxi features and releases, not working in my main GUI IRC 
+client forced me to use CLI clients like irssi, via /exec -o inxi.
+
+There was a secondary cause of failure, which was missing a key qdbus package,
+which made figuring this one out a two step process.
+
+So inxi is once again working in all areas, with no known significant failure 
+areas beyond known issues that have no current solution, or which I don't feel 
+like doing. 
+
+But possibly more important, a goal I have had for a while now of doing long 
+needed code refactors, bug fixes, without huge new code blocks or features 
+adding new future fixes and bugs, has been slowly happening. 
+
+This was quite important, because inxi's codebase and logic is so complex and 
+large now that at some point, it required rest and cleanup and corrections, 
+without continuously adding new code and logic, which would then trigger new 
+fixes and bugs. In other words, the code is taking a long needed, and well 
+deserved, breather, to recover after huge increases in the overall LOC and 
+feature sets.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. No known way to detect that the system might be Wayland for the Graphics:.. 
+API: fixes, unless Xwayland is installed if the wayland protocol detections 
+failed, which they often do in console. Not practical to look for all compositor 
+variants on system to determine if it could be Wayland if not X or Xvesa, so 
+that one will just be what it is, which is fine, definitely better than it was 
+before. Note this is only an issue if in Console, no Display. Note that if inxi 
+is run as root, Wayland data also usually fails, even in Display.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. Another corner case monitor position issue, applied fallback primary monitor
+rule when a primary monitor had already been located. This is corrected via a 
+graphics global $b_primary which once set will disable this fallback feature. 
+Objectively, the fallback feature should just be removed. The test is if that
+monitor is not primary, and if position is 0x0, then assume primary, without 
+verifying no primary had been located yet.
+
+2. A super old bug, in current konversation, was failing to trip the konvi 
+detections, which then resulted in not stripping off the first two args in 
+@ARGV, which then resulted in bad args being passed to inxi on konvi start, 
+which then resulted in silent failing. Many thanks to argonel of #konversation 
+for the patience to help me figure out what was going on with this bug. He's 
+been a Konversation developer probably longer than I've been doing inxi.
+
+Cause was very tricky and subtle, the ps aux path for konvi had changed 
+slightly, not the path, but the pattern, it used to be:
+
+konversation -session [sessin id]
+but it's changed to:
+konversation -qwindowtitle Konversation
+or just plain:
+konversation as line ending.
+
+This led to failure to find konvi running, which then made the konvi ids fail.
+
+Also, this would not work if the qdbus-qt5 package was not installed, or other
+distros might have that packaged differently. Because of these dual causes, I 
+was simply unable to figure out what was going on for many years. I suspect this 
+stopped working with KDE 5/QT 5, but I'm not sure.
+
+3. Used wrong key names for some ZFS tests and fallbacks, those could have led 
+to failures though very difficult to test and verify this. Also see fix 5, which 
+of course also looks like a bug, acts like one, but was actually due to a new 
+use of /dev/disk/by-partuuid for ZFS components in Ubuntu which inxi had not 
+seen before.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. Alternate ps IDs for appimage detection (try appimagelauncher), alternate 
+paths for possible appimage storage locations (also try ~/.appimage/*). File 
+names might be *.appimage or *.AppImage, probably other variants too.
+
+2. Going along with Change 1, made tests more granular for missing graphics API 
+type data. Also updated messages to be more correct and clear, in and out of 
+display. This corrects an issue I'd seen but never resolved, which was on 
+headless systems showing this message:
+
+Message: GL data unavailable in console. Try -G --display
+
+Now the tests are far more granular, and only show that if glxinfo is installed, 
+and also shows specific messages if glxinfo not installed, but X/Xorg present, 
+or, for Wayland, if Xwayland present. These all get their own specific messages 
+now, and generally will also show which API is being used, or API: N/A if 
+nothing is detected, as in the case of a headless system with no X, Wayland, 
+etc.
+
+3. Github issue #275 on of all things Microsoft WSL environment, has a small 
+glitch with undefined display hz, but otherwise inxi seems to work in that 
+environment, albeit missing many data types!
+
+4. Made tests for konversation more robust, including test for 
+$ENV{'PYTHONPATH'} containing konversation in path, which I believe will work 
+for all new Konversations (KDE 5 and newer), and be much faster. The previous 
+tests are now more robust and less prone to failure, and only activate when 
+PYTHONPATH is not present with konversation string present as well.
+
+5. Fix for ZFS using /dev/disk/by-partuuid for partition id in zfs, 
+which can lead to wrong usable disk total size report, along with failure 
+to show components. Thanks delanym, issue #276 for reporting this problem, which
+also exposed some harder to trigger bugs in ZFS (Bug 3).
+
+6. Exposed by issue #276, case where line was wrapping value when value was too 
+short visually to value: used: 34.4 GiB (4.5%) due to the 3 or more words 
+trigger to enable wrapping of value, but noticed that if length of line was 
+exactly max-width, not > or <, it might vanish.
+
+7. Case where no X or GPU drivers found, but dri driver detected, was not 
+showing, now does.
+
+8. OpenRC is the init system in some cases, that is: readlink /sbin/init > 
+/sbin/openrc-init, where /proc/1/comm == init. Was showing only as OpenRC rc 
+type, which wasn't actually correct.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. New nvidia gpu product ids for Turing, Ampere, Lovelace, Hopper. New Intel 
+GPU ids.
+
+2. Added Zinc to systembase/distro, needs slightly special handling to get both
+names right. Also added Tuxedo, which could use existing methods.
+
+3. Added dpkg tool nala, which is sort of a CLI front end for apt, zinc uses it, 
+but it's also in Debian main package pool. Also deb-get, which is another zinc 
+thing for package management.
+
+4. Full support for dinit: version, dinitctl w/status in ServiceData
+
+4. Added initial support for init systems: 31init (31 line C program, no 
+--version), Hummingbird (unknown if -v/--version).
+
+5. A few new CPU arch ids (new Intels).
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. Going somewhat along with the change in Audio to call ALSA a Sound API 
+instead of a sound server, changed key name OpenGL: to API: OpenGL in Graphics. 
+Also for EGL wayland, calling that the api too.
+
+https://en.wikipedia.org/wiki/OpenGL
+
+This conforms more closely to how these things are defined. Note that once 
+again, a value had been used as a key name, which almost always indicates a 
+failure to understand something about the core tech.
+
+2. Changed wrapping of values from 3 words or more to 3 or more words AND length 
+> 24 characters. Saw example of:
+ .... used: 28.45 GiB 
+  (4.5%)
+  
+which isn't desirable.
+
+3. Changed minimum wrap to 60 columns, the new wrapper features are working so 
+well that if users want output that short, it will usually work fine, except of
+course for very long word strings like a kernel name or parameter. 
+
+Note that this does not truncate long 'words' that might be wrapped, or going
+along with Change 2, long 'sentences' of 2 words, those will always appear on 
+the same line regardless. For 'sentences' of 3 or more words, however, it goes 
+word by word, so it could well wrap after the first word, and so on. Obviously,
+a 24 or fewer character value will never be wrapped, which was the intended 
+correction of change 2.
+
+4. Going with Fix 8, OpenRc is an init system when it owns /proc/1/comm, had not
+realized that /proc/1/comm == init can map to dinit, openrc as init. Now will 
+only show OpenRc as rc: type if not init as well.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1. Updates in man for Change 1.
+
+2. Added to docs/inxi-graphics.txt good quote re EGL/GBM, as well as VBE/GOP for 
+vesa. Trying to find docs where they actually say clearly it's an API is 
+remarkably difficult.
+
+3. Man page, added note about Konversation requiring qdbus-qt5 (Debian+), 
+qt5-qttool (RHEL+/SUSE+), qt-tools (Arch+) for inxi to work inside it. Also 
+updated smxi.org/docs/inxi-usage.txt to note requirements for Konversation use 
+and setup.
+
+4. Man, help, changed min width for -y/--width from 80 to 60.
+
+5. docs/inxi-values.txt updated for --cygwin, --wsl fake OS type switches. Not
+technically the OS, more the environment, but close enough.
+
+6. docs/inxi-init.txt updated for new init types.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. Refactored tools/gpu_ids.pl to correct and enhance some features.
+
+2. Renamed functions and sections to better reflect that the display interface
+is an API, this makes stuff less odd internally, and makes the function/variable
+names correspond better to what the stuff really is.
+
+3. Commented out kde konversation data source config collector, that logic looks 
+like it never worked, and couldn't work, since it never actually located 
+inxi.conf files, just paths to the data directories.
+
+4. Expanded release.pl to handle acxi docs as well, makes it all consistent and
+a lot easier to do long term.
+
+5. Fake --wsl WSL switch, not really used, but in case.
+
+6. Changed $b_cygwin to $windows{'cygwin'} and added $windows{'wsl'}.
+
+7. Added -WSL to debugger string generator once WSL type is detected.
+
+8. Refactored init, runlevel functions get_init_data() (now InitData::get()), 
+get_runlevel_data() (now InitData::get_runlevel()), get_runlevel_default() (now 
+InitData::get_runlevel_default()) into one package/class: InitData. This should 
+have been done a long time ago, to follow the general rule "if > 1 functions for 
+a tool refactor it into a class/package" for when to create a package/class 
+internally.
+
+9. Completed gpu_ids.pl, now outputs the full hash set per item, so entire 
+blocks can be copied/pasted over. Something of a pain to get comments included, 
+which aren't strictly necessary in pinxi itself, but they do help read the 
+hashes for gpu data.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Mon, 31 Oct 2022 16:45:37 -0700
+
+================================================================================
+Version: 3.3.22
+Patch: 00
+Date: 2022-10-08
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+Another big one, with a long time to-do item done! /sys based sensors data is 
+now used as a fallback, with fully revised error messages to handle this new 
+sensor data variant. Due to potential bugs this might create, this was left off 
+of the 3.3.21 release, which needed to go out on a schedule, but there is plenty
+of time for 3.3.22 to be debugged.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. inxi can't currently handle raw in[0-9] voltage sensor data from 
+/sys/class/hwmon, that may get corrected, but I've honestly never seen a system 
+that shows raw in[0-9] values as field names, so it's probably not very 
+pressing, but it can happen. Similar that is to how default fanx and tempx field 
+names are processed.
+
+2. Currently only checking -Gx, -Nx device temp for bus IDs ending in .0, which
+is the primary PCI device. I think that's the only one that will have a temp, 
+.1, which is a second device on the same hardware, doesn't have that data in 
+tests. Saves some requests since it's a big glob of /sys.
+
+3. Spiral Linux has no obvious way to determine that it is Spiral and not Debian 
+11 as base distro. No /etc/ files for distro ID contain anything for spiral, so
+leaving that one alone.
+
+4. Can't get 100% reliable cpu level > v2 due to it not being a pure cpu flag 
+based test, which is kind of sadly typical for the originators of this idea, but 
+since the choice was dump the feature, or just use the note: check for > v2, 
+opted for note: check. One wants to ask questions here, but honestly I already 
+know the answer so why bother asking the question... The docs for this are 
+awful, inadequate, incomplete.
+
+My strong suspicion is that this is NOT intended to be a distro-wide feature 
+beyond v2 support minimum, but rather is for specific compile options for a 
+package or daemon or server or whatever that can benefit from this type of 
+fine-tuning. One thinks of Gentoo for example back when such fine-tunings could 
+actually deliver noticeable differences in performance. A per system type 
+feature that is, not a distro-wide feature. At least that's my initial feeling, 
+but this is probably about all the  time I will spend on it since inxi can't get 
+it more accurate anyway.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. Bug in monitor position logic, the horizontal/vertical sorts were being done 
+alphanumerically, leading to absurd results where 800 > 2560 or whatever. 
+Basically all x / y positions less than 1000 would have forced the smaller 
+number to be considered as the greatest value. Another corner case find by 
+mrmazda. Thanks mrmazda!
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. Added i350bb sensor to network sensor type.
+
+2. Small glitch with some scenarios with missing fan1 in sensors, showed fan1 0 
+rpm, but then showed fan 3: empty. That was a slight error in how undefined vs 
+'' empty was treated.
+
+3. Added fix for defective fan speeds, skip fan item if > 15000, which is a bug 
+in the fan speed report, making it useless. Seen 65535 reported RPM. Could 
+probably make it 10000 upper limit but suspect that is a simple bug that creates 
+an absurd value, 2^16 so won't be anything high unless bug active. This fix runs 
+for ipmi, linux, and sysctl fan data.
+
+4. Trying for fix for dynamic gpu voltage, assumed always mV, but might be V.
+
+5. Inadequate or obscure or non-existent redhat/suse documentation led to some 
+fixes for cpu v levels. Note that level v3/v4 can't be fully determined by cpu 
+flag tests, but who cares? Certainly not me. Added 'note: check' for v3/v4.
+
+6. Nvidia device arch id was too loose, false id for non existing lovelace arch.
+Note that due to array reverse, the newest ids will always run first, which 
+leads to possible false positives with first string match tests when no product 
+IDs are available yet.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. Elbrus CPU arch, process, year, arch data made more complete using new data 
+resource. Thanks Elbrus guys!
+
+2. Finally, raw, basic /sys/class/hwmon temp data. Linux kernel docs note 
+supports temp, fan, volts, amps, energy. But have only seen temps so far. Can 
+force /sys use with --force sensors-sys / --sensors-sys, though there's no point
+to doing that except to test.
+
+Also changed --recommends to note lm-sensors not required for sensor data now.
+
+3. Adding device temp for -Gx, -Nx. Will only work for Linux and when found, and 
+only for free drivers (I think).
+
+4. Added xdriinfo based dri drivers (with fallback to Xorg.0.log as data source, 
+not as accurate), that will show if and only if that driver is not the same name 
+as a detected X or gpu driver.
+
+5. Another big upgrade to cp_cpu_arch, added and corrected many AMD/Intel 
+matches. 
+
+6. A few more gpu product ids, Intel, added.
+
+7. More disk vendors, ids, the list, as we are now well aware, is endless, 
+reflecting perhaps the futility of pursuing the infinite using finite means.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. Slight changes in how inxi supplies no sensor data messages, and in the 
+fallback cases and handling. More accurate and precise, and more robust overall.
+
+2. Due to complexity of understanding level: and the fact not all cpu flags are
+exposed that are required, moved -Cxx level: to -Ca.
+
+3. Changing slightly inaccurate Sound Server for ALSA/OSS to Sound API, which is 
+the closest I can come to explaining clearly what it is. Note that you can only 
+load one API type audio subsystem/driver, so you will be running one or the 
+other, never both, from what I understand. 
+
+Since OpenBSD sndio includes sndiod, calling that a sound server is basically 
+fine, since it's both the server and the interface, if I understand it right, 
+and there won't be a second sound server listed, actually won't be for any BSD
+that I know of, it's going to be sndio or OSS or nothing, unless something has 
+changed.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1. Man page, updates for /sys/class/hwmon based sensor data.
+
+2. Small update for cpu level v3/v4, added note: check explanation, though it's 
+too hard to really explain this stuff since the docs are... not wonderful, when 
+they even exist and don't contradict each other. 
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. Refined significantly sensors missing data and error messages to be much more 
+accurate and granular. Also enables more sensors tools, though hopefully they 
+won't appear since those are a real pain to implement, but it's more open to 
+being sensor tool agnostic now due to these refinements than before.
+
+2. Added xdpiinfo to debugger.
+
+3. Switched x_drivers to return ref of array of refs, use join for output only, 
+that lets us use the drivers to test dri stuff also (if we want or need to), and 
+keeps it consistent with how most of inxi does that type of data 
+handling/testing. If undef, it means no array ref exists, which makes testing 
+easy.
+
+Not truly understanding hash/array refs when inxi rewrite to Perl started is 
+probably one of the bigger causes of glitches and ongoing optimizations. 
+Basically, in all but very small array cases, it's almost always better to start 
+with a ref from the start as soon as the hash/array moves between functions, 
+with one exception, when it's a globally stored data item. Then it depends. But 
+this requires a consistent testing for null data as well, which is harder if you 
+did it in different ways from the start. But slowly and surely chipping away at 
+these.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Sat, 7 Oct 2022 11:15:12 -0700
+
+================================================================================
+Version: 3.3.21
+Patch: 00
+Date: 2022-08-22
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+A small point release, some nice enhancements, a few bug fixes, and some fixes
+to correct or update some issues. Main new features: 
+* -rx,-rxx,-ra/-Ix,-Ixx,-Ia: enhanced Packages: report
+* -Cxx: microarchitecture level. This is a relatively new convention, used to 
+set various compile flags.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. Can't safely look for pm tool KDE Discover because apt calls it 
+plasma-discover, but other packaging systems call it discover, which is already 
+a non-related program (hardware data). Since it's not really core to any package 
+manager, it's not really a necessary thing to report anyway, though 
+gnome-software is added because that appears to be more like syntaptic than 
+anything else. 
+
+There's also a qt variant of the rpm packagekit, packagekit-qt, which is 
+available in for example Arch, but again, it's too granular, and not really 
+core.
+
+2. At some point, sensors should add /sys hwmon sensor data, then switch to 
+using lm-sensors as a fallback, and remove one recommended tool from newer linux 
+systems. I don't think that's too hard, just a bunch of little steps to 
+integrate that into the main logic.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. For Slackware slackpkg/pkgtool:
+a: Failed to show package counts at all because of bad globbing path, forgot /*.
+b. Failed to show lib counts for packages due to having wrong counter for path. 
+
+2. If no ipmi sensor data was found but the tools are present, could result in 
+an undefined hash reference error for sensors. The most likely cause for this is 
+that one of the ipmi commands:
+"ipmi-tool sensors" or "ipmi-sensors"
+had an error, and since errors are sent to /dev/null, inxi saw null data, then 
+returned an undefined value instead of the hash reference it was supposed to. 
+This is the first time I've seen this happen with ipmi, but there have not been 
+a lot of ipmi samples.
+
+[update: the bug was running ipmitool sensors instead of ipmitool sensor]
+
+Thanks issue poster #274 for having systems that triggered this scenario.
+
+3. $source for ipmi was set to lm-sensors by accident.
+
+4. For sensors, with > 1 sensor type, like lm-sensors + ipmi, sensor data from 
+second sensor type was getting written to first sensor type row. See Fixes 9 for
+more sensors fixes.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. Force CPU bits to 64 if LM flag is present, if it reports as i686. This fix 
+only runs for non RISC CPUs that show as 32 bit, so it won't run very often. If 
+no LM found, remains 32 bit.
+
+This fix goes along with enhancement 1, which only applies to 64 bit CPUs.
+
+2. In --recommends, JSON::PP module package names were wrong, they were copied
+from JSON::Cpanel::XS and hadn't been changed to the right package names. Note 
+that for most distros, this is in Perl Core Modules, but not all.
+
+3. Samsung ram vendor id was too tight, loosened it up a bit. Missed this one:
+K3LK7K70BM
+
+4. With Bug 1, extended possible package manager tool detection for slackware 
+type systems. Slackware is kind of unique in that it is not actually made out of 
+a core package manager as a collection of packages, but uses package managers as 
+a kind of layer on top of that, but none of those tools is required to run the 
+system.
+
+5. Found another corner case indentation glitch, was adding in level 2 on -I
+which is has no second level indentation.
+
+6. Forgot to add $force{'pkg'} to -v8.
+
+7. Small fix, if -Z is used, forgot to force --zl, --zu, --zv to false as well
+as -z.
+
+8. Small fix, for saphire rapids, alder lake, added + to year built, since those
+are ongoing.
+
+9. Sensors:
+a. in one case, with an array of fan speeds, set to '' instead of undef, which 
+made test fail, and showed empty fan item. 
+b. added wildcards for possible voltage/power matches, was too restrictive for 
+ipmi sensors values.
+c. added better space regex for ipmi temps [\s_-]?
+d. DIMM voltage/temp excluded > 9 numbering, like DIMM 19
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. New feature: -Cxx shows for AMD / Intel 64 bit CPUs the microarchitecture 
+level (v1,v2,v3,v4). v1 is baseline. GCC supports this I believe in latest 
+versions, and some distros use it to determine CPU support levels for compile 
+time optimizations. This was introduced in 2020 via a collaboration between AMD, 
+Intel, SUSE, and Redhat. Now you know. This is a simple test based on which CPU 
+flags/features are present.
+
+These levels can be used for Go language optimization (GOAMD64), GCC 
+optimization switches (GCC -O2 for example), and probably more. 
+
+2. Expanded YMTC (Yangtze Memory) RAM vendor ids and detections.
+
+3. Added [unverified] window managers CDE and NsCDE. No data, only using ps aux
+method.
+
+4a. Added slax ID to distro id, added slax to system base support. Currently 
+only work on slackware based 15.0, not debian based 11.4.
+
+4b. Added SteamOS debian/arch for system  base.
+
+4c. Added os-release VERSION_CODENAME to enhance distro ID data (eg steamos)
+
+5. Added to -ra/-Ia package tools installed report, this goes along with change 
+2, which changes apt to dpkg, the low level tool. Now with -a, shows the package 
+manager tools installed, like slackpkg, apt, apt-get, dnf, yum, zypper, etc.
+
+rpm installed as secondary pm requires some further tests. Currently known pm
+that have tools (and rpm tests if detected):
+All these are known to support rpm secondary pm:
+* dpkg - Debian, Ubuntu, and apt-rpm based distros like PCLinuxOS, Alt Linux 
+* pacman - Arch based distros 
+* pkgtool - Slackware based distros
+* tce - TinyCore Linux
+
+6. A few more pci product IDs for GPU matches. Slow going.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. Changed --pkg to --rpm, the original intention was that this could apply to
+more than RPM package manager, but that's the only one that it's used for. This 
+leads to unclear output for other distributions where the user might have rpm 
+installed alongside their standard package manager.
+
+2. Changed package pm: 'apt' to 'dpkg', to go along with type rpm (suse,redhat) 
+and pkgtool (slackware). Note that dpkg is the actual package manager of Debian,
+inxi had this wrong, apt interacts with dpkg.
+
+3. Changed -h -a section, to follow after -x, -xx, -xxx, like on man page.
+
+4. For rpm notes, after running some tests to determine whether to use rpm or 
+not, will show the rpm note: see --rpm in pm: rpm note:... This allows for 
+more granular errors which will be more useful to users.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1. Docs were wrong for -ra/-Ia packages, from original when the package report
+was only an -a option, but it got moved to -rx, -rxx for basic features, and -a
+for advanced features.
+
+2. Updated for --pkg/--rpm and --force rpm/pkg
+
+3. See change 3, I think people tend to miss the sequence of -x, -xx, -xxx, -a
+because -a came before -x, -xx, -xxx in -h menu, but on man page, -a correctly 
+comes after the -xxx options. Better to be consistent.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. Added convert to change --force rpm/--rpm to switch on $force{pkg}.
+
+2. Refactored package PackageData to be more granular.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Mon, 22 Aug 2022 18:46:23 -0700
+
+================================================================================
 Version: 3.3.20
 Patch: 00
 Date: 2022-07-27

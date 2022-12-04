@@ -15,17 +15,17 @@
 .\"  with this program; if not, write to the Free Software Foundation, Inc.,
 .\"  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 .\"  
-.TH INXI 1 "2022\-07\-27" "inxi" "inxi manual"
+.TH INXI 1 "2022\-10\-31" "inxi" "inxi manual"
 
 .SH NAME
-inxi  \- Command line system information script for console and IRC
+inxi \- Command line system information script for console and IRC
 
 .SH SYNOPSIS
 \fBinxi\fR
 
 \fBinxi\fR [\fB\-AbBCdDEfFGhiIjJlLmMnNopPrRsSuUVwyYzZ\fR]
 
-\fBinxi\fR [\fB\-c NUMBER\fR]
+\fBinxi\fR [\fB\-c -NUMBER\fR]
 [\fB\-\-sensors\-exclude SENSORS\fR] [\fB\-\-sensors\-use SENSORS\fR] 
 [\fB\-t\fR [\fBc\fR|\fBm\fR|\fBcm\fR|\fBmc\fR][\fBNUMBER\fR]] 
 [\fB\-v NUMBER\fR] [\fB\-W LOCATION\fR] 
@@ -318,8 +318,9 @@ Deprecated. See \fB\-G \-a\fR.
 .B \-G \fR, \fB\-\-graphics\fR
 Show Graphic device(s) information, including details of device and display 
 drivers (\fBX:\fR \fBloaded:\fR, and, if applicable: \fBunloaded:\fR, 
-\fBfailed:\fR, and active \fBgpu:\fR drivers), display protocol (if available), 
-display server (and/or Wayland compositor), vendor and version number, e.g.:
+\fBfailed:\fR, \fBdri:\fR (if X and different from loaded X drivers) drivers, 
+and active \fBgpu:\fR drivers), display protocol (if available), display server 
+(and/or Wayland compositor), vendor and version number, e.g.:
 
 \fBDisplay: x11 server: Xorg v: 1.15.1\fR
 
@@ -331,9 +332,10 @@ If protocol is not detected, shows:
 
 \fBDisplay: server: Xorg 1.15.1\fR
 
-Also shows screen resolution(s) (per monitor/X screen). For X.org: OpenGL 
-renderer, OpenGL core profile version/OpenGL version; for VESA: data (for 
-Xvesa); for Wayland:  GBM/EGL data (not implemented).
+Also shows screen resolution(s) (per monitor/X screen). Shows graphics API used, 
+like OpenGL. For X.org: OpenGL renderer, OpenGL core profile version/OpenGL 
+version; for VESA: data (for Xvesa); for Wayland: GBM/EGL data (not 
+implemented).
 
 Compositor information will show if detected using \fB\-xx\fR option or always 
 if detected and Wayland since the compositor is the server with Wayland.
@@ -689,12 +691,18 @@ then shows what package(s) you need to install to add support for each feature.
 
 .TP
 .B \-s \fR, \fB\-\-sensors\fR
-Show output from sensors if sensors installed/configured: Motherboard/CPU/GPU
-temperatures; detected fan speeds. GPU temperature when available. Nvidia shows
-screen number for multiple screens. IPMI sensors are also used (root required)
-if present. See Advanced options \fB\-\-sensors\-use\fR or 
-\fB\-\-sensors\-exclude\fR if you want to use only a subset of all sensors, or
-exclude one.
+Show output from sensors if sensors installed/configured: Motherboard/CPU/GPU 
+temperatures; detected fan speeds. GPU temperature when available. Nvidia shows 
+screen number for multiple screens. IPMI sensors are also used (root required) 
+if present. 
+
+See Advanced options \fB\-\-sensors\-use\fR or \fB\-\-sensors\-exclude\fR if you 
+want to use only a subset of all sensors, or exclude one (currently only for  
+\fBlm\-sensors\fR and \fB/sys\fR sourced data).
+
+For current Linux, will fallback gracefully to using \fB/sys/class/hwmon\fR as 
+sensor data source if \fBlm\-sensors\fR is not installed. You can compare the 
+two by using \fB\-\-force sensors\-sys\fR option with \fB\-s\fR.
 .
 .TP
 .B \-\-slots\fR
@@ -998,7 +1006,6 @@ Konversation etc.
 
 Setting a specific color type removes the global color selection.
 
-
 .TP
 .B \-\-indent [11\-xx]\fR
 Change primary wide indent width. Generally useless. Only applied if output 
@@ -1075,7 +1082,7 @@ configuration items, or the actual widths of the terminal.
 
 * \fB\-y\fR \- sets default width of 80 columns.
 .br
-* \fB\-y [80-xxx]\fR \- sets width to given number. Must be 80 or more.
+* \fB\-y [60-xxx]\fR \- sets width to given number. Must be 60 or more.
 .br
 * \fB\-y 1\fR \-  switches to a single indented key/value pair per line, and 
 removes all long line wrapping (similar to \fBdmidecode\fR output). Not 
@@ -1208,7 +1215,7 @@ dds rev version to optical drive.
 
 .TP
 .B \-x \-D\fR
-\- Adds HDD temperature with disk data.
+\- Adds drive temperature with disk data.
 
 Method 1: Systems running Linux kernels ~5.6 and newer should have 
 \fBdrivetemp\fR module data available. If so, drive temps will come from 
@@ -1268,6 +1275,8 @@ specific vendor [product] information.
 
 \- \fBX.org:\fR Adds (for single GPU, nvidia driver) screen number that GPU is 
 running on.
+
+\- Adds device temperature for each discrete device (Linux only).
 
 .TP
 .B \-x \-i\fR
@@ -1343,6 +1352,8 @@ specific vendor [product] information.
 
 \- Adds PCI/USB ID of each device.
 
+\- Adds device temperature for each discrete device (Linux only).
+
 .TP
 .B \-x \-o\fR, \fB\-x \-p\fR, \fB\-x \-P\fR
 \- Adds \fBmapper:\fR (the \fB/dev/mapper/\fR partition ID) 
@@ -1363,8 +1374,8 @@ bitmap (if present). Resync line, shows blocks synced/total blocks.
 
 .TP
 .B \-x \-s\fR
-\- Adds basic voltages: 12v, 5v, 3.3v, vbat (\fBipmi\fR, \fBlm-sensors\fR if 
-present).
+\- Adds basic voltages: 12v, 5v, 3.3v, vbat (\fBipmi\fR, \fBlm\-sensors / 
+/sys/class/hwmon\fR if present).
 
 .TP
 .B \-x \-S\fR
@@ -1538,9 +1549,9 @@ same. Example:
 \- Adds system default runlevel/target, if detected. Supports Systemd / Upstart 
 /SysVinit type defaults.
 
-\- Shows \fBPackages:\fR counts by discovered package manager types. In cases 
-where only 1 type had results, does not show total after \fBPackages:\fR. Does 
-not show installed package managers wtih 0 packages. See \fB\-a\fR for full 
+\- Shows \fBPackages:\fR counts by discovered package manager types (\fBpm:\fR). 
+In cases where only 1 pm had results, does not show total after \fBPackages:\fR. 
+Does not show installed package managers with 0 packages. See \fB\-a\fR for full 
 output. Moves to \fBRepos\fR if \fB\-rxx\fR.
 
 \- Adds parent program (or pty/tty) that started shell, if not IRC client.
@@ -1594,7 +1605,7 @@ ROM size if using \fBdmidecode\fR.
 
 .TP
 .B \-xx \-r\fR
-\- Adds Packages info. See \fB\-Ixx\fR
+\- Adds to \fBPackages:\fR info. See \fB\-Ixx\fR
 
 .TP
 .B \-xx \-R\fR
@@ -1819,6 +1830,13 @@ shown).
 only will show if Core generation, otherwise the arch value is enough. For AMD, 
 only shows Zen generation. 
 
+\- Adds microarchitecture \fBlevel:\fR (v1,v2,v3,v4) (64 bit Intel/AMD CPUs 
+only). This information is used for setting compile time optimization switches 
+in for example GCC. These levels were introduced in 2020.
+
+Because this a CPU flag based test, and these levels when > 2 are not always 
+100% based on exposed CPU flags (eg OSXSAVE), for > v2, adds \fBnote: check\fR.
+
 \- Adds CPU family, model\-id, and stepping (replaces \fBrev\fR of \fB\-Cx\fR). 
 Format is \fBhexadecimal (decimal)\fR if greater than 9, otherwise 
 \fBhexadecimal\fR. 
@@ -1913,6 +1931,8 @@ differences shown, like \fBcores:\fR, \fBmin/max:\fR, etc.
     type: MT MCP MCM SMP
     arch: Zen
       gen: 1
+    level: v3
+      note: check
     process: GF 14nm
     built: 2017\-19
     family:0x17 (23)
@@ -2011,7 +2031,7 @@ issues, shows extra data that can help diagnose/debug. Adds \fBcode:\fR item if
 found and not the same as \fBarch:\fR.
 
 .nf
-\fBinxi \-GIaz
+\fBinxi \-Gaz
 Graphics:
   Device\-1: NVIDIA NV34 [GeForce FX 5200] driver: nouveau v: kernel
     non\-free: 173.14.xx status: legacy (EOL) last: kernel: 3.12 xorg: 1.15
@@ -2026,7 +2046,7 @@ Graphics:
 With \fB\-y1\fR:
 
 .nf
-\fBinxi \-Ga \-y1
+\fBinxi \-Gaz \-y1
 Graphics:
   Device\-1: NVIDIA NV34 [GeForce FX 5200]
     driver: nouveau
@@ -2067,8 +2087,8 @@ Graphics:
     active: DVI\-I\-1,VGA\-1 empty: HDMI\-A\-1 bus\-ID: 0a:00.0 
     chip\-ID: 1002:68f9 class\-ID: 0300
   Display: x11 server: X.Org v: 1.21.1.3 with: Xwayland v: 22.1.0
-    compositor: xfwm v: 4.16.1 driver: X: loaded: modesetting gpu: radeon
-    display\-ID: :0.0 screens: 1
+    compositor: xfwm v: 4.16.1 driver: X: loaded: modesetting dri: r600
+    gpu: radeon display\-ID: :0.0 screens: 1
   Screen\-1: 0 s-res: 2560x1024 s-dpi: 96 s\-size: 677x270mm (26.65x10.63")
     s\-diag: 729mm (28.7")
   Monitor\-1: DVI\-I\-1 pos: primary,left model: Samsung SyncMaster
@@ -2079,7 +2099,7 @@ Graphics:
     built: 2008 res: 1280x1024 hz: 60 dpi: 86 gamma: 1.4
     size: 376x301mm (14.8x11.85") diag: 482mm (19") ratio: 5:4 modes:
     max: 1280x1024 min: 720x400
-  OpenGL: renderer: AMD CEDAR (DRM 2.50.0 / 5.16.0-11.1\-liquorix-amd64 LLVM
+  API: OpenGL renderer: AMD CEDAR (DRM 2.50.0 / 5.16.0-11.1\-liquorix-amd64 LLVM
     12.0.1) v: 3.3 Mesa 21.2.6 compat\-v: 3.1 direct render: Yes
  ....\fR
 .fi
@@ -2102,22 +2122,23 @@ Graphics:
     res: 1280x1024 hz: 60 gamma: 1.4 dpi: 86 gamma: 1.4 
     size: 380x300mm (15.0x11.8") diag: 484mm (19.1") ratio: 5:4 modes: 
     max: 1280x1024 min: 720x400
-  Message: Wayland GBM/EGL data currently not available.
+  API: GBM/EGL  
+    Message: Wayland GBM/EGL data currently not available.
 .fi
 .TP
 .B \-a \-I\fR
-\- Adds Packages, totals, per package manager totals, and number of lib packages 
-detected per package manager. Also adds detected package managers with 0 
-packages listed. Moves to \fBRepos\fR if \fB\-ra\fR.
+\- Adds to Packages number of lib packages detected per package manager. Also 
+adds detected package managers with 0 packages listed. Adds package manager 
+tools (supported: rpm, dpkg, pkgtool) Moves to \fBRepos\fR if \fB\-ra\fR.
 
 .nf
 \fBinxi \-aI
 Info:
   ....
   Init: systemd v: 245 target: graphical.target (5) default: graphical.target 
-  Compilers: gcc: 9.3.0 alt: 5/6/7/8/9 Packages: apt: 3681 lib: 2096 rpm: 0 
-  Shell: ksh v: A_2020.0.0 default: Bash v: 5.0.16 running\-in: kate 
-  inxi: 3.1.04\fR
+  Compilers: gcc: 9.3.0 alt: 5/6/7/8/9 Packages: pm: apt pkgs: 3681 libs: 2096 
+  tools: apt, apt\-get,aptitude pm: rpm pkgs: 0 Shell: ksh v: A_2020.0.0 
+  default: Bash v: 5.0.16 running\-in: kate inxi: 3.1.04\fR
 .fi
 
 \- Adds service control tool, tested for in the following order: \fBsystemctl 
@@ -2187,7 +2208,7 @@ not the raw size.
 
 .TP
 .B \-a \-r\fR
-\- Adds Packages. See \fB\-Ia\fR
+\- Adds to \fBPackages:\fR report. See \fB\-Ia\fR
 
 .TP
 .B \-a \-R\fR
@@ -2288,7 +2309,7 @@ Shortcut. See \fB\-\-force dmidecode\fR.
 Force inxi to use Curl, Fetch, Perl, or Wget for downloads.
 
 .TP
-.B \-\-force [colors|dmidecode|hddtemp|lsusb|pkg|usb-sys|wayland|vmstat|wmctrl]\fR 
+.B \-\-force [option(s)]\fR 
 Various force options to allow users to override defaults. Values can be given 
 as a comma separated list:
 
@@ -2305,18 +2326,33 @@ redirected output.
 \- \fBlsusb\fR \- Forces the USB data generator to use \fBlsusb\fR as data 
 source (default). Overrides \fBUSB_SYS\fR in user configuration file(s).
 
-\- \fBpkg\fR \- Force override of disabled package counts. Known package 
-managers with non\-resolvable issues: 
+\- \fBrpm\fR, \fBpkg\fR \- Force override of disabled RPM package counts on 
+primarily RPM run systems due to unacceptably slow execution times for this 
+command:
 
-rpm: Due to up to 30 seconds delays executing 
 .nf
 \fBrpm \-qa \-\-nodigest \-\-nosignature\fR
 .fi
-on older hardware (and over 1 second on new hardware with some rpm versions) 
-package counts are disabled by default because of the unacceptable slowdowns to 
-execute a simple package list command. 
 
-\- \fBusb-sys\fR \- Forces the USB data generator to use \fB/sys\fR as data 
+Even on newer RPM systems, in virtual machines, running rpm package list query 
+takes more than 0.15 seconds (compared to 0.01 to 0.05 for dpkg, pacman, pkgtool 
+etc) for just this single feature, which is north of 10% of total execution time 
+for \fBinxi \-bar\fR. On bare metal this can hit 1 second or more in our tests. 
+Older systems have taken up to 30 seconds to run this command! 
+
+For systems that support running rpm along with the primary package installer 
+(dpkg/apt, pacman, and pkgtool/slackpkg), there are not going to be many rpms, 
+if any, installed, so the command runs in those cases (if inxi can determine it 
+is running in that type of system).
+
+\- \fBsensors\-sys\fR \- Force use of \fB/sys/class/hwmon\fR data for sensors 
+(excluding ipmi sensors, which are their own line if present), skip 
+\fBlm\-sensors\fR. Generally useful for testing since sys data is used if no 
+lm\-sensors data was found anyway, but if \fBlm\-sensors\fR was installed, and 
+returned no data, it's most likely if not nearly certain that \fB/sys\fR will 
+also not return data.
+
+\- \fBusb\-sys\fR \- Forces the USB data generator to use \fB/sys\fR as data 
 source instead of \fBlsusb\fR (Linux only).
 
 \- \fBvmstat\fR \- Forces use of vmstat for memory data.
@@ -2393,14 +2429,14 @@ requires configuration to setup anyway for these options) just use this option,
 or \fBNO_SUDO\fR configuration item.
 
 .TP
-.B \-\-pkg\fR
-Shortcut. See \fB\-\-force pkg\fR.
-
-.TP
 .B \-\-pm\-type [package manager name]\fR
 For distro package maintainers only, and only for non apt, rpm, or pacman 
 based systems. To be used to test replacement package lists for recommends 
 for that package manager.
+
+.TP
+.B \-\-rpm\fR, \fB\-\-pkg\fR
+Shortcut. See \fB\-\-force rpm\fR.
 
 .TP
 .B \-\-sensors\-default\fR
@@ -2409,19 +2445,24 @@ on a one time basis.
 
 .TP
 .B \-\-sensors\-exclude\fR
-Similar to \fB\-\-sensors\-use\fR except removes listed sensors from sensor 
-data. Make permanent with \fBSENSORS_EXCLUDE\fR configuration item. Note that 
-gpu, network, disk, and other specific device monitor chips are excluded by 
+Linux only. Similar to \fB\-\-sensors\-use\fR except removes listed sensors from 
+sensor data. Make permanent with \fBSENSORS_EXCLUDE\fR configuration item. Note 
+that gpu, network, disk, and other specific device monitor chips are excluded by 
 default.
 
 Example: \fBinxi \-sxx \-\-sensors\-exclude k10temp-pci-00c3\fR
 
 .TP
+.B \-\-sensors\-sys\fR
+Shortcut. See \fB\-\-force sensors\-sys\fR
+
+.TP
 .B \-\-sensors\-use\fR
-Use only the (comma separated) sensor arrays for \fB\-s\fR output. Make 
-permanent with \fBSENSORS_USE\fR configuration item. Sensor array ID value 
-must be the exact value shown in lm\-sensors sensors output (Linux/lm-sensors 
-only). If you only want to exclude one (or more) sensors from the output, 
+Linux only. Use only the (comma separated) sensor arrays for \fB\-s\fR output. 
+Make permanent with \fBSENSORS_USE\fR configuration item. Sensor array ID value 
+must be the exact value shown in lm\-sensors sensors output (lm-sensors only) or 
+use \fB\-s \-\-dbg 18\fR ('main' =>.. section) to see the sensor ID strings used 
+internally. If you only want to exclude one (or more) sensors from the output, 
 use \fB\-\-sensors\-exclude\fR.
 
 Can be useful if the default sensor data used by inxi is not from the right 
@@ -2632,6 +2673,13 @@ If you are using KDE/QT 5, then you may also need to add the following to get
 the Konversation \fR/inxi\fR command to work:
 
 .B ln \-s /usr/share/konversation /usr/share/apps/
+
+Make sure you also have the \fRqdbus\-qt5\fR package (Debian/Ubuntu + derived), 
+\fRqt5\-qttools\fR (Fedora/RHEL/SUSE + derived),  \fRqt5\-tools\fR (Arch + 
+derived) installed (for KDE 5/QT 5, check distros for future package names), 
+\fRqt5\-tools\fR (Arch + derived). Check your distro if the program is missing. 
+Depending on the distro, \fR/usr/lib/qt5/bin/qdbus\fR is required, which in 
+Debian+ is provided by the above package.
 
 Then you can start inxi directly, like this:
 
