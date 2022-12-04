@@ -111,6 +111,8 @@ ShowHelp()
     DisplayAsHelp 'log' 'display the service script runtime log.'
     DisplayAsHelp 'version' 'display the package version number.'
     Display
+    Display "Example: to see everything: inxi -Ffxxxm"
+    Display
 
     }
 
