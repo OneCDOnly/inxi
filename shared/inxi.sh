@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 ####################################################################################
 # inxi.sh
-#
-# Copyright (C) 2020-2022 OneCD [one.cd.only@gmail.com]
-#
+
+# Copyright (C) 2020-2023 OneCD - one.cd.only@gmail.com
+
 # so, blame OneCD if it all goes horribly wrong. ;)
-#
+
 # For more info:
 ####################################################################################
 
