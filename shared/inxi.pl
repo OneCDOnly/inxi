@@ -49,8 +49,8 @@ use POSIX qw(ceil uname strftime ttyname);
 
 ## INXI INFO ##
 my $self_name='inxi';
-my $self_version='3.3.28';
-my $self_date='2023-07-10';
+my $self_version='3.3.31';
+my $self_date='2023-11-02';
 my $self_patch='00';
 ## END INXI INFO ##
 
@@ -111,10 +111,10 @@ my ($wan_url,$wl_compositors) = ('','');
 my ($bits_sys,$cpu_arch,$ppid);
 my ($cpu_sleep,$dl_timeout,$limit,$ps_cols,$ps_count) = (0.35,4,10,0,5);
 my $sensors_cpu_nu = 0;
-my ($dl_ua,$weather_source,$weather_unit) = ('s-tools/' . $self_name  . '-',100,'mi');
+my ($weather_source,$weather_unit) = (100,'mi');
 
 ## Tools
-my ($bt_tool,$display,$ftp_alt);
+my ($display,$ftp_alt);
 my ($display_opt,$sudoas) = ('','');
 
 ## Output
@@ -263,7 +263,6 @@ sub set {
 	}
 	print Data::Dumper::Dumper \%alerts if $dbg[25];
 	set_fake_bsd_tools() if $fake{'bsd'};
-	set_forced_tools();
 	eval $end if $b_log;
 }
 
@@ -354,6 +353,8 @@ sub set_commands {
 		$commands{'bluetoothctl'} = ['missing','linux','',''];
 		# bt-adapter hangs when bluetooth service is disabled
 		$commands{'bt-adapter'} = ['missing','linux','',''];
+		# btmgmt enters its own shell with no options given
+		$commands{'btmgmt'} = ['missing','linux','',''];
 		$commands{'hciconfig'} = ['missing','linux','',''];
 	}
 	if ($show{'sensor'}){
@@ -379,20 +380,6 @@ sub set_commands {
 	}
 	if ($show{'unmounted'}){
 		$commands{'disklabel'} = ['missing','bsd','xx'];
-	}
-}
-
-sub set_forced_tools {
-	if ($bt_tool){
-		if ($bt_tool ne 'bluetootctl' && $alerts{'bluetoothctl'}->{'action'} eq 'use'){
-			$alerts{'bluetoothctl'}->{'action'} = 'missing';
-		}
-		if ($bt_tool ne 'bt-adapter' && $alerts{'bt-adapter'}->{'action'} eq 'use'){
-			$alerts{'bt-adapter'}->{'action'} = 'missing';
-		}
-		if ($bt_tool ne 'hciconfig' && $alerts{'hciconfig'}->{'action'} eq 'use'){
-			$alerts{'hciconfig'}->{'action'} = 'missing';
-		}
 	}
 }
 
@@ -437,9 +424,9 @@ sub set_basics {
 	$b_root = $< == 0; # root UID 0, all others > 0
 	$dl{'dl'} = 'curl';
 	$dl{'curl'} = 1;
+	$dl{'fetch'} = 1;
 	$dl{'tiny'} = 1; # note: two modules needed, tested for in set_downloader
 	$dl{'wget'} = 1;
-	$dl{'fetch'} = 1;
 	$client{'console-irc'} = 0;
 	$client{'dcop'} = (check_program('dcop')) ? 1 : 0;
 	$client{'qdbus'} = (check_program('qdbus')) ? 1 : 0;
@@ -1739,6 +1726,7 @@ sub bluetooth_data {
 	print "Collecting bluetooth data...\n";
 	# no warnings 'uninitialized';
 	my @cmds = (
+	['btmgmt','info'],
 	['hciconfig','-a'], # no version
 	#['hcidump',''], # hangs sometimes
 	['hcitool','dev'],
@@ -1965,6 +1953,12 @@ sub display_data {
 	# kde 5/plasma desktop 5, this is maybe an extra package and won't be used
 	['about-distro',''],
 	['aticonfig','--adapter=all --od-gettemperature'],
+	['clinfo',''],
+	['clinfo','--list'],
+	['clinfo','--raw'], # machine friendly
+	['eglinfo',''],
+	['eglinfo','-B'],
+	['es2_info',''],
 	['glxinfo',''],
 	['glxinfo','-B'],
 	['kded','--version'],
@@ -1999,6 +1993,8 @@ sub display_data {
 	['vainfo',''],
 	['vdpauinfo',''],
 	['vulkaninfo',''],
+	['vulkaninfo','--summary'],
+	# ['vulkaninfo','--json'], # outputs to file, not sure how to output to stdout
 	['wayland-info',''], # not packaged as far as I know yet
 	['weston-info',''], 
 	['wmctrl','-m'],
@@ -2658,6 +2654,7 @@ sub ram_use {
 #### DOWNLOADER
 #### -------------------------------------------------------------------
 
+# args: 0: download type; 1: url; 2: file; 3: [ua type string]
 sub download_file {
 	my ($type, $url, $file,$ua) = @_;
 	my ($cmd,$args,$timeout) = ('','','');
@@ -2679,7 +2676,7 @@ sub download_file {
 	## NOTE: 1 is success, 0 false for Perl
 	if ($dl{'dl'} eq 'tiny'){
 		$cmd = "Using tiny: type: $type \nurl: $url \nfile: $file";
-		$result = get_file($type, $url, $file);
+		$result = get_file_http_tiny($type,$url,$file,$ua);
 		$debug_data = ($type ne 'stdout') ? $result : 'Success: stdout data not null.';
 	}
 	# But: 0 is success, and 1 is false for these
@@ -2711,9 +2708,11 @@ sub download_file {
 	return $result;
 }
 
-sub get_file {
-	my ($type, $url, $file) = @_;
-	my $tiny = HTTP::Tiny->new;
+sub get_file_http_tiny {
+	my ($type,$url,$file,$ua) = @_;
+	$ua = ($ua && $dl{'ua'}) ? $dl{'ua'} . $ua:  '';
+	my %headers = ($ua) ? ('agent' => $ua) : ();
+	my $tiny = HTTP::Tiny->new(%headers);
 	# note: default is no verify, so default here actually is to verify unless overridden
 	$tiny->verify_SSL => 1 if !$use{'no-ssl'};
 	my $response = $tiny->get($url);
@@ -2760,6 +2759,7 @@ sub get_file {
 sub set_downloader {
 	eval $start if $b_log;
 	my $quiet = '';
+	my $ua_raw = 's-tools/' . $self_name  . '-';
 	$dl{'no-ssl'} = '';
 	$dl{'null'} = '';
 	$dl{'spider'} = '';
@@ -2767,7 +2767,11 @@ sub set_downloader {
 	# It is NOT part of core modules. IO::Socket::SSL is also required 
 	# For some https connections so only use tiny as option if both present
 	if ($dl{'tiny'}){
-		if (check_perl_module('HTTP::Tiny') && check_perl_module('IO::Socket::SSL')){
+		# this only for -U 4, grab file with ftp to avoid unsupported SSL issues
+		if ($use{'ftp-download'}){
+			$dl{'tiny'} = 0;
+		}
+		elsif (check_perl_module('HTTP::Tiny') && check_perl_module('IO::Socket::SSL')){
 			HTTP::Tiny->import;
 			IO::Socket::SSL->import;
 			$dl{'tiny'} = 1;
@@ -2782,6 +2786,7 @@ sub set_downloader {
 		$dl{'file'} = '';
 		$dl{'stdout'} = '';
 		$dl{'timeout'} = '';
+		$dl{'ua'} = $ua_raw;
 	}
 	elsif ($dl{'curl'} && check_program('curl')){
 		$quiet = '-s ' if !$dbg[1];
@@ -2790,7 +2795,7 @@ sub set_downloader {
 		$dl{'no-ssl'} = ' --insecure';
 		$dl{'stdout'} = " -L ${quiet}";
 		$dl{'timeout'} = ' -y ';
-		$dl{'ua'} = ' -A ' . $dl_ua;
+		$dl{'ua'} = ' -A ' . $ua_raw;
 	}
 	elsif ($dl{'wget'} && check_program('wget')){
 		$quiet = '-q ' if !$dbg[1];
@@ -2800,7 +2805,7 @@ sub set_downloader {
 		$dl{'spider'} = " ${quiet}--spider";
 		$dl{'stdout'} = " $quiet -O -";
 		$dl{'timeout'} = ' -T ';
-		$dl{'ua'} = ' -U ' . $dl_ua;
+		$dl{'ua'} = ' -U ' . $ua_raw;
 	}
 	elsif ($dl{'fetch'} && check_program('fetch')){
 		$quiet = '-q ' if !$dbg[1];
@@ -2809,6 +2814,7 @@ sub set_downloader {
 		$dl{'no-ssl'} = ' --no-verify-peer';
 		$dl{'stdout'} = " ${quiet}-o -";
 		$dl{'timeout'} = ' -T ';
+		$dl{'ua'} = ' --user-agent=' . $ua_raw;
 	}
 	# at least openbsd/netbsd
 	elsif ($bsd_type && check_program('ftp')){
@@ -2817,6 +2823,7 @@ sub set_downloader {
 		$dl{'null'} = ' 2>/dev/null';
 		$dl{'stdout'} = ' -o - ';
 		$dl{'timeout'} = '';
+		$dl{'ua'} = ' -U ' . $ua_raw;
 	}
 	else {
 		$dl{'dl'} = '';
@@ -3034,9 +3041,10 @@ sub check_items {
 			$info_os = 'info-bsd';
 		}
 		else {
-			@data = qw(blockdev bt-adapter dig dmidecode doas fdisk file fruid_print
-			hciconfig hddtemp ifconfig ip ipmitool ipmi-sensors lsblk lsusb lvs 
-			mdadm modinfo runlevel sensors smartctl strings sudo tree upower uptime);
+			@data = qw(blockdev bt-adapter btmgmt dig dmidecode doas fdisk file 
+			fruid_print hciconfig hddtemp ifconfig ip ipmitool ipmi-sensors lsblk 
+			lsusb lvs mdadm modinfo runlevel sensors smartctl strings sudo tree upower 
+			uptime);
 		}
 		$b_program = 1;
 		$item = 'Program';
@@ -3045,11 +3053,13 @@ sub check_items {
 	}
 	elsif ($type eq 'recommended display information programs'){
 		if ($bsd_type){
-			@data = qw(glxinfo wmctrl xdpyinfo xprop xdriinfo xrandr);
+			@data = qw(eglinfo glxinfo vulkaninfo wmctrl xdpyinfo xprop xdriinfo 
+			xrandr);
 			$info_os = 'info-bsd';
 		}
 		else {
-			@data = qw(glxinfo wmctrl xdpyinfo xprop xdriinfo xrandr);
+			@data = qw(eglinfo glxinfo vulkaninfo wmctrl xdpyinfo xprop xdriinfo 
+			xrandr);
 		}
 		$b_program = 1;
 		$item = 'Program';
@@ -3286,12 +3296,20 @@ sub set_item_data {
 	'rpm' => 'util-linux',
 	},
 	'bt-adapter' => {
-	'info' => '-E bluetooth data (if no hciconfig)',
+	'info' => '-E bluetooth data (if no hciconfig, btmgmt)',
 	'info-bsd' => '',
 	'apt' => 'bluez-tools',
 	'pacman' => 'bluez-tools',
 	'pkgtool' => '', # needs to be built by user
 	'rpm' => 'bluez-tools',
+	},
+	'btmgmt' => {
+	'info' => '-E bluetooth data (if no hciconfig)',
+	'info-bsd' => '',
+	'apt' => 'bluez',
+	'pacman' => 'bluez-utils',
+	'pkgtool' => '', # needs to be built by user
+	'rpm' => 'bluez',
 	},
 	'curl' => {
 	'info' => '-i (if no dig); -w,-W; -U',
@@ -3558,17 +3576,33 @@ sub set_item_data {
 	'rpm' => 'wget',
 	},
 	## Programs-Display ##
+	'eglinfo' => {
+	'info' => '-G X11/Wayland EGL info',
+	'info-bsd' => '-G X11/Wayland EGL info',
+	'apt' => 'mesa-utils (or: mesa-utils-extra)',
+	'pacman' => 'mesa-demos',
+	'pkgtool' => 'mesa',
+	'rpm' => 'egl-utils (SUSE: Mesa-demo-egl)',
+	},
 	'glxinfo' => {
-	'info' => '-G (X) glx info',
-	'info-bsd' => '-G (X) glx info',
+	'info' => '-G X11 GLX info',
+	'info-bsd' => '-G X11 GLX info',
 	'apt' => 'mesa-utils',
 	'pacman' => 'mesa-demos',
 	'pkgtool' => 'mesa',
-	'rpm' => 'glx-utils (SUSE: Mesa-demo-x)',
+	'rpm' => 'glx-utils (Fedora: glx-utils; SUSE: Mesa-demo-x)',
+	},
+	'vulkaninfo' => {
+	'info' => '-G Vulkan API info',
+	'info-bsd' => '-G Vulkan API info',
+	'apt' => 'vulkan-tools',
+	'pacman' => 'vulkan-tools',
+	'pkgtool' => 'vulkan-tools',
+	'rpm' => 'vulkan-demos (Fedora: vulkan-tools; SUSE: vulkan-demos)',
 	},
 	'wmctrl' => {
 	'info' => '-S active window manager (fallback)',
-	'info-bsd' => '-S active window managerr (fallback)',
+	'info-bsd' => '-S active window manager (fallback)',
 	'apt' => 'wmctrl',
 	'pacman' => 'wmctrl',
 	'pkgtool' => 'wmctrl',
@@ -3580,7 +3614,7 @@ sub set_item_data {
 	'apt' => 'X11-utils',
 	'pacman' => 'xorg-xdpyinfo',
 	'pkgtool' => 'xdpyinfo',
-	'rpm' => 'xorg-x11-utils (SUSE/Fedora?: xdpyinfo)',
+	'rpm' => 'xorg-x11-utils (SUSE/Fedora: xdpyinfo)',
 	},
 	'xdriinfo' => {
 	'info' => '-G (X) DRI driver (if missing, fallback to Xorg log)',
@@ -3588,7 +3622,7 @@ sub set_item_data {
 	'apt' => 'X11-utils',
 	'pacman' => 'xorg-xdriinfo',
 	'pkgtool' => 'xdriinfo',
-	'rpm' => 'xorg-x11-utils (SUSE/Fedora?: xdriinfo)',
+	'rpm' => 'xorg-x11-utils (SUSE/Fedora: xdriinfo)',
 	},
 	'xprop' => {
 	'info' => '-S (X) desktop data',
@@ -3596,7 +3630,7 @@ sub set_item_data {
 	'apt' => 'X11-utils',
 	'pacman' => 'xorg-xprop',
 	'pkgtool' => 'xprop',
-	'rpm' => 'x11-utils',
+	'rpm' => 'x11-utils (Fedora/SUSE: xprop)',
 	},
 	'xrandr' => {
 	'info' => '-G (X) monitors(s) resolution; -Ga monitor data',
@@ -3604,7 +3638,7 @@ sub set_item_data {
 	'apt' => 'x11-xserver-utils',
 	'pacman' => 'xrandr',
 	'pkgtool' => 'xrandr',
-	'rpm' => 'x11-server-utils (Fedora: xrandr)',
+	'rpm' => 'x11-server-utils (SUSE/Fedora: xrandr)',
 	},
 	## Perl Modules ##
 	'Cpanel::JSON::XS' => {
@@ -4544,17 +4578,14 @@ sub get_defaults {
 	my ($type) = @_;
 	my %defaults = (
 	'ftp-upload' => 'ftp.smxi.org/incoming',
-	'inxi-branch-1' => 'https://github.com/smxi/inxi/raw/one/',
-	'inxi-branch-2' => 'https://github.com/smxi/inxi/raw/two/',
-	'inxi-dev' => 'https://smxi.org/in/',
-	'inxi-main' => 'https://github.com/smxi/inxi/raw/master/',
-	'inxi-pinxi' => 'https://github.com/smxi/inxi/raw/inxi-perl/',
-	'inxi-man' => "https://smxi.org/in/$self_name.1",
-	'inxi-man-gh' => "https://github.com/smxi/inxi/raw/master/$self_name.1",
-	'pinxi-man' => "https://smxi.org/in/$self_name.1",
-	'pinxi-man-gh' => "https://github.com/smxi/inxi/raw/inxi-perl/$self_name.1",
+	'inxi-branch-1' => 'https://codeberg.org/smxi/inxi/raw/one/',
+	'inxi-branch-2' => 'https://codeberg.org/smxi/inxi/raw/two/',
+	"$self_name-dev" => 'https://smxi.org/in/',
+	"$self_name-dev-ftp" => 'ftp://ftp.smxi.org/outgoing/',
+	"inxi-main" => 'https://codeberg.org/smxi/inxi/raw/master/',
+	'pinxi-main' => 'https://codeberg.org/smxi/pinxi/raw/master/',
 	);
-	if (exists $defaults{$type}){
+	if ($defaults{$type}){
 		return $defaults{$type};
 	}
 	else {
@@ -4574,7 +4605,6 @@ sub update_me {
 	$self_path =~ s/\/$//; # dirname sometimes ends with /, sometimes not
 	$self_download =~ s/\/$//; # dirname sometimes ends with /, sometimes not
 	my $full_self_path = "$self_path/$self_name";
-	
 	if ($b_irc){
 		error_handler('not-in-irc', "-U/--update")
 	}
@@ -4591,7 +4621,6 @@ sub update_me {
 	$output = '';
 	$self_download = "$self_download/$self_name";
 	$file_contents = download_file('stdout', $self_download);
-	
 	# then do the actual download
 	if ($file_contents){
 		# make sure the whole file got downloaded and is in the variable
@@ -4610,7 +4639,7 @@ sub update_me {
 			print $output;
 			$output = '';
 			if ($use{'man'}){
-				update_man($download_id);
+				update_man($self_download,$download_id);
 			}
 			else {
 				print "Skipping man download because branch version is being used.\n";
@@ -4630,7 +4659,7 @@ sub update_me {
 
 sub update_man {
 	eval $start if $b_log;
-	my ($download_id) = @_;
+	my ($self_download,$download_id) = @_;
 	my $man_file_location = set_man_location();
 	my $man_file_path = "$man_file_location/$self_name.1" ;
 	my ($file_contents,$man_file_url,$output,$program) = ('','','','');
@@ -4656,13 +4685,8 @@ sub update_man {
 		print "Required program gzip not found. Unable to install man page.\n";
 		return 0;
 	}
-	 # first choice is inxi.1/pinxi.1 from gh, second from smxi.org
-	if ($download_id ne 'dev server'){
-		$man_file_url = get_defaults($self_name . '-man-gh'); 
-	}
-	else {
-		$man_file_url = get_defaults($self_name . '-man'); 
-	}
+	# first choice is inxi.1/pinxi.1 from gh, second from smxi.org
+	$man_file_url = $self_download . '.1';
 	print "Updating $self_name.1 in $man_file_location\n";
 	print "using $download_id branch as download source\n";
 	print "Downloading man page file...\n";
@@ -5214,8 +5238,8 @@ sub get {
 	},
 	'bt-tool:s' => sub { 
 		my ($opt,$arg) = @_;
-		if ($arg =~ /^(bluetoothctl|bt-adapter|hciconfig|rfkill)$/i){
-			$bt_tool = lc($arg);
+		if ($arg =~ /^(bluetoothctl|bt-adapter|btmgmt|hciconfig|rfkill)$/i){
+			$force{lc($arg)} = 1;
 		}
 		else {
 			main::error_handler('bad-arg', $opt, $arg);
@@ -5346,11 +5370,11 @@ sub get {
 	'fake:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg){
-			my $wl = 'bluetooth|compiler|cpu|dboot|dmidecode|elbrus|iomem|ipmi|';
-			$wl .= 'logical|lspci|partitions|pciconf|pcictl|pcidump|';
+			my $wl = 'bluetooth|compiler|cpu|dboot|dmidecode|egl|elbrus|glx|';
+			$wl .= 'iomem|ip-if|ipmi|logical|lspci|partitions|pciconf|pcictl|pcidump|';
 			$wl .= 'raid-btrfs|raid-hw|raid-lvm|raid-md|raid-soft|raid-zfs|';
 			$wl .= 'sensors|sensors-sys|swaymsg|sys-mem|sysctl|uptime|usbconfig|';
-			$wl .= 'usbdevs|vmstat|wl-info|wlr-randr|xdpyinfo|xorg-log|xrandr';
+			$wl .= 'usbdevs|vmstat|vulkan|wl-info|wlr-randr|xdpyinfo|xorg-log|xrandr';
 			for (split(',',$arg)){
 				if ($_ =~ /\b($wl)\b/){
 					$fake{lc($1)} = 1;
@@ -5374,9 +5398,10 @@ sub get {
 	'force:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg){
-			my $wl = 'colors|cpuinfo|display|dmidecode|hddtemp|lsusb|man|meminfo|';
-			$wl .= 'no-dig|no-doas|no-html-wan|no-sudo|pkg|rpm|sensors-sys|usb-sys|';
-			$wl .= 'vmstat|wayland|wmctrl';
+			my $wl = 'bluetoothctl|bt-adapter|btmgmt|colors|cpuinfo|display|dmidecode|';
+			$wl .= 'hciconfig|hddtemp|ip|ifconfig|lsusb|man|meminfo|';
+			$wl .= 'no-dig|no-doas|no-html-wan|no-sudo|pkg|rfkill|rpm|sensors-sys|';
+			$wl .= 'usb-sys|vmstat|wayland|wmctrl';
 			for (split(',',$arg)){
 				if ($_ =~ /\b($wl)\b/){
 					$force{lc($1)} = 1;
@@ -5405,6 +5430,8 @@ sub get {
 		$show{'no-host'} = 0;},
 	'html-wan' => sub {
 		$force{'no-html-wan'} = 0;},
+	'ifconfig' => sub {
+		$force{'ifconfig'} = 1;},
 	'indent:i' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg >= 11){
@@ -5513,7 +5540,7 @@ sub get {
 		$debugger{'sys-force'} = 1;},
 	'tty' => sub { # workaround for ansible/scripts running this
 		$b_irc = 0;},
-	'U|update:s' => sub { # 1,2,3 OR http://myserver/path/inxi
+	'U|update:s' => sub { # 1,2,3,4 OR http://myserver/path/inxi
 		my ($opt,$arg) = @_;
 		process_updater($opt,$arg);},
 	'usb-sys' => sub {
@@ -5556,7 +5583,7 @@ sub post_process {
 		main::set_downloader();
 	}
 	$use{'man'} = 0 if (!$use{'yes-man'} || $use{'no-man'});
-	main::update_me($self_download, $download_id) if $use{'update-trigger'};
+	main::update_me($self_download,$download_id) if $use{'update-trigger'};
 	main::set_xorg_log() if $show{'graphic'};
 	if ($b_pledge){
 		my $b_update;
@@ -5583,11 +5610,14 @@ sub post_process {
 		}
 	}
 	if (($show{'label'} || $show{'uuid'}) && !$show{'partition'} && 
-	 !$show{'partition-full'} && !$show{'swap'} && !$show{'unmounted'}){
+	!$show{'partition-full'} && !$show{'swap'} && !$show{'unmounted'}){
 		main::error_handler('bad-arg', '-l/-u', 'missing required option(s) -j, -o, -p, -P');
 	}
 	$extra = 3 if $b_admin;
-	$show{'graphic-basic'} = 0 if $show{'graphic-full'} && $extra > 1;
+	# this turns off basic for F/v graphic output levels. 
+	if ($show{'graphic-basic'} && $show{'graphic-full'} && $extra > 1){
+		$show{'graphic-basic'} = 0;
+	}
 	if ($force{'rpm'}){
 		$force{'pkg'} = 1;
 		delete $force{'rpm'};
@@ -5602,7 +5632,7 @@ sub post_process {
 		$use{'block-tool'} = 1;
 	}
 	if ($show{'short'} || $show{'raid'} || $show{'disk'} || $show{'disk-total'} || 
-	 $show{'disk-basic'} || $show{'unmounted'}){
+	$show{'disk-basic'} || $show{'unmounted'}){
 		$use{'btrfs'} = 1;
 		$use{'mdadm'} = 1;
 	}
@@ -5631,16 +5661,17 @@ sub post_process {
 		$show{'disk-basic'} = 0;
 		$show{'disk-total'} = 0;
 	}
-	if ($show{'ram'} || $show{'slot'} || ($show{'cpu'} && ($extra > 1 || $bsd_type)) || 
-	 (($bsd_type || $force{'dmidecode'}) && ($show{'machine'} || $show{'battery'}))){
+	if ($show{'ram'} || $show{'slot'} || 
+	($show{'cpu'} && ($extra > 1 || $bsd_type)) || 
+	(($bsd_type || $force{'dmidecode'}) && ($show{'machine'} || $show{'battery'}))){
 		$use{'dmidecode'} = 1;
 	}
 	if ($show{'audio'} || $show{'bluetooth'} || $show{'graphic'} || 
-	 $show{'network'} || $show{'raid'}){
+	$show{'network'} || $show{'raid'}){
 		$use{'pci'} = 1;
 	}
 	if ($show{'usb'} || $show{'audio'} || $show{'bluetooth'} || $show{'disk'} || 
-	 $show{'graphic'} || $show{'network'}){
+	$show{'graphic'} || $show{'network'}){
 		$use{'usb'} = 1;
 	}
 	if ($bsd_type){
@@ -5652,8 +5683,8 @@ sub post_process {
 			$use{'bsd-cpu'} = 1;
 			$use{'bsd-sleep'} = 1;}
 		if ($show{'short'} || $show{'disk-basic'} || $show{'disk-total'} || 
-		 $show{'disk'} || $show{'partition'} || $show{'partition-full'} || 
-		 $show{'raid'} || $show{'swap'} || $show{'unmounted'}){
+		$show{'disk'} || $show{'partition'} || $show{'partition-full'} || 
+		$show{'raid'} || $show{'swap'} || $show{'unmounted'}){
 			$use{'bsd-disk'} = 1;
 			$use{'bsd-partition'} = 1;
 			$use{'bsd-raid'} = 1;}
@@ -5684,31 +5715,38 @@ sub process_updater {
 	$use{'downloader'} = 1;
 	if ($use{'update'}){
 		$use{'update-trigger'} = 1;
-		if (!$arg && $self_name eq 'pinxi'){
+		if (!$arg){
 			$use{'man'} = 1;
-			$download_id = 'inxi-perl branch';
-			$self_download = main::get_defaults('inxi-pinxi');
+			$download_id = "$self_name main branch";
+			$self_download = main::get_defaults("$self_name-main");
 		}
 		elsif ($arg && $arg eq '3'){
 			$use{'man'} = 1;
 			$download_id = 'dev server';
-			$self_download = main::get_defaults('inxi-dev');
+			$self_download = main::get_defaults("$self_name-dev");
 		}
-		else {
-			if (!$arg){
-				$download_id = 'main branch';
-				$self_download = main::get_defaults('inxi-main');
-				$use{'man'} = 1;
-				$use{'yes-man'} = 1;
-			}
-			elsif ($arg =~ /^[12]$/){
+		elsif ($arg && $arg eq '4'){
+			$use{'man'} = 1;
+			$use{'ftp-download'} = 1;
+			$download_id = 'dev server ftp';
+			$self_download = main::get_defaults("$self_name-dev-ftp");
+		}
+		elsif ($arg =~ /^[12]$/){
+			if ($self_name eq 'inxi'){
 				$download_id = "branch $arg";
 				$self_download = main::get_defaults("inxi-branch-$arg");
 			}
-			elsif ($arg =~ /^http/){
-				$download_id = 'alt server';
-				$self_download = $arg;
+			else {
+				main::error_handler('bad-arg', $opt, $arg);
 			}
+		}
+		elsif ($arg =~ /^(ftp|https?):/){
+			$download_id = 'alt server';
+			$self_download = $arg;
+		}
+		if ($self_download && $self_name eq 'inxi'){
+			$use{'man'} = 1;
+			$use{'yes-man'} = 1;
 		}
 		if (!$self_download){
 			main::error_handler('bad-arg', $opt, $arg);
@@ -5777,7 +5815,7 @@ sub show_options {
 	['1', '', '--gpu', "Deprecated. Triggers -Ga."],
 	['1', '-G', '--graphics', "Graphics info (devices(s), drivers, display 
 	protocol (if available), display server/Wayland compositor, resolution, X.org: 
-	renderer, OpenGL version; Xvesa: VBE info."],
+	renderer, basic EGL, OpenGL, Vulkan API data; Xvesa API: VBE info."],
 	['1', '-i', '--ip', "WAN IP address and local interfaces (requires ifconfig 
 	or ip network tool). Triggers -n. Not shown with -F for user security reasons. 
 	You shouldn't paste your local/WAN IP."],
@@ -5955,9 +5993,9 @@ sub show_options {
 	['2', '-E', '', "PCI/USB Bus ID of device, driver version, 
 	LMP version."],
 	['2', '-G', '', "GPU arch (AMD/Intel/Nvidia only); Specific vendor/product 
-	information (if relevant); PCI/USB ID of device; Direct rendering status 
-	(in X); Screen number GPU is running on (Nvidia only); device temp (Linux, 
-	if found)."],
+	information (if relevant); PCI/USB ID of device; Screen number GPU is running 
+	on (Nvidia only); device temp (Linux, if found); APIs: EGL: active/inactive 
+	platforms; OpenGL: direct rendering status (in X); Vulkan device counts."],
 	['2', '-i', '', "For IPv6, show additional scope addresses: Global, Site, 
 	Temporary, Unknown. See --limit for large counts of IP addresses."],
 	['2', '-I', '', "Default system GCC. With -xx, also shows other installed 
@@ -6004,11 +6042,12 @@ sub show_options {
 	(if found); USB rev, speed, lanes (if found)."],
 	['2', '-G', '', "Chip vendor:product ID for each video device; Output ports, 
 	used and empty; PCIe speed, lanes (if found); USB rev, speed, lanes (if 
-	found); Xorg: OpenGL compatibility version, if free drivers and available; 
-	Xorg compositor; alternate Xorg drivers (if available. Alternate means driver 
-	is on automatic driver check list of Xorg for the device vendor, but is not 
-	installed on system); Xorg Screen data: ID, s-res, dpi;  Monitors: ID, 
-	position (if > 1), resolution, dpi, model, diagonal."],
+	found); Xorg: Xorg compositor; alternate Xorg drivers (if available. Alternate 
+	means driver is on automatic driver check list of Xorg for the device vendor, 
+	but is not installed on system); Xorg Screen data: ID, s-res, dpi;  Monitors: 
+	ID, position (if > 1), resolution, dpi, model, diagonal; APIs: EGL: per 
+	platform report; OpenGL: ES version, device-ID, display-ID (if not found in 
+	Display line); Vulkan: per device report."], 
 	['2', '-I', '', "Other detected installed gcc versions (if present). System 
 	default target/runlevel. Adds parent program (or pty/tty) for shell info if 
 	not in IRC. Adds Init version number, RC (if found). Adds per package manager
@@ -6049,9 +6088,11 @@ sub show_options {
 	installed); smt status, if available."],
 	['2', '-D', '', "Firmware rev. if available; partition scheme, in some cases; 
 	disk type, rotation rpm (if available)."],
-	['2', '-E', '', "Serial number, class ID, HCI version and revision."],
+	['2', '-E', '', "Serial number, class ID, bluetooth device class ID, HCI 
+	version and revision."],
 	['2', '-G', '', "Device serial number, class ID; Xorg Screen size, diag; 
-	Monitors: hz, size, modes, serial, scale, modes (max/min)."],
+	Monitors: hz, size, modes, serial, scale, modes (max/min); APIs: EGL: hardware 
+	driver info; Vulkan: layer count, device hardware vendor."],
 	['2', '-I', '', "For 'Shell:' adds ([doas|su|sudo|login]) to shell name if 
 	present; adds default shell+version if different; for 'running in:' adds (SSH)
 	if SSH session; adds wakeups: (from suspend) to Uptime."],
@@ -6064,9 +6105,9 @@ sub show_options {
 	['2', '-R', '', "zfs-raid: portion allocated (used) by RAID devices/arrays. 
 	md-raid: system md-raid support types (kernel support, read ahead, RAID 
 	events). Hardware RAID rev, ports, specific vendor/product information."],
-	['2', '-S', '', "Panel/tray/bar/dock info in desktop output, if in X (like 
-	lxpanel, xfce4-panel, mate-panel); (if available) dm version number, window 
-	manager version number, virtual terminal number."],
+	['2', '-S', '', "Kernel clocksource; Panel/tray/bar/dock info in desktop 
+	output, if in X (like lxpanel, xfce4-panel, mate-panel); (if available) dm 
+	version number, window manager version number, virtual terminal number."],
 	);
 	if ($use{'weather'}){
 		push(@$rows, 
@@ -6091,17 +6132,20 @@ sub show_options {
 	['2', '-d,-D', '', "If available: logical and physical block sizes; drive 
 	family; maj:min; USB mode (if found); USB drive specifics; SMART report."],
 	['2', '-E', '', "PCIe lanes-max: gen, speed, lanes (if relevant); USB mode 
-	(if found); If available: in Report:, adds Info: line: acl-mtu, sco-mtu, 
-	link-policy, link-mode, service-classes."],
+	(if found); If available: in Report:, adds status: discoverable, pairing; 
+	adds Info: line: acl-mtu, sco-mtu, link-policy, link-mode, service-classes."],
 	['2', '-G', '', "GPU process node, built year (AMD/Intel/Nvidia only); 
 	non-free driver info (Nvidia only); PCIe lanes-max: gen, speed, lanes (if 
 	relevant); USB mode (if found); list of alternate kernel modules/drivers for 
 	device(s) (if available); Monitor built year, gamma, screen ratio (if 
-	available)."],
+	available); APIs: OpenGL: device memory, unified memory status; Vulkan: adds 
+	full device report, device name, driver version, surfaces."],
 	['2', '-I', '', "Adds to Packages total number of lib files found for each 
 	package manager and pm tools (if not -r); adds init service tool."],
 	['2', '-j,-p,-P', '', "For swap (if available): swappiness and vfs cache 
 	pressure, and if values are default or not."],
+	['2', '-j', '', "Linux only: (if available): row one zswap data, and per zram
+	row, active and available zram compressions, max compression streams."],
 	['2', '-J', '', "Adds USB mode (Linux only); IEC speed (base 2, Bytes/s)."],
 	['2', '-L', '', "LV, Crypto, devices, components: add maj:min; show
 	full device/components report (speed, mapped names)."],
@@ -6115,7 +6159,8 @@ sub show_options {
 	percent available for user, block size of file system (root required)."],
 	['2', '-r', '', "Packages, see -Ia."],
 	['2', '-R', '', "mdraid: device maj:min; per component: size, maj:min, state."],
-	['2', '-S', '', "If available: kernel boot parameters."],
+	['2', '-S', '', "If available: kernel alternate clocksources, boot 
+	parameters."],
 	['2', '', '--slots', "If available: slot bus ID children."],
 	);
 	push(@$rows, 
@@ -6135,11 +6180,12 @@ sub show_options {
 		otherwise user is fine. Man page installs require root. No arguments 
 		downloads from main $self_name git repo."],
 		['1', '', '', "Use alternate sources for updating $self_name"],
-		['2', '1', '', "Get the git branch one version."],
-		['2', '2', '', "Get the git branch two version."],
 		['3', '3', '', "Get the dev server (smxi.org) version."],
-		['2', '<http>', '', "Get a version of $self_name from your own server. 
-		Use the full download path, e.g.^$self_name^-U^https://myserver.com/inxi"],
+		['3', '4', '', "Get the dev server (smxi.org) FTP version. Use if SSL issues
+		and --no-ssl doesn't work."],
+		['2', '<http|https|ftp>', '', "Get a version of $self_name from your own 
+		server. Use the full download path, e.g.
+		^$self_name^-U ^https://myserver.com/inxi"],
 		);
 	}
 	push(@$rows, 
@@ -6155,22 +6201,24 @@ sub show_options {
 	['2', '43', '', "Bypass Wget as a downloader option."],
 	['2', '44', '', "Bypass Curl, Fetch, and Wget as downloader options. Forces 
 	Perl if HTTP::Tiny present."],
-	['1', '', '--bt-tool', "[bt-adapter|hciconfig|rfkill] Force use of given tool 
-	for bluetooth report."],
+	['1', '', '--bt-tool', "[bt-adapter btmgmt hciconfig rfkill] Force use of 
+	given tool forbluetooth report. Or use --force [tool]."],
 	['1', '', '--dig', "Overrides configuration item NO_DIG (resets to default)."],
 	['1', '', '--display', "[:[0-9]] Try to get display data out of X (default: 
 	display 0)."],
 	['1', '', '--dmidecode', "Force use of dmidecode data instead of /sys where 
 	relevant 
 	(e.g. -M, -B)."],
-	['1', '', '--downloader', "Force $self_name to use [curl|fetch|perl|wget] for 
+	['1', '', '--downloader', "Force $self_name to use [curl fetch perl wget] for 
 	downloads."],
-	['1', '', '--force', "[dmidecode|hddtemp|lsusb|meminfo|usb-sys|vmstat|wmctrl].
+	['1', '', '--force', "[bt-adapter btmgmt dmidecode hciconfig hddtemp ip 
+	ifconfig lsusb meminfo rfkill usb-sys vmstat wmctrl].
 	1 or more in comma separated list. Force use of item(s). 
 	See --hddtemp, --dmidecode, --wm, --usb-tool, --usb-sys."],
 	['1', '', '--hddtemp', "Force use of hddtemp for disk temps."],
 	['1', '', '--html-wan', "Overrides configuration item NO_HTML_WAN (resets to 
 	default)."],
+	['1', '', '--ifconfig', "Force use of ifconfig for IF with -i."],
 	);
 	if ($use{'update'}){
 		push(@$rows, 
@@ -6196,7 +6244,7 @@ sub show_options {
 	['1', '', '--no-sudo', "Skip internal program use of sudo features (not 
 	related to starting $self_name with sudo)."],
 	['1', '', '--rpm', "Force use of disabled package manager counts for packages 
-	feature with -rx/-Ix. RPM disabled by default due to slow to massive RPM 
+	feature with -rx/-Ix. RPM disabled by default due to slow to massive rpm 
 	package query times."],
 	['1', '', '--sensors-default', "Removes configuration item SENSORS_USE and 
 	SENSORS_EXCLUDE. Same as default behavior."],
@@ -6219,7 +6267,7 @@ sub show_options {
 	(Linux only)."],
 	['1', '', '--wan-ip-url', "[URL] Skips dig, uses supplied URL for WAN IP (-i). 
 	URL output must end in the IP address. See man. 
-	Example:^$self_name^-i^--wan-ip-url^https://yoursite.com/ip.php"],
+	Example:^$self_name^-i^--wan-ip-url^https://yoursite.com/remote-ip"],
 	['1', '', '--wm', "Force wm: to use wmctrl as data source. Default uses ps."],
 	['0', '', '', $line ],
 	['0', '', '', "Debugging Options:"],
@@ -6298,7 +6346,7 @@ sub show_version {
 		}
 		push(@$rows, 
 		[ 0, '', '', '' ],
-		[ 0, '', '', "Website:^https://github.com/smxi/inxi^or^https://smxi.org/" ],
+		[ 0, '', '', "Website:^https://codeberg.org/smxi/inxi^or^https://smxi.org/" ],
 		[ 0, '', '', "IRC:^irc.oftc.net channel:^#smxi" ],
 		[ 0, '', '', "Forums:^https://techpatterns.com/forums/forum-33.html" ],
 		[ 0, '', '', '' ],
@@ -6910,9 +6958,11 @@ sub make_line {
 	return $line;
 }
 
+# args: 0: type; 1: info [optional]; 2: info [optional]
 sub message {
-	my ($type,$id) = @_;
+	my ($type,$id,$id2) = @_;
 	$id ||= '';
+	$id2 ||= '';
 	my %message = (
 	'arm-cpu-f' => 'Use -f option to see features',
 	'audio-server-on-pipewire-pulse' => 'off (using pipewire-pulse)',
@@ -6944,19 +6994,21 @@ sub message {
 	'edid-revision' => "invalid EDID revision: $id",
 	'edid-sync' => "bad sync value: $id",
 	'edid-version' => "invalid EDID version: $id",
-	'egl-wayland' => 'No known Wayland EGL/GBM data sources.',
-	'egl-wayland-console' => 'No known Wayland EGL/GBM data sources.',
+	'egl-null' => 'No EGL data available.',
+	'egl-missing' => 'EGL data requires eglinfo. Check --recommends.',
 	'file-unreadable' => 'File not readable (permissions?)',
-	'gfx-api' => 'No display API data. No known data sources.',
-	'gfx-api-console' => 'No display API data available in console. Headless machine?',
-	'gfx-api-xvesa' => 'No Xvesa VBE/GOP data found.',
-	'gl-console-glxinfo-missing' => 'GL data unavailable in console and glxinfo missing.',
-	'gl-console-root' => 'GL data unavailable in console for root.',
-	'gl-console-try' => 'GL data unavailable in console. Try -G --display',
-	'gl-display-root' => 'GL data unavailable for root.',
-	'gl-null' => 'No GL data found on this system.',
-	'gl-value-empty' => 'Unset. Missing GL driver?',
-	'glxinfo-missing' => 'Unable to show GL data. Required tool glxinfo missing.',
+	'gfx-api' => 'No display API data available.',
+	'gfx-api-console' => 'No API data available in console. Headless machine?',
+	'glx-console-glxinfo-missing' => 'GL data unavailable in console, glxinfo missing.',
+	'glx-console-root' => 'GL data unavailable in console for root.',
+	'glx-console-try' => 'GL data unavailable in console. Try -G --display',
+	'glx-display-root' => 'GL data unavailable for root.',
+	'glx-egl' => 'incomplete (EGL sourced)',
+	'glx-egl-console' => 'console (EGL sourced)',
+	'glx-egl-missing' => 'glxinfo missing (EGL sourced)',
+	'glx-null' => 'No GL data available.',
+	'glx-value-empty' => 'Unset. Missing GL driver?',
+	'glxinfo-missing' => 'Unable to show GL data. glxinfo is missing.',
 	'IP' => "No $id found. Connected to web? SSL issues?",
 	'IP-dig' => "No $id found. Connected to web? SSL issues? Try --no-dig",
 	'IP-no-dig' => "No $id found. Connected to web? SSL issues? Try enabling dig",
@@ -6975,8 +7027,9 @@ sub message {
 	'note-est' => 'est.',
 	'note-not-reliable' => 'not reliable',
 	'nv-current' => "current (as of $id)",
+	'nv-current-eol' => "current (as of $id; EOL~$id2)",
 	'nv-legacy-active' => "legacy-active (EOL~$id)", 
-	'nv-legacy-eol' => 'legacy (EOL)',
+	'nv-legacy-eol' => "legacy (EOL~$id)",
 	'optical-data' => 'No optical or floppy data found.',
 	'optical-data-bsd' => 'No optical or floppy data found.',
 	'output-control' => "-:: 'Enter' to continue to next block. Any key + 'Enter' to exit:",
@@ -7043,8 +7096,10 @@ sub message {
 	'unknown-dev' => 'ERR-102',
 	'unknown-device-id' => 'unknown device ID',
 	'unknown-shell' => 'ERR-100',
+	'vulkan-null' => 'No Vulkan data available.',
 	'weather-error' => "Error: $id",
 	'weather-null' => "No $id found. Internet connection working?",
+	'xvesa-null' => 'No Xvesa VBE/GOP data found.',
 	);
 	return $message{$type};
 }
@@ -8748,7 +8803,9 @@ sub get {
 	eval $start if $b_log;
 	my $rows = [];
 	my $num = 0;
-	$b_bluetooth = 1 if @ps_cmd && (grep {m|/bluetoothd\b|} @ps_cmd);
+	if ($fake{'bluetooth'} || (@ps_cmd && (grep {m|/bluetoothd\b|} @ps_cmd))){
+		$b_bluetooth = 1;
+	}
 	# note: rapi 4 has pci bus
 	if (%risc && !$use{'soc-bluetooth'} && !$use{'pci-tool'}){
 		# do nothing, but keep the test conditions to force 
@@ -8901,18 +8958,7 @@ sub advanced_output {
 	my ($rows,$type,$bus_id) = @_;
 	my (@temp);
 	my ($j,$num,$k,$l,$m,$n,$address,$id,$note,$tool) = (0,1,2,3,4,5,'','','','');
-	if (!$b_hci && $alerts{'hciconfig'}->{'action'} eq 'use'){
-		hciconfig_data();
-		$tool = 'hciconfig';
-	}
-	elsif (!$b_hci && $alerts{'bt-adapter'}->{'action'} eq 'use'){
-		bt_tool_data();
-		$tool = 'bt-adapter';
-	}
-	if (!$b_rfk && -e '/sys/class/bluetooth/'){
-		rfkill_data();
-		$tool = 'rfkill' if !$tool;
-	}
+	set_bluetooth_data(\$tool);
 	# print "bid: $bus_id\n";
 	if ($type ne 'check'){
 		@temp = main::globber('/sys/class/bluetooth/*');
@@ -8979,10 +9025,9 @@ sub advanced_output {
 					$address = main::filter($hci{$item}->{'address'});
 				}
 				$rows->[$j]{main::key($num++,0,$l,'address')} = $address;
-				# lmp/hci version only hciconfig sadly
-				if (defined $hci{$item}->{'lmp-version'} && 
-				 (my $btv = bluetooth_version($hci{$item}->{'lmp-version'}))){
-					$rows->[$j]{main::key($num++,0,$l,'bt-v')} = $btv;
+				# lmp/hci version only hciconfig
+				if ($hci{$item}->{'bt-version'}){
+					$rows->[$j]{main::key($num++,0,$l,'bt-v')} = $hci{$item}->{'bt-version'};
 				}
 				if ($extra > 0 && defined $hci{$item}->{'lmp-version'}){
 					$rows->[$j]{main::key($num++,0,$l,'lmp-v')} = $hci{$item}->{'lmp-version'};
@@ -8990,25 +9035,34 @@ sub advanced_output {
 						$rows->[$j]{main::key($num++,0,$m,'sub-v')} = $hci{$item}->{'lmp-subversion'};
 					}
 				}
-				if ($extra > 0 && defined $hci{$item}->{'hci-version'} && ($extra > 2 || !$hci{$item}->{'lmp-version'} || 
-				 ($hci{$item}->{'lmp-version'} && $hci{$item}->{'lmp-version'} ne $hci{$item}->{'hci-version'}))){
+				if ($extra > 0 && defined $hci{$item}->{'hci-version'} && 
+				($extra > 2 || !$hci{$item}->{'lmp-version'} || 
+				($hci{$item}->{'lmp-version'} && 
+				$hci{$item}->{'lmp-version'} ne $hci{$item}->{'hci-version'}))){
 					$rows->[$j]{main::key($num++,0,$l,'hci-v')} = $hci{$item}->{'hci-version'};
 					if ($extra > 1 && $hci{$item}->{'hci-revision'}){
 						$rows->[$j]{main::key($num++,0,$m,'rev')} = $hci{$item}->{'hci-revision'};
 					}
 				}
-				# if ($extra > 1 && $hci{$item}->{'discoverable'}){
-				# 	$rows->[$j]{main::key($num++,1,$l,'discover')} = $hci{$item}->{'discoverable'};
-				# 	if ($extra > 2 && $hci{$item}->{'discovering'}){
-				# 		$rows->[$j]{main::key($num++,1,$m,'active')} = $hci{$item}->{'discovering'};
-				# 	}
-				# }
-				# if ($extra > 1 && $hci{$item}->{'pairable'}){
-				# 	$rows->[$j]{main::key($num++,0,$l,'pair')} = $hci{$item}->{'pairable'};
-				# }
-				# this data only from hciconfig
 				if ($b_admin && 
-				($hci{$item}->{'acl-mtu'} || $hci{$item}->{'sco-mtu'} || $hci{$item}->{'link-policy'})){
+				($hci{$item}->{'discoverable'} || $hci{$item}->{'pairable'})){
+					$rows->[$j]{main::key($num++,1,$l,'status')} = '';
+					if ($hci{$item}->{'discoverable'}){
+						$rows->[$j]{main::key($num++,1,$m,'discoverable')} = $hci{$item}->{'discoverable'};
+						if ($hci{$item}->{'discovering'}){
+							$rows->[$j]{main::key($num++,1,$n,'active')} = $hci{$item}->{'discovering'};
+						}
+					}
+					if ($hci{$item}->{'pairable'}){
+						$rows->[$j]{main::key($num++,0,$m,'pairing')} = $hci{$item}->{'pairable'};
+					}
+				}
+				if ($extra > 2 && $hci{$item}->{'class'}){
+					$rows->[$j]{main::key($num++,0,$l,'class-ID')} = $hci{$item}->{'class'};
+				}
+				# this data only from hciconfig
+				if ($b_admin && ($hci{$item}->{'acl-mtu'} || $hci{$item}->{'sco-mtu'} || 
+				$hci{$item}->{'link-policy'})){
 					$j = scalar @$rows;
 					push(@$rows,{
 					main::key($num++,1,$l,'Info') => '',
@@ -9035,11 +9089,13 @@ sub advanced_output {
 	}
 	# since $rows is ref, we need to just check if no $j were set.
 	if (!$j && !$b_hci_error && ($alerts{'hciconfig'}->{'action'} ne 'use' &&
-	$alerts{'bt-adapter'}->{'action'} ne 'use')){
+	$alerts{'bt-adapter'}->{'action'} ne 'use' && 
+	$alerts{'btmgmt'}->{'action'} ne 'use')){
 		my $key = 'Report';
 		my $value = '';
 		if ($alerts{'hciconfig'}->{'action'} eq 'platform' || 
-		 $alerts{'bt-adapter'}->{'action'} eq 'platform'){
+		$alerts{'bt-adapter'}->{'action'} eq 'platform' ||
+		$alerts{'btmgmt'}->{'action'} eq 'platform'){
 			$value = main::message('tool-missing-os','bluetooth');
 		}
 		else {
@@ -9053,7 +9109,34 @@ sub advanced_output {
 	eval $end if $b_log;
 }
 
-sub bt_tool_data {
+# note: echo 'show' | bluetoothctl outputs everything but hciX ID, and is fast
+# args: 0: $tool, by ref
+sub set_bluetooth_data {
+	eval $start if $b_log;
+	if (!$b_hci && !$force{'bt-adapter'} && !$force{'btmgmt'} && 
+	!$force{'rfkill'} && 
+	($fake{'bluetooth'} || $alerts{'hciconfig'}->{'action'} eq 'use')){
+		hciconfig_data();
+		${$_[0]} = 'hciconfig';
+	}
+	elsif (!$b_hci && !$force{'rfkill'} && !$force{'bt-adapter'} && 
+	($fake{'bluetooth'} || $alerts{'btmgmt'}->{'action'} eq 'use')){
+		btmgmt_data();
+		${$_[0]} = 'btmgmt';
+	}
+	elsif (!$b_hci && !$force{'rfkill'} && 
+	($fake{'bluetooth'} || $alerts{'bt-adapter'}->{'action'} eq 'use')){
+		bt_adapter_data();
+		${$_[0]} = 'bt-adapter';
+	}
+	if (!$b_rfk && ($fake{'bluetooth'} || -e '/sys/class/bluetooth/')){
+		rfkill_data();
+		${$_[0]} = 'rfkill' if !${$_[0]};
+	}
+	eval $end if $b_log;
+}
+
+sub bt_adapter_data {
 	eval $start if $b_log;
 	$b_hci = 1;
 	my (@data,$id);
@@ -9065,7 +9148,7 @@ sub bt_tool_data {
 	else {
 		if ($b_bluetooth){
 			my $cmd = "$alerts{'bt-adapter'}->{'path'} --info 2>/dev/null";
-			@data = main::grabber($cmd,'', 'strip');
+			@data = main::grabber($cmd,'','strip'); 
 		}
 	}
 	# print Data::Dumper::Dumper \@data;
@@ -9079,6 +9162,9 @@ sub bt_tool_data {
 		}
 		elsif ($working[0] eq 'Address'){
 			$hci{$id}->{'address'} = join(':',@working[1 .. $#working]);
+		}
+		elsif ($working[0] eq 'Class' && $working[1] =~ /^0x0*(\S+)/){
+			$hci{$id}->{'class'} = $1;
 		}
 		elsif ($working[0] eq 'Powered'){
 			$hci{$id}->{'state'} = ($working[1] =~ /^(1|yes)\b/) ? 'up': 'down';
@@ -9096,7 +9182,50 @@ sub bt_tool_data {
 	if (!@data && !$b_bluetooth){
 		$hci{'alert'} = main::message('bluetooth-down');
 	}
-	print Data::Dumper::Dumper \%hci if $dbg[27];
+	print 'bt-adapter: ', Data::Dumper::Dumper \%hci if $dbg[27];
+	main::log_data('dump','%hci', \%hci) if $b_log;
+	eval $end if $b_log;
+}
+
+sub btmgmt_data {
+	eval $start if $b_log;
+	$b_hci = 1;
+	my (@data,$id);
+	if ($fake{'bluetooth'}){
+		my $file;
+		$file = "$ENV{'HOME'}/bin/scripts/inxi/data/bluetooth/btmgmt-2.txt";
+		@data = main::reader($file,'strip');
+	}
+	else {
+		if ($b_bluetooth){
+			my $cmd = "$alerts{'btmgmt'}->{'path'} info 2>/dev/null";
+			@data = main::grabber($cmd,'', 'strip');
+		}
+	}
+	# print Data::Dumper::Dumper \@data;
+	main::log_data('dump','@data', \@data) if $b_log;
+	foreach (@data){
+		next if /^Index list/;
+		if (/^(hci[0-9]+):\s+/){
+			$id = $1;
+		}
+		# addr 4C:F3:72:9C:B4:D3 version 6 manufacturer 15 class 0x000104
+		elsif (/^addr\s+([0-9A-F:]+)\s+version\s+([0-9]+)\s/){
+			$hci{$id}->{'address'} = $1;
+			$hci{$id}->{'lmp-version'} = $2; # assume non hex integer
+			$hci{$id}->{'bt-version'} = bluetooth_version($2);
+			if (/ class\s+0x0*(\S+)\b/){
+				$hci{$id}->{'class'} = $1;
+			}
+		}
+		elsif (/^current settings:\s+(.*)/){
+			my $settings = $1;
+			$hci{$id}->{'state'} = ($settings =~ /\bpowered\b/) ? 'up' : 'down';
+			$hci{$id}->{'discoverable'} = ($settings =~ /\bdiscoverable\b/) ? 'yes' : 'no';
+			$hci{$id}->{'pairable'} = ($settings =~ /\bconnectable\b/) ? 'yes' : 'no';
+		}
+	}
+	print 'btmgmt: ', Data::Dumper::Dumper \%hci if $dbg[27];
 	main::log_data('dump','%hci', \%hci) if $b_log;
 	eval $end if $b_log;
 }
@@ -9107,7 +9236,7 @@ sub hciconfig_data {
 	my (@data,$id);
 	if ($fake{'bluetooth'}){
 		my $file;
-		$file = "";
+		$file = "$ENV{'HOME'}/bin/scripts/inxi/data/bluetooth/hciconfig-a-2.txt";
 		@data = main::reader($file,'strip');
 	}
 	else {
@@ -9132,13 +9261,28 @@ sub hciconfig_data {
 		elsif (/^(UP|DOWN).*/){
 			$hci{$id}->{'state'} = lc($1);
 		}
-		elsif (/^HCI Version:\s+([0-9\.]+)\s+.*Revision:\s+0x([0-9a-f]+)/){
-			$hci{$id}->{'hci-version'} = $1;
-			$hci{$id}->{'hci-revision'} = $2;
+		elsif (/^Class:\s+0x0*(\S+)/){
+			$hci{$id}->{'class'} = $1;
 		}
-		elsif (/^LMP Version:\s+([0-9\.]+)\s+.*Subversion:\s+0x([0-9a-f]+)/){
-			$hci{$id}->{'lmp-version'} = $1;
-			$hci{$id}->{'lmp-subversion'} = $2;
+		# HCI Version: 4.0 (0x6)  Revision: 0x1000
+		# HCI Version: 6.6  Revision: 0x1000 [don't know if this exists]
+		# HCI Version:  (0x7)  Revision: 0x3101
+		elsif (/^HCI Version:\s+(([0-9\.]+)\s+)?\(0x([0-9a-f]+)\)\s+Revision:\s+0x([0-9a-f]+)/i){
+			$hci{$id}->{'hci-revision'} = $4;
+			if (defined $3){
+				$hci{$id}->{'bt-version'} = bluetooth_version(hex($3));
+				$hci{$id}->{'hci-version'} = hex($3);
+				$hci{$id}->{'hci-version-hex'} = $3;
+			}
+		}
+		# LMP Version: 4.0 (0x6)  Subversion: 0x220e
+		# LMP Version: 6.6  Revision: 0x1000 [don't know if this exists]
+		# LMP Version:  (0x7)  Subversion: 0x1
+		elsif (/^LMP Version:\s+(([0-9\.]+)\s+)?\(0x([0-9a-f]+)\)\s+Subversion:\s+0x([0-9a-f]+)/i){
+			$hci{$id}->{'lmp-subversion'} = $4;
+			$hci{$id}->{'bt-version'} = bluetooth_version(hex($3));
+			$hci{$id}->{'lmp-version'} = hex($3);
+			$hci{$id}->{'lmp-version-hex'} = $3;
 		}
 		elsif (/^Link policy:\s+(.*)/){
 			$hci{$id}->{'link-policy'} = lc($1);
@@ -9150,7 +9294,7 @@ sub hciconfig_data {
 			$hci{$id}->{'service-classes'} = main::clean_unset(lc($1));
 		}
 	}
-	print Data::Dumper::Dumper \%hci if $dbg[27];
+	print 'hciconfig: ', Data::Dumper::Dumper \%hci if $dbg[27];
 	main::log_data('dump','%hci', \%hci) if $b_log;
 	eval $end if $b_log;
 }
@@ -9187,7 +9331,7 @@ sub rfkill_data {
 			$hci{$id}->{'rf-index'} = $value;
 		}
 	}
-	print Data::Dumper::Dumper \%hci if $dbg[27];
+	print 'rfkill: ', Data::Dumper::Dumper \%hci if $dbg[27];
 	main::log_data('dump','%hci', \%hci) if $b_log;
 	eval $end if $b_log;
 }
@@ -9202,13 +9346,16 @@ sub check_service {
 	eval $end if $b_log;
 }
 
+# args: 0: lmp versoin - could be hex, but probably decimal, like 6.6
 sub bluetooth_version {
 	eval $start if $b_log;
 	my ($lmp) = @_;
-	return if !defined $lmp || !main::is_numeric($lmp);
+	return if !defined $lmp;
+	return if !main::is_numeric($lmp);
 	$lmp = int($lmp);
-	# conveniently, LMP starts with 0, so perfect for array indexes
-	my @bt = qw(1.0b 1.1 1.2 2.0 2.1 3.0 4.0 4.1 4.2 5.0 5.1 5.2);
+	# Conveniently, LMP starts with 0, so perfect for array indexes.
+	# 6.0 is coming, but might be 5.5 first, nobody knows.
+	my @bt = qw(1.0b 1.1 1.2 2.0 2.1 3.0 4.0 4.1 4.2 5.0 5.1 5.2 5.3 5.4);
 	return $bt[$lmp];
 	eval $end if $b_log;
 }
@@ -11368,6 +11515,8 @@ sub cp_cpu_arch {
 	my $check = main::message('note-check');
 	# See: docs/inxi-cpu.txt 
 	# print "type:$type fam:$family model:$model step:$stepping\n";
+	# Note: AMD family is not Ext fam . fam but rather Ext-fam + fam.
+	# But model is Ext model . model...
 	if ($type eq 'amd'){
 		if ($family eq '3'){
 			$arch = 'Am386';
@@ -11603,6 +11752,7 @@ sub cp_cpu_arch {
 		elsif ($family eq '19'){ # AF
 			# zen 4 raphael, phoenix 1 use n5 I believe
 			# Epyc Bergamo zen4c 4nm, only few full model IDs, update when appear
+			# zen4c is for cloud hyperscale
 			if ($model =~ /^(78)$/){
 				$arch = 'Zen 4c';
 				$gen = '5';
@@ -11632,9 +11782,26 @@ sub cp_cpu_arch {
 				$note = $check;
 				$process = 'TSMC n5 (5nm)';
 				$year = '2021-22';}
-			# Zen 5: TSMC n3
 		}
-		## Roadmap: check to verify, AMD is usually closer to target than Intel
+		# Zen 5: TSMC n3/n4, epyc turin / granite ridge? / turin dense zen 5c 3nm
+		elsif ($family eq '20'){ # BF
+			if ($model =~ /^(0)$/){
+				$arch = 'Zen 5';
+				$gen = '5';
+				$process = 'TSMC n3 (3nm)'; # turin could be 4nm, need more data
+				$year = '2023+';}
+			elsif ($model =~ /^(20|40)$/){
+				$arch = 'Zen 5';
+				$gen = '5';
+				$process = 'TSMC n3 (3nm)'; # desktop, granite ridge, confirm 2024
+				$year = '2024+';}
+			else {
+				$arch = 'Zen 5';
+				$note = $check;
+				$process = 'TSMC n3/n4 (3,4nm)';
+				$year = '2024+';}
+		}
+		# Roadmap: check to verify, AMD is usually closer to target than Intel
 		# Epyc 4 genoa: zen 4, nm, 2022+ (dec 2022), cxl-1.1,pcie-5, ddr-5
 	}
 	# we have no advanced data for ARM cpus, this is an area that could be improved?
@@ -12118,13 +12285,13 @@ sub cp_cpu_arch {
 				$arch = 'Raptor Lake'; # 13 gen, socket LG 1700,1800
 				$process = 'Intel 7 (10nm)';
 				$year = '2022+';}
-			elsif ($model =~ /^(BD)$/){
-				$arch = 'Lunar Lake'; # 16 gn
+			elsif ($model =~ /^(BC|BD)$/){
+				$arch = 'Lunar Lake'; # 15 gn
 				$process = 'Intel 18a (1.8nm)';
 				$year = '2024+';} # check when actually in production
 			# Meteor Lake-S maybe cancelled, replaced by arrow
-			elsif ($model =~ /^(C6)$/){
-				$arch = 'Arrow Lake'; # 15 gn
+			elsif ($model =~ /^(C5|C6)$/){
+				$arch = 'Arrow Lake'; # 14 gn
 				# gfx tile is TSMC 3nm
 				$process = 'Intel 20a (2nm)';# TSMC 3nm (corei3-5)/Intel 20A 2nm (core i5-9)
 				$year = '2024+';} # check when actually in production
@@ -12139,11 +12306,11 @@ sub cp_cpu_arch {
 			# Diamond Rapids: Intel 3 (7nm+), 2025
 			# Raptor Lake: 13 gen, Intel 7 (10nm), 2022
 			# Meteor Lake: 14 gen, Intel 4 (7nm+)
-			# Arrow Lake - 15 gen, TSMC 3nm (corei3-5)/Intel 20A 2nm (core i5-9), 2024
-			# Panther Lake - 15 gen, ?
-			# Beast Lake - 15 gen, ?
-			# Lunar Lake - 16 gen, Intel 18A (1.8nm), 2024-5
-			# Nova Lake - 17 gen, Intel 18A (1.8nm), 2026
+			# Arrow Lake - 14 gen, TSMC 3nm (corei3-5)/Intel 20A 2nm (core i5-9), 2024
+			# Lunar Lake - 15 gen, Intel 18A (1.8nm), 2024-5
+			# Panther Lake - 15 gen, ?, late 2025, cougar cove Xe3 Celestial GPU architecture
+			# Beast Lake - 16 gen, ?, 2026?
+			# Nova Lake - 16 gen, Intel 18A (1.8nm), 2026
 		}
 		# itanium 1 family 7 all recalled
 		elsif ($family eq 'B'){
@@ -14028,18 +14195,19 @@ sub set_disk_vendors {
 	['(^MKN|Mushkin)','Mushkin','Mushkin',''], # MKNS
 	# MU = Multiple_Flash_Reader too risky: |M[UZ][^L] HD103SI HD start risky
 	# HM320II HM320II HM
-	['(SAMSUNG|^(AWMB|[BC]DS20|[BC]WB|BJ[NT]|[BC]GND|CJ[NT]|CUT|[DG]3 Station|DUO\b|DUT|CKT|[GS]2 Portable|GN|HD\d{3}[A-Z]{2}$|(HM|SP)\d{2}|HS\d|M[AB]G\d[FG]|MCC|MCBOE|MCG\d+GC|[CD]JN|MZ|^G[CD][1-9][QS]|P[BM]\d|(SSD\s?)?SM\s?841)|^SSD\s?[89]\d{2}\s(DCT|PRO|QVD|\d+[GT]B)|\bEVO\b|SV\d|[BE][A-Z][1-9]QT|YP\b|[CH]N-M|MMC[QR]E)','SAMSUNG','Samsung',''], # maybe ^SM, ^HM
+	['(SAMSUNG|^(AWMB|[BC]DS20|[BC]WB|BJ[NT]|[BC]GND|CJ[NT]|CKT|CUT|[DG]3 Station|DUO\b|DUT|EB\dMW|GE4S5|[GS]2 Portable|GN|HD\d{3}[A-Z]{2}$|(HM|SP)\d{2}|HS\d|M[AB]G\d[FG]|MCC|MCBOE|MCG\d+GC|[CD]JN|MZ|^G[CD][1-9][QS]|P[BM]\d|(SSD\s?)?SM\s?841)|^SSD\s?[89]\d{2}\s(DCT|PRO|QVD|\d+[GT]B)|\bEVO\b|SV\d|[BE][A-Z][1-9]QT|YP\b|[CH]N-M|MMC[QR]E)','SAMSUNG','Samsung',''], # maybe ^SM, ^HM
 	# Android UMS Composite?U1
-	['(SanDisk|0781|^(A[BCD]LC[DE]|AFGCE|D[AB]4|DX[1-9]|Extreme|Firebird|S[CD]\d{2}G|SD(S[S]?[ADQ]|SL\d+G|SU\d|\sUltra)|SDW[1-9]|SE\d{2}|SEM[1-9]|\d[STU]|U(3\b|1\d0))|Clip Sport|Cruzer|iXpand|SSD (Plus|U1[01]0) [1-9]|ULTRA\s(FIT|trek|II)|X[1-6]\d{2})','(SanDisk|0781)','SanDisk',''],
+	['(SanDisk|0781|^(A[BCD]LC[DE]|AFGCE|D[AB]4|DX[1-9]|Extreme|Firebird|S[CD]\d{2}G|SD(S[S]?[ADQ]|SL\d+G|SU\d|\sUltra)|SDW[1-9]|SE\d{2}|SEM[1-9]|\d[STU]|U(3\b|1\d0))|Clip Sport|Cruzer|iXpand|SN(\d+G|128|256)|SSD (Plus|U1[01]0) [1-9]|ULTRA\s(FIT|trek|II)|X[1-6]\d{2})','(SanDisk|0781)','SanDisk',''],
 	# these are HP/Sandisk cobranded. DX110064A5xnNMRI ids as HP and Sandisc
 	['(^DX[1-9])','^(HP\b|SANDDISK)','Sandisk/HP',''], # ssd drive, must come before seagate ST test
 	# real, SSEAGATE Backup+; XP1600HE30002 | 024 HN (spinpoint) ; possible usb: 24AS
 	# ST[numbers] excludes other ST starting devices
 	['([S]?SEAGATE|^((Barra|Fire)Cuda|BUP|EM\d{3}|Expansion|(ATA\s|HDD\s)?ST\d{2}|5AS|X[AFP])|Backup(\+|\s?Plus)\s?(Hub)?|DS2\d|Expansion Desk|FreeAgent|GoFlex|INIC|IronWolf|OneTouch|Slim\s?BK)','[S]?SEAGATE','Seagate',''], 
-	['^(WD|WL[0]9]|Western Digital|My (Book|Passport)|\d*LPCX|Elements|easystore|EA[A-Z]S|EARX|EFRX|EZRX|\d*EAVS|G[\s-]Drive|i HTS|0JD|JP[CV]|MD0|M000|\d+(BEV|(00)?AAK|AAV|AZL|EA[CD]S)|PC\sSN|SPZX|3200[AB]|2500[BJ]|20G2|5000[AB]|6400[AB]|7500[AB]|00[ABL][A-Z]{2}|SSC\b)','(^WDC|Western\s?Digital)','Western Digital',''],
+	['^(WD|WL[0]9]|Western Digital|My (Book|Passport)|\d*LPCX|Elements|easystore|EA[A-Z]S|EARX|EFRX|EZRX|\d*EAVS|G[\s-]Drive|i HTS|0JD|JP[CV]|MD0|M000|\d+(BEV|(00)?AAK|AAV|AZL|EA[CD]S)|PC\sSN|SN530|SPZX|3200[AB]|2500[BJ]|20G2|5000[AB]|6400[AB]|7500[AB]|00[ABL][A-Z]{2}|SSC\b)','(^WDC|Western\s?Digital)','Western Digital',''],
 	# rare cases WDC is in middle of string
 	['(\bWDC\b|1002FAEX)','','Western Digital',''],
-	## THEN BETTER KNOWN ONESs ##
+	
+	## THEN BETTER KNOWN ONES ##
 	['^Acer','^Acer','Acer',''],
 	# A-Data can be in middle of string
 	['^(.*\bA-?DATA|ASP\d|AX[MN]|CH11|FX63|HV[1-9]|IM2|HD[1-9]|HDD\s?CH|IUM|SX\d|Swordfish)','A-?DATA','A-Data',''],
@@ -14048,7 +14216,7 @@ sub set_disk_vendors {
 	['^ATP','^ATP\b','ATP',''],
 	# Force MP500
 	['^(Corsair|Force\s|(Flash\s*)?(Survivor|Voyager)|Neutron|Padlock)','^Corsair','Corsair',''],
-	['^(FUJITSU|MJA|MH[TVWYZ]\d|MP|MAP\d|F\d00s?-)','^FUJITSU','Fujitsu',''],
+	['^(FUJITSU|MJA|MH[RTVWYZ]\d|MP|MAP\d|F\d00s?-)','^FUJITSU','Fujitsu',''],
 	# MAB3045SP shows as HP or Fujitsu, probably HP branded fujitsu
 	['^(MAB\d)','^(HP\b|FUJITSU)','Fujitsu/HP',''],
 	# note: 2012:  wdc bought hgst
@@ -14071,6 +14239,7 @@ sub set_disk_vendors {
 	# note: get rid of: M[DGK] becasue mushkin starts with MK
 	# note: seen: KXG50ZNV512G NVMe TOSHIBA 512GB | THNSN51T02DUK NVMe TOSHIBA 1024GB 
 	['(TOSHIBA|TransMemory|KBG4|^((A\s)?DT01A|M[GKQ]\d|HDW|SA\d{2}G$|(008|016|032|064|128)G[379E][0-9A]$|[S]?TOS|THN)|0930|KSG\d)','S?(TOSHIBA|0930)','Toshiba',''], # scsi-STOSHIBA_STOR.E_EDITION_
+	
 	## LAST: THEY ARE SHORT AND COULD LEAD TO FALSE ID, OR ARE UNLIKELY ##
 	# unknown: AL25744_12345678; ADP may be usb 2.5" adapter; udisk unknown: Z1E6FTKJ 00AAKS
 	# SSD2SC240G726A10 MRS020A128GTS25C EHSAJM0016GB
@@ -14089,12 +14258,15 @@ sub set_disk_vendors {
 	['^(Advantech|SQF)','^Advantech','Advantech',''],
 	['^AEGO','^AEGO','AEGO',''],
 	['^AFOX','^AFOX','AFOX',''],
+	['^AFTERSHOCK','^AFTERSHOCK','AFTERSHOCK',''],
 	['^(Agile|AGI)','^(AGI|Agile\s?Gear\s?Int[a-z]*)','AGI',''],
 	['^Aigo','^Aigo','Aigo',''],
+	['^AirDisk','^AirDisk','AirDisk',''],
 	['^Aireye','^Aireye','Aireye',''],
 	['^Alcatel','^Alcatel','Alcatel',''],
 	['^(Alcor(\s?Micro)?|058F)','^(Alcor(\s?Micro)?|058F)','Alcor Micro',''],
 	['^Alfawise','^Alfawise','Alfawise',''],
+	['(^ALKETRON|FireWizard)','^ALKETRON','ALKETRON',''],
 	['^Android','^Android','Android',''],
 	['^ANACOMDA','^ANACOMDA','ANACOMDA',''],
 	['^Ant[\s_-]?Esports','^Ant[\s_-]?Esports','Ant Esports',''],
@@ -14141,12 +14313,14 @@ sub set_disk_vendors {
 	['^Clover','^Clover','Clover',''],
 	['^CODi','^CODi','CODi',''],
 	['^Colorful\b','^Colorful','Colorful',''],
+	['^CONSISTENT','^CONSISTENT','Consistent',''],
 	# note: www.cornbuy.com is both a brand and also sells other brands, like newegg
 	# addlink; colorful; goldenfir; kodkak; maxson; netac; teclast; vaseky
 	['^Corn','^Corn','Corn',''],
 	['^CnMemory|Spaceloop','^CnMemory','CnMemory',''],
 	['^(Creative|(Nomad\s?)?MuVo)','^Creative','Creative',''],
 	['^CSD','^CSD','CSD',''],
+	['^CYX\b','^CYX','CYX',''],
 	['^(Dane-?Elec|Z Mate)','^Dane-?Elec','DaneElec',''],
 	['^DATABAR','^DATABAR','DataBar',''],
 	# Daplink vfs is an ARM software thing
@@ -14158,6 +14332,7 @@ sub set_disk_vendors {
 	['^DeLOCK','^Delock(\s?products)?','Delock',''],
 	['^Derler','^Derler','Derler',''],
 	['^detech','^detech','DETech',''],
+	['^DEXP','^DEXP','DEXP',''],
 	['^DGM','^DGM\b','DGM',''],
 	['^(DICOM|MAESTRO)','^DICOM','DICOM',''],
 	['^Digifast','^Digifast','Digifast',''],
@@ -14191,8 +14366,11 @@ sub set_disk_vendors {
 	['^(Shenzhen\s)?Etopso(\sTechnology)?','^(Shenzhen\s)?Etopso(\sTechnology)?','Etopso',''],
 	['^EURS','^EURS','EURS',''],
 	['^eVAULT','^eVAULT','eVAULT',''],
+	['^EVM','^EVM','EVM',''],
+	['^eVtran','^eVtran','eVtran',''],
 	# NOTE: ESA3... may be IBM PCIe SAD card/drives
 	['^(EXCELSTOR|r technology)','^EXCELSTOR( TECHNO(LOGY)?)?','ExcelStor',''],
+	['^EXRAM','^EXRAM','EXRAM',''],
 	['^EYOTA','^EYOTA','EYOTA',''],
 	['^EZCOOL','^EZCOOL','EZCOOL',''],
 	['^EZLINK','^EZLINK','EZLINK',''],
@@ -14225,6 +14403,7 @@ sub set_disk_vendors {
 	['^(Gigabyte|GP-G)','^Gigabyte','Gigabyte',''], # SSD
 	['^Gigastone','^Gigastone','Gigastone',''],
 	['^Gigaware','^Gigaware','Gigaware',''],
+	['^GJN','^GJN\b','GJN',''],
 	['^(Gloway|FER\d)','^Gloway','Gloway',''],
 	['^GLOWY','^GLOWY','Glowy',''],
 	['^Goldendisk','^Goldendisk','Goldendisk',''],
@@ -14251,6 +14430,7 @@ sub set_disk_vendors {
 	['^HEMA','^HEMA','HEMA',''],
 	['(HEORIADY|^HX-0)','^HEORIADY','HEORIADY',''],
 	['^(Hikvision|HKVSN|HS-SSD)','^Hikvision','Hikvision',''],
+	['^Hi[\s-]?Level ','^Hi[\s-]?Level ','Hi-Level',''], # ^HI\b with no Level?
 	['^(Hisense|H8G)','^Hisense','Hisense',''],
 	['^Hoodisk','^Hoodisk','Hoodisk',''],
 	['^HUAWEI','^HUAWEI','Huawei',''],
@@ -14301,6 +14481,7 @@ sub set_disk_vendors {
 	['^KimMIDI','^KimMIDI','KimMIDI',''],
 	['^Kimtigo','^Kimtigo','Kimtigo',''],
 	['^Kingbank','^Kingbank','Kingbank',''],
+	['^(KingCell|KC\b)','^KingCell','KingCell',''],
 	['^Kingchux[\s-]?ing','^Kingchux[\s-]?ing','Kingchuxing',''],
 	['^KINGCOMP','^KINGCOMP','KingComp',''],
 	['(KingDian|^NGF|S(280|400))','KingDian','KingDian',''],
@@ -14309,7 +14490,7 @@ sub set_disk_vendors {
 	['^Kingrich','^Kingrich','Kingrich',''],
 	['^Kingsand','^Kingsand','Kingsand',''],
 	['KING\s?SHA\s?RE','KING\s?SHA\s?RE','KingShare',''],
-	['^(KingSpec|ACSC|C3000|KS[DQ]|N[ET]-\d|P3$|P4\b|PA[_-]?(18|25)|Q-180|T-(3260|64|128)|Z(\d\s|F\d))','^KingSpec','KingSpec',''],
+	['^(KingSpec|ACSC|C3000|KS[DQ]|MSH|N[ET]-\d|P3$|P4\b|PA[_-]?(18|25)|Q-180|T-(3260|64|128)|Z(\d\s|F\d))','^KingSpec','KingSpec',''],
 	['^KingSSD','^KingSSD','KingSSD',''],
 	# kingwin docking, not actual drive
 	['^(EZD|EZ-Dock)','','Kingwin Docking Station',''],
@@ -14330,7 +14511,7 @@ sub set_disk_vendors {
 	['^(Lazos|L-?ISS)','^Lazos','Lazos',''],
 	['^LDLC','^LDLC','LDLC',''],
 	# LENSE30512GMSP34MEAT3TA / UMIS RPITJ256PED2MWX
-	['^(LEN|UMIS)','^Lenovo','Lenovo',''],
+	['^(LEN|UMIS|Think)','^Lenovo','Lenovo',''],
 	['^RPFT','','Lenovo O.E.M.',''],
 	# JAJS300M120C JAJM600M256C JAJS600M1024C JAJS600M256C JAJMS600M128G 
 	['^(Leven|JAJ[MS])','^Leven','Leven',''],
@@ -14345,13 +14526,13 @@ sub set_disk_vendors {
 	['^(LSI|MegaRAID)','^LSI\b','LSI',''],
 	['^(M-Systems|DiskOnKey)','^M-Systems','M-Systems',''],
 	['^(Mach\s*Xtreme|MXSSD|MXU|MX[\s-])','^Mach\s*Xtreme','Mach Xtreme',''],
-	['^(MacroVIP|MV\d)','^MacroVIP','MacroVIP',''],
+	['^(MacroVIP|MV(\d|GLD))','^MacroVIP','MacroVIP',''], # maybe MV alone
 	['^Mainic','^Mainic','Mainic',''],
+	['^(MARSHAL\b|MAL\d)','^MARSHAL','Marshal',''],
 	['^Maxell','^Maxell','Maxell',''],
 	['^Maximus','^Maximus','Maximus',''],
+	['^MAXIO','^MAXIO','Maxio',''],
 	['^Maxone','^Maxone','Maxone',''],
-	['^(Memorex|TravelDrive|TD\s?Classic)','^Memorex','Memorex',''],
-	['^(MARSHAL\b|MAL\d)','^MARSHAL','Marshal',''],
 	['^MARVELL','^MARVELL','Marvell',''],
 	['^Maxsun','^Maxsun','Maxsun',''],
 	['^MDT\b','^MDT','MDT (rebuilt WD/Seagate)',''], # mdt rebuilds wd/seagate hdd
@@ -14359,7 +14540,9 @@ sub set_disk_vendors {
 	['^MD[1-9]','^Max\s*Digital','MaxDigital',''],
 	['^Medion','^Medion','Medion',''],
 	['^(MEDIAMAX|WL\d{2})','^MEDIAMAX','MediaMax',''],
+	['^(Memorex|TravelDrive|TD\s?Classic)','^Memorex','Memorex',''],
 	['^Mengmi','^Mengmi','Mengmi',''],
+	['^MicroFrom','^MicroFrom','MicroFrom',''],
 	['^MGTEC','^MGTEC','MGTEC',''],
 	# must come before micron
 	['^(Mtron|MSP)','^Mtron','Mtron',''],
@@ -14378,8 +14561,9 @@ sub set_disk_vendors {
 	['^Morebeck','^Morebeck','Morebeck',''],
 	['^(Moser\s?Bear|MBIL)','^Moser\s?Bear','Moser Bear',''],
 	['^(Motile|SSM\d)','^Motile','Motile',''],
-	['^(Motorola|XT\d{4})','^Motorola','Motorola',''],
+	['^(Motorola|XT\d{4}|Moto[\s-]?[EG])','^Motorola','Motorola',''],
 	['^Moweek','^Moweek','Moweek',''],
+	['^Move[\s-]?Speed','^Move[\s-]?Speed','Move Speed',''],
 	#MRMAD4B128GC9M2C
 	['^(MRMA|Memoright)','^Memoright','Memoright',''],
 	['^MSI\b','^MSI\b','MSI',''],
@@ -14389,11 +14573,13 @@ sub set_disk_vendors {
 	['^(Myson)','^Myson([\s-]?Century)?([\s-]?Inc\.?)?','Myson Century',''],
 	['^(Natusun|i-flashdisk)','^Natusun','Natusun',''],
 	['^(Neo\s*Forza|NFS\d)','^Neo\s*Forza','Neo Forza',''],
-	['^(Netac|OnlyDisk|S535N)','^Netac','Netac',''],
+	['^(Netac|NS\d{3}|OnlyDisk|S535N)','^Netac','Netac',''],
+	['^Newsmy','^Newsmy','Newsmy',''],
 	['^NFHK','^NFHK','NFHK',''],
 	# NGFF is a type, like msata, sata
 	['^Nik','^Nikimi','Nikimi',''],
 	['^NOREL','^NOREL(SYS)?','NorelSys',''],
+	['^(N[\s-]?Tech|NT\d)','^N[\s-]?Tec','N Tech',''], # coudl be ^NT alone
 	['^ODYS','^ODYS','ODYS',''],
 	['^Olympus','^Olympus','Olympus',''],
 	['^Orico','^Orico','Orico',''],
@@ -14417,15 +14603,17 @@ sub set_disk_vendors {
 	['^(Premiertek|QSSD|Quaroni)','^Premiertek','Premiertek',''],
 	['^(-?Pretec|UltimateGuard)','-?Pretec','Pretec',''],
 	['^(Prolific)','^Prolific( Technolgy Inc\.)?','Prolific',''],
-	# PS3109S9 is the result of an error condition with ssd drive
+	# PS3109S9 is the result of an error condition with ssd controller: Phison PS3109
 	['^PUSKILL','^PUSKILL','Puskill',''],
 	['QEMU','^\d*QEMU( QEMU)?','QEMU',''], # 0QUEMU QEMU HARDDISK
 	['(^Quantum|Fireball)','^Quantum','Quantum',''],
 	['(^QOOTEC|QMT)','^QOOTEC','QOOTEC',''],
-	['^QUMO','^QUMO','Qumo',''],
+	['^(QUMO|Q\dDT)','^QUMO','Qumo',''],
+	['^QOPP','^QOPP','Qopp',''],
 	['^Qunion','^Qunion','Qunion',''],
 	['^(R[3-9]|AMD\s?(RADEON)?|Radeon)','AMD\s?(RADEON)?','AMD Radeon',''], # ssd 
 	['^(Ramaxel|RT|RM|RPF|RDM)','^Ramaxel','Ramaxel',''],
+	['^RAMOS','^RAMOS','RAmos',''],
 	['^(Ramsta|R[1-9])','^Ramsta','Ramsta',''],
 	['^RCESSD','^RCESSD','RCESSD',''],
 	['^(Realtek|RTL)','^Realtek','Realtek',''],
@@ -14438,6 +14626,7 @@ sub set_disk_vendors {
 	 #RTDMA008RAV2BWL comes with lenovo but don't know brand
 	['^Runcore','^Runcore','Runcore',''],
 	['^Rundisk','^Rundisk','RunDisk',''],
+	['^RZX','^RZX\b','RZX',''],
 	['^(S3Plus|S3\s?SSD)','^S3Plus','S3Plus',''],
 	['^(Sabrent|Rocket)','^Sabrent','Sabrent',''],
 	['^Sage','^Sage(\s?Micro)?','Sage Micro',''],
@@ -14454,6 +14643,7 @@ sub set_disk_vendors {
 	['(Silicon[\s-]?Power|^SP[CP]C|^Silicon|^Diamond|^HasTopSunlightpeed)','Silicon[\s-]?Power','Silicon Power',''],
 	# simple drive could also maybe be hgst
 	['^(Simple\s?Tech|Simple[\s-]?Drive)','^Simple\s?Tech','SimpleTech',''],
+	['^(Simmtronics?|S[79]\d{2}|ZipX)','^Simmtronics?','Simmtronics',''],
 	['^SINTECHI?','^SINTECHI?','SinTech (adapter)',''],
 	['^SiS\b','^SiS','SiS',''],
 	['Smartbuy','\s?Smartbuy','Smartbuy',''], # SSD Smartbuy 60GB; mSata Smartbuy 3
@@ -14464,9 +14654,11 @@ sub set_disk_vendors {
 	['^Skill','^Skill','Skill',''],
 	['^(SMART( Storage Systems)?|TX)','^(SMART( Storage Systems)?)','Smart Storage Systems',''],
 	['^Sobetter','^Sobetter','Sobetter',''],
+	['^Solidata','^Solidata','Solidata',''],
 	['^(SOLIDIGM|SSDPFK)','^SOLIDIGM\b','solidgm',''],
 	['^(Sony|IM9|Microvalut|S[FR]-)','^Sony','Sony',''],
 	['^(SSSTC|CL1-)','^SSSTC','SSSTC',''],
+	['^(SST|SG[AN])','^SST\b','SST',''],
 	['^STE[CK]','^STE[CK]','sTec',''], # wd bought this one
 	['^STORFLY','^STORFLY','StorFly',''],
 	['\dSUN\d','^SUN(\sMicrosystems)?','Sun Microsystems',''],
@@ -14488,7 +14680,7 @@ sub set_disk_vendors {
 	['^(TC[\s-]*SUNBOW|X3\s\d+[GT])','^TC[\s-]*SUNBOW','TCSunBow',''],
 	['^(TDK|TF[1-9]\d|LoR)','^TDK','TDK',''],
 	['^TEAC','^TEAC','TEAC',''],
-	['^(TEAM|T[\s-]?Create|L\d\s?Lite|T\d{3,}[A-Z]|TM\d|(Dark\s?)?L3\b|T[\s-]?Force)','^TEAM(\s*Group)?','TeamGroup',''],
+	['^(TEAM|T[\s-]?Create|CX[12]\b|L\d\s?Lite|T\d{3,}[A-Z]|TM\d|(Dark\s?)?L3\b|T[\s-]?Force)','^TEAM(\s*Group)?','TeamGroup',''],
 	['^(Teclast|CoolFlash)','^Teclast','Teclast',''],
 	['^(tecmiyo)','^tecmiyo','TECMIYO',''],
 	['^Teelkoou','^Teelkoou','Teelkoou',''],
@@ -14536,7 +14728,7 @@ sub set_disk_vendors {
 	['^Walton','^Walton','Walton',''],
 	['^(Wearable|Air-?Stash)','^Wearable','Wearable',''],
 	['^Wellcomm','^Wellcomm','Wellcomm',''],
-	['^(wicgtyp|N900)','^wicgtyp','wicgtyp',''],
+	['^(wicgtyp|N[V]?900)','^wicgtyp','wicgtyp',''],
 	['^Wilk','^Wilk','Wilk',''],
 	['^(WinMemory|SWG\d)','^WinMemory','WinMemory',''],
 	['^(Winton|WT\d{2})','^Winton','Winton',''],
@@ -14563,6 +14755,7 @@ sub set_disk_vendors {
 	['^Zenfast','^Zenfast','Zenfast',''],
 	['^Zenith','^Zenith','Zenith',''],
 	['^ZEUSLAP','^ZEUSLAP','ZEUSLAP',''],
+	['^ZEUSS','^ZEUSS','Zeuss',''],
 	['^(Zheino|CHN|CNM)','^Zheino','Zheino',''],
 	['^(Zotac|ZTSSD)','^Zotac','Zotac',''],
 	['^ZSPEED','^ZSPEED','ZSpeed',''],
@@ -14819,7 +15012,8 @@ sub drive_speed {
 ## GraphicItem 
 {
 package GraphicItem;
-my ($b_primary,$b_wayland_data,%graphics,$monitor_ids,$monitor_map);
+my ($b_primary,$b_wayland_data,%graphics,%mesa_drivers,
+$monitor_ids,$monitor_map);
 my ($gpu_amd,$gpu_intel,$gpu_nv);
 
 sub get {
@@ -14856,7 +15050,7 @@ sub get {
 	# note: not perfect, but we need usb gfx to show for all types, soc, pci, etc
 	usb_output($rows);
 	display_output($rows);
-	display_api_output($rows);
+	display_api($rows);
 	(%graphics,$monitor_ids,$monitor_map) = ();
 	eval $end if $b_log;
 	return $rows;
@@ -15506,205 +15700,375 @@ sub monitors_output_full {
 	eval $end if $b_log;
 }
 
-## DISPLAY API OUTPUT ##
-# as soon as EGL data source for Wayland appears add it!
-sub display_api_output {
+## DISPLAY API ##
+
+# API Output #
+
+# GLX/OpenGL EGL Vulkan XVesa
+sub display_api {
 	eval $start if $b_log;
 	my $rows = $_[0];
-	my $num = 0;
-	my ($api,$program,$type);
 	# print ("$b_display : $b_root\n");
 	# xvesa is absolute, if it's there, it works in or out of display
 	if ($graphics{'xvesa'}){
-		xvesa_output($rows,\$num);
+		xvesa_output($rows);
+		return;
 	}
-	else {
+	my ($b_egl,$b_egl_print,$b_glx,$b_glx_print,$b_vulkan,$api,$program,$type);
+	my $gl = {};
+	if ($fake{'egl'} || ($program = main::check_program('eglinfo'))){
+		gl_data('egl',$program,$rows,$gl);
+		$b_egl = 1;
+	}
+	if ($fake{'glx'} || ($program = main::check_program('glxinfo'))){
+		gl_data('glx',$program,$rows,$gl) if $b_display;
+		$b_glx = 1;
+	}
+	# Note: we let gl/egl output handle null or root null data issues
+	if ($gl->{'glx'}){
+		process_glx_data($gl->{'glx'},$b_glx);
+	}
+	# egl/vulkan give data out of display, and for root
+	# if ($b_egl}){
+	if ($b_egl && ($show{'graphic-full'} || !$gl->{'glx'})){
+		egl_output($rows,$gl);
+		$b_egl_print = 1;
+	}
+	# fill in whatever was missing from eglinfo, or if legacy system/no eglinfo
+	# if ($b_glx || $gl->{'glx'}){
+	if (($show{'graphic-full'} && ($b_glx || $gl->{'glx'})) || 
+	(!$show{'graphic-full'} && !$b_egl_print && ($b_glx || $gl->{'glx'}))){
+		opengl_output($rows,$gl);
+		$b_glx = 1;
+		$b_glx_print = 1;
+	}
+	# if ($fake{'vulkan'} || ($program = main::check_program('vulkaninfo'))){
+	if (($fake{'vulkan'} || ($program = main::check_program('vulkaninfo'))) &&
+	($show{'graphic-full'} || (!$b_egl_print && !$b_glx_print))){
+		vulkan_output($program,$rows);
+		$b_vulkan = 1;
+	}
+	if ($show{'graphic-full'} || (!$b_egl_print && !$b_glx_print)){
+		# remember, sudo/root usually has empty $DISPLAY as well
 		if ($b_display){
-			if (!$force{'wayland'} && ($program = main::check_program('glxinfo'))){
-				opengl_output($program,$rows,\$num);
+			# first do positive tests, won't be set for sudo/root
+			if (!$b_glx && $graphics{'protocol'} eq 'x11'){
+				$api = 'OpenGL';
+				$type = 'glxinfo-missing';
 			}
-			# handles no data until we find one for wayland egl data
-			elsif ($graphics{'protocol'} eq 'wayland'){
-				egl_output($rows,\$num);
+			elsif (!$b_egl && $graphics{'protocol'} eq 'wayland'){
+				$api = 'EGL'; # /GBM
+				$type = 'egl-missing';
 			}
-			else {
-				if (main::check_program('X') || main::check_program('Xorg')){
-					$api = 'OpenGL';
-					$type = 'glxinfo-missing';
-				}
-				# has to come after X tests, since X can have Xwayland installed.
-				elsif (main::check_program('Xwayland')){
-					$api = 'EGL/GBM';
-					$type = 'egl-wayland';
-				}
-				else {
-					$api = 'N/A';
-					$type = 'gfx-api';
-				}
-				push(@$rows,{
-				main::key($num++,1,1,'API') => $api,
-				main::key($num++,0,2,'Message') => main::message($type)
-				});
+			elsif (!$b_glx && 
+			(main::check_program('X') || main::check_program('Xorg'))){
+				$api = 'OpenGL';
+				$type = 'glxinfo-missing';
+			}
+			elsif (!$b_egl && main::check_program('Xwayland')){
+				$api = 'EGL';
+				$type = 'egl-missing';
+			}
+			elsif (!$b_egl && !$b_glx && !$b_vulkan) {
+				$api = 'N/A';
+				$type = 'gfx-api';
 			}
 		}
 		else {
-			if ($graphics{'protocol'} eq 'wayland'){
-				$api = 'EGL/GBM';
-				$type = 'egl-wayland-console';
-			}
-			elsif (main::check_program('glxinfo')){
+			if (!$b_glx && 
+			(main::check_program('X') || main::check_program('Xorg'))){
 				$api = 'OpenGL';
-				$type = ($b_root) ? 'gl-console-root' : 'gl-console-try';
+				$type = 'glx-console-glxinfo-missing';
 			}
-			elsif (main::check_program('X') || main::check_program('Xorg')){
-				$api = 'OpenGL';
-				$type = 'gl-console-glxinfo-missing';
-			}
-			# has to come after X tests, since X can have Xwayland installed.
-			elsif (main::check_program('Xwayland')){
-				$api = 'EGL/GBM';
-				$type = 'egl-wayland-console';
+			elsif (!$b_egl && main::check_program('Xwayland')){
+				$api = 'EGL';
+				$type = 'egl-console-missing';
 			}
 			# we don't know what it is, headless system, non xwayland wayland
-			else {
+			elsif (!$b_egl && !$b_glx && !$b_vulkan) {
 				$api = 'N/A';
 				$type = 'gfx-api-console';
 			}
-			push(@$rows,{
-			main::key($num++,1,1,'API') => $api,
-			main::key($num++,0,2,'Message') => main::message($type)
-			});
 		}
+		no_data_output($api,$type,$rows) if $type;
 	}
+	eval $end if $b_log;
+}
+
+sub no_data_output {
+	eval $start if $b_log;
+	my ($api,$type,$rows) = @_;
+	my $num = 0;
+	push(@$rows, {
+	main::key($num++,1,1,'API') => $api,
+	main::key($num++,0,2,'Message') => main::message($type)
+	});
 	eval $end if $b_log;
 }
 
 sub egl_output {
 	eval $start if $b_log;
-	my ($rows,$num) = @_;
-	push(@$rows,{
-	main::key($num++,1,1,'API') => 'EGL/GBM',
-	main::key($num++,0,2,'Message') => main::message('egl-wayland')
+	my ($rows,$gl) = @_;
+	if (!$gl->{'egl'}){
+		my $api = 'EGL';
+		my $type = 'egl-null';
+		no_data_output($api,$type,$rows);
+		return 0;
+	}
+	my ($i,$j,$num) = (0,scalar @$rows,0);
+	my ($value);
+	my $ref;
+	my $data = $gl->{'egl'}{'data'};
+	my $plat = $gl->{'egl'}{'platforms'};
+	push(@$rows, {
+	main::key($num++,1,1,'API') => 'EGL',
 	});
+	if ($extra < 2){
+		$value = ($data->{'versions'}) ? join(',',sort keys %{$data->{'versions'}}): 'N/A';
+	}
+	else {
+		$value = ($data->{'version'}) ? $data->{'version'}: 'N/A';
+	}
+	$rows->[$j]{main::key($num++,0,2,'v')} = $value;
+	if ($extra < 2){
+		$value = ($data->{'drivers'}) ? join(',',sort keys %{$data->{'drivers'}}): 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'drivers')} = $value;
+		$value = ($data->{'platforms'}{'active'}) ? join(',',@{$data->{'platforms'}{'active'}}) : 'N/A';
+		if ($extra < 1){
+			$rows->[$j]{main::key($num++,0,2,'platforms')} = $value;
+		}
+		else {
+			$rows->[$j]{main::key($num++,1,2,'platforms')} = '';
+			$rows->[$j]{main::key($num++,0,3,'active')} = $value;
+			$value = ($data->{'platforms'}{'inactive'}) ? join(',',@{$data->{'platforms'}{'inactive'}}) : 'N/A';
+			$rows->[$j]{main::key($num++,0,3,'inactive')} = $value;
+		}
+	}
+	else {
+		if ($extra > 2 && $data->{'hw'}){
+			$i = 0;
+			$rows->[$j]{main::key($num++,1,2,'hw')} = '';
+			foreach my $key (sort keys %{$data->{'hw'}}){
+				$value = ($key ne $data->{'hw'}{$key}) ? $data->{'hw'}{$key} . ' ' . $key: $key;
+				$rows->[$j]{main::key($num++,0,3,'drv')} = $value;
+			}
+		}
+		$rows->[$j]{main::key($num++,1,2,'platforms')} = '';
+		$data->{'version'} ||= 0;
+		$i = 0;
+		foreach my $key (sort keys %$plat){
+			next if !$plat->{$key}{'status'} || $plat->{$key}{'status'} eq 'inactive';
+			if ($key eq 'device'){
+				foreach my $id (sort keys %{$plat->{$key}}){
+					next if ref $plat->{$key}{$id} ne 'HASH';
+					$rows->[$j]{main::key($num++,1,3,$key)} = $id;
+					$ref = $plat->{$key}{$id}{'egl'};
+					egl_advanced_output($rows,$ref,\$num,$j,4,$data->{'version'});
+				}
+			}
+			else {
+				$rows->[$j]{main::key($num++,1,3,$key)} = '';
+				$ref = $plat->{$key}{'egl'};
+				egl_advanced_output($rows,$ref,\$num,$j,4,$data->{'version'});
+			}
+		}
+		if (!$data->{'platforms'}{'active'}){
+			$rows->[$j]{main::key($num++,0,3,'active')} = 'N/A';
+		}
+		if ($data->{'platforms'}{'inactive'}){
+			$rows->[$j]{main::key($num++,0,3,'inactive')} = join(',',@{$data->{'platforms'}{'inactive'}});
+		}
+	}
 	eval $end if $b_log;
+}
+
+# args: 0: $rows; 1: data ref; 2: \$num; 3: $j; 4: indent; 5: $b_plat_v
+sub egl_advanced_output {
+	my ($rows,$ref,$num,$j,$ind,$version) = @_;
+	my $value;
+	# version is set to 0 for math
+	if ($version && (!$ref->{'version'} || $version != $ref->{'version'})){
+		$value = ($ref->{'version'}) ? $ref->{'version'} : 'N/A';
+		$rows->[$j]{main::key($$num++,0,$ind,'egl')} = $value;
+		undef $value;
+	}
+	if ($ref->{'driver'}){
+		$value = $ref->{'driver'};
+	}
+	else {
+		if ($ref->{'vendor'} && $ref->{'vendor'} ne 'mesa'){
+			$value = $ref->{'vendor'};
+		}
+		$value ||= 'N/A';
+	}
+	$rows->[$j]{main::key($$num++,0,$ind,'drv')} = $value;
 }
 
 sub opengl_output {
 	eval $start if $b_log;
-	my ($program,$rows,$num) = @_;
-	# NOTE: glxinfo -B is not always available, unfortunately
-	my $glxinfo = main::grabber("$program $display_opt 2>/dev/null",'','','ref');
-	# my $file = "$fake_data_dir/graphics/glxinfo/glxinfo-ssh-centos.txt";
-	# my @glxinfo = main::reader($file);
-	if (!@$glxinfo){
+	my ($rows,$gl) = @_;
+	# egl will have set $glx if present
+	if (!$gl->{'glx'}){
+		my $api = 'OpenGL';
 		my $type;
-		if ($b_root){
-			$type = 'gl-display-root';
+		if ($b_display){
+			$type = ($b_root) ? 'glx-display-root': 'glx-null';
 		}
 		else {
-			$type = 'gl-null';
+			$type = ($b_root) ? 'glx-console-root' : 'glx-console-try';
 		}
-		push(@$rows, {
-		main::key($$num++,1,1,'API') => 'OpenGL',
-		main::key($$num++,0,2,'Message') => main::message($type)
-		});
-		return;
+		no_data_output($api,$type,$rows);
+		return 0;
 	}
-	# print join("\n", @$glxinfo),"\n";
-	my $compat_version = '';
-	my ($b_compat,$b_nogl,@core_profile_version,@direct_render,@renderer,
-	@opengl_version,@working);
-	foreach (@$glxinfo){
-		next if /^\s/;
-		if (/^opengl renderer/i){
-			@working = split(/:\s*/, $_, 2);
-			if ($working[1]){
-				$working[1] = main::clean($working[1]);
-			}
-			# note: seen cases where gl drivers are missing, with empty field value.
-			else {
-				$b_nogl = 1;
-				$working[1] = main::message('gl-value-empty');
-			}
-			push(@renderer, $working[1]);
-		}
-		# dropping all conditions from this test to just show full mesa information
-		# there is a user case where not f and mesa apply, atom mobo
-		# /opengl version/ && ( f || $2 !~ /mesa/){
-		elsif (/^opengl version/i){
-			@working = split(/:\s*/, $_, 2);
-			if ($working[1]){
-				# fglrx started appearing with this extra string, does not appear 
-				# to communicate anything of value
-				$working[1] =~ s/(Compatibility Profile Context|\(Compatibility Profile\))//;
-				$working[1] =~ s/\s\s/ /g;
-				$working[1] =~ s/^\s+|\s+$//;
-				push(@opengl_version, $working[1]);
-				# note: this is going to be off if ever multi opengl versions appear, 
-				# never seen one
-				@working = split(/\s+/, $working[1]);
-				$compat_version = $working[0];
-			}
-			elsif (!$b_nogl){
-				push(@opengl_version, main::message('gl-value-empty'));
-			}
-		}
-		elsif (/^opengl core profile version/i){
-			@working = split(/:\s*/, $_, 2);
-			# note: no need to apply empty message here since we don't have the data
-			# anyway
-			if ($working[1]){
-				# fglrx started appearing with this extra string, does not appear 
-				# to communicate anything of value
-				$working[1] =~ s/(Compatibility Profile Context|\((Compatibility|Core) Profile\))//;
-				$working[1] =~ s/\s\s/ /g;
-				$working[1] =~ s/^\s+|\s+$//;
-				push(@core_profile_version, $working[1]);
-			}
-		}
-		elsif (/direct rendering/){
-			@working = split(/:\s*/, $_, 2);
-			push(@direct_render, $working[1]);
-		}
-		# if -B was always available, we could skip this, but it is not
-		elsif (/GLX Visuals/){
-			last;
-		}
-	}
-	my ($direct_render,$renderer,$version) = ('N/A','N/A','N/A');
-	$direct_render = join(', ',  @direct_render) if @direct_render;
-	# non free drivers once filtered and cleaned show the same for core and compat
-	# but this stopped for some reason at 4.5/4.6 nvidia
-	if (@core_profile_version && @opengl_version && 
-		join('', @core_profile_version) ne join('', @opengl_version) &&
-		!(grep {/nvidia/i} @opengl_version)){
-		@opengl_version = @core_profile_version;
-		$b_compat = 1;
-	}
-	$version = join(', ', @opengl_version) if @opengl_version;
-	$renderer = join(', ', @renderer) if @renderer;
-	my $j = scalar @$rows;
+	my ($j,$num) = (scalar @$rows,0);
+	my $value;
+	# print join("\n", %$gl),"\n";
+	my $glx = $gl->{'glx'};
+	$glx->{'opengl'}{'version'} ||= 'N/A';
 	push(@$rows, {
-	main::key($$num++,1,1,'API') => 'OpenGL',
-	main::key($$num++,0,2,'v') => ($version) ? $version : 'N/A',
-	main::key($$num++,1,2,'renderer') => ($renderer) ? $renderer : 'N/A',
+	main::key($num++,1,1,'API') => 'OpenGL',
+	main::key($num++,0,2,'v') => $glx->{'opengl'}{'version'},
 	});
-	if ($b_compat && $extra > 1 && $compat_version){
-		$rows->[$j]{main::key($$num++,0,2,'compat-v')} = $compat_version;
+	if ($glx->{'opengl'}{'compatibility'}{'version'}){
+		$rows->[$j]{main::key($num++,0,2,'compat-v')} = $glx->{'opengl'}{'compatibility'}{'version'};
+	}
+	if ($glx->{'opengl'}{'vendor'}){
+		$rows->[$j]{main::key($num++,1,2,'vendor')} = $glx->{'opengl'}{'vendor'};
+		$glx->{'opengl'}{'driver'}{'version'} ||= 'N/A';
+		$rows->[$j]{main::key($num++,0,3,'v')} = $glx->{'opengl'}{'driver'}{'version'};
+	}
+	if ($extra > 0 && $glx->{'glx-version'}){
+		$rows->[$j]{main::key($num++,0,2,'glx-v')} = $glx->{'glx-version'};
+	}
+	if ($extra > 1 && $glx->{'es'}{'version'}){
+		$rows->[$j]{main::key($num++,0,2,'es-v')} = $glx->{'es'}{'version'};;
+	}
+	if ($glx->{'note'}){
+		$rows->[$j]{main::key($num++,0,2,'note')} = $glx->{'note'};
+	}
+	if ($extra > 0 && (!$glx->{'note'} || $glx->{'direct-render'})){
+		$glx->{'direct-render'} ||= 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'direct-render')} = $glx->{'direct-render'};
+	}
+	if (!$glx->{'note'} || $glx->{'opengl'}{'renderer'}){
+		$glx->{'opengl'}{'renderer'} ||= 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'renderer')} = $glx->{'opengl'}{'renderer'};
+	}
+	if ($extra > 1 && $glx->{'info'}){
+		if ($glx->{'info'}{'vendor-id'} && $glx->{'info'}{'device-id'}){
+			$value = $glx->{'info'}{'vendor-id'} . ':' . $glx->{'info'}{'device-id'};
+			$rows->[$j]{main::key($num++,0,2,'device-ID')} = $value;
+		}
+		if ($b_admin && $glx->{'info'}{'device-memory'}){
+			$rows->[$j]{main::key($num++,1,2,'memory')} = $glx->{'info'}{'device-memory'};
+			if ($glx->{'info'}{'unified-memory'}){
+				$rows->[$j]{main::key($num++,0,3,'unified')} = $glx->{'info'}{'unified-memory'};
+			}
+		}
+		# display id depends on xdpyinfo in Display line, which may not be present, 
+		if (!$graphics{'display-id'} && $glx->{'display-id'} && $extra > 1){
+			$rows->[$j]{main::key($num++,0,2,'display-ID')} = $glx->{'display-id'};
+		}
+	}
+	eval $end if $b_log;
+}
+
+sub vulkan_output {
+	eval $start if $b_log;
+	my ($program,$rows) = @_;
+	my $vulkan = {};
+	vulkan_data($program,$vulkan);
+	if (!%$vulkan){
+		my $api = 'Vulkan';
+		my $type = 'vulkan-null';
+		no_data_output($api,$type,$rows);
+		return 0;
+	}
+	my $num = 0;
+	my $j = scalar @$rows;
+	my ($value);
+	my $data = $vulkan->{'data'};
+	my $devices = $vulkan->{'devices'};
+	$data->{'version'} ||= 'N/A';
+	push(@$rows,{
+	main::key($num++,1,1,'API') => 'Vulkan',
+	main::key($num++,0,2,'v') => $data->{'version'},
+	});
+	# this will be expanded with -a to a full device report
+	if ($extra < 2){
+		$value = ($data->{'drivers'}) ? join(',',@{$data->{'drivers'}}): 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'drivers')} = $value;
+	}
+	if ($extra > 2){
+		$data->{'layers'} ||= 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'layers')} = $data->{'layers'};
+	}
+	if (!$b_admin){
+		$value = ($data->{'surfaces'}) ? join(',',@{$data->{'surfaces'}}) : 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'surfaces')} = $value;
 	}
 	if ($extra > 0){
-		$rows->[$j]{main::key($$num++,0,2,'direct-render')} = $direct_render;
+		if (!$devices){
+			$rows->[$j]{main::key($num++,0,2,'devices')} = 'N/A';
+		}
+		else {
+			if ($extra < 2){
+				$value = scalar keys %{$devices};
+				$rows->[$j]{main::key($num++,0,2,'devices')} = $value;
+			}
+			else {
+				foreach my $id (sort keys %$devices){
+					$rows->[$j]{main::key($num++,1,2,'device')} = $id;
+					$devices->{$id}{'device-type'} ||= 'N/A';
+					$rows->[$j]{main::key($num++,0,3,'type')} = $devices->{$id}{'device-type'};
+					if ((($extra == 3 && !$b_admin) || 
+					($extra > 2 && !$devices->{$id}{'device-name'})) && 
+					$devices->{$id}{'hw'} && $devices->{$id}{'hw'} ne 'nvidia'){
+						$rows->[$j]{main::key($num++,0,3,'hw')} = $devices->{$id}{'hw'};
+					}
+					if ($b_admin){
+						$value = ($devices->{$id}{'device-name'}) ? 
+						$devices->{$id}{'device-name'}: 'N/A';
+						$rows->[$j]{main::key($num++,0,3,'name')} = $value;
+					}
+					if ($extra > 1){
+						if ($devices->{$id}{'driver-name'}){
+							$value = $devices->{$id}{'driver-name'};
+							if ($devices->{$id}{'mesa'} && $value ne 'mesa'){
+								$value = 'mesa ' . $value;
+							}
+							$rows->[$j]{main::key($num++,1,3,'driver')} = $value;
+							if ($b_admin && $devices->{$id}{'driver-info'}){
+								$rows->[$j]{main::key($num++,0,4,'v')} = $devices->{$id}{'driver-info'};
+							}
+						}
+						else {
+							$rows->[$j]{main::key($num++,0,3,'driver')} = 'N/A';
+						}
+						$value = ($devices->{$id}{'device-id'} && $devices->{$id}{'vendor-id'}) ? 
+						$devices->{$id}{'vendor-id'} . ':' . $devices->{$id}{'device-id'} : 'N/A';
+						$rows->[$j]{main::key($num++,0,3,'device-ID')} = $value;
+						if ($b_admin){
+							$value = ($devices->{$id}{'surfaces'}) ? 
+							join(',',@{$devices->{$id}{'surfaces'}}): 'N/A';
+							$rows->[$j]{main::key($num++,0,3,'surfaces')} = $value;
+						}
+					}
+				}
+			}
+		}
 	}
 	eval $end if $b_log;
 }
 
 sub xvesa_output {
 	eval $start if $b_log;
-	my ($rows,$num) = @_;
+	my ($rows) = @_;
 	my ($controller,$dac,$interface,$ram,$source,$version);
 	# note: goes to stderr, not stdout
 	my @data = main::grabber($graphics{'xvesa'} . ' -listmodes 2>&1');
 	my $j = scalar @$rows;
+	my $num = 0;
 	# gop replaced uga, both for uefi
 	# WARNING! Never seen a GOP type UEFI, needs more data
 	if ($data[0] && $data[0] =~ /^(VBE|GOP|UGA)\s+version\s+(\S+)\s\(([^)]+)\)/i){
@@ -15721,21 +16085,704 @@ sub xvesa_output {
 		$ram = main::get_size($ram,'string');
 	}
 	if (!$interface){
-		$rows->[$j]{main::key($$num++,1,1,'API')} = 'VBE/GOP';
-		$rows->[$j]{main::key($$num++,0,2,'Message')} = main::message('gfx-api-xvesa');
+		$rows->[$j]{main::key($num++,1,1,'API')} = 'VBE/GOP';
+		$rows->[$j]{main::key($num++,0,2,'Message')} = main::message('xvesa-null');
 	}
 	else {
-		$rows->[$j]{main::key($$num++,1,1,'API')} = $interface;
-		$rows->[$j]{main::key($$num++,0,2,'v')} = ($version) ? $version : 'N/A';
-		$rows->[$j]{main::key($$num++,0,2,'source')} = ($source) ? $source : 'N/A';
+		$rows->[$j]{main::key($num++,1,1,'API')} = $interface;
+		$rows->[$j]{main::key($num++,0,2,'v')} = ($version) ? $version : 'N/A';
+		$rows->[$j]{main::key($num++,0,2,'source')} = ($source) ? $source : 'N/A';
 		if ($dac){
-			$rows->[$j]{main::key($$num++,0,2,'dac')} = $dac;
-			$rows->[$j]{main::key($$num++,0,2,'controller')} = $controller;
+			$rows->[$j]{main::key($num++,0,2,'dac')} = $dac;
+			$rows->[$j]{main::key($num++,0,2,'controller')} = $controller;
 		}
 		if ($ram){
-			$rows->[$j]{main::key($$num++,0,2,'ram')} = $ram;
+			$rows->[$j]{main::key($num++,0,2,'ram')} = $ram;
 		}
 	}
+	eval $end if $b_log;
+}
+
+# API Data #
+sub gl_data {
+	eval $start if $b_log;
+	my ($source,$program,$rows,$gl) = @_;
+	my ($b_opengl,$msg);
+	my ($gl_data,$results) = ([],[]);
+	# only check these if no eglinfo or eglinfo had no opengl data
+	$b_opengl = 1 if ($source eq 'egl' || !$gl->{'glx'});
+	# NOTE: glxinfo -B is not always available, unfortunately
+	if ($dbg[56] || $b_log){
+		$msg = "${line1}GL Source: $source\n${line3}";
+		print $msg if $dbg[56];
+		push(@$results,$msg) if $b_log;
+	}
+	if ($source eq 'glx'){
+		if (!$fake{'glx'}){
+			$gl_data = main::grabber("$program $display_opt 2>/dev/null",'','','ref');
+		}
+		else {
+			my $file;
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-2012-nvidia-glx1.4.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-ssh-centos.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxiinfo-t420-intel-1.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-mali-allwinner-lima-1.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-partial-intel-5500-1.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-vbox-debian-etch-1.txt";
+			 $file = "$fake_data_dir/graphics/glxinfo/glxinfo-x11-neomagic-lenny-1.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-nvidia-gl4.6-chr.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-intel-atom-dell_studio-bm.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-asus_1025c-atom-bm.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-2011-nvidia-glx1.4.txt";
+			$gl_data= main::reader($file,'','ref');
+		}
+	}
+	else {
+		if (!$fake{'egl'}){
+			$gl_data = main::grabber("$program 2>/dev/null",'','','ref');
+		}
+		else {
+			my $file;
+			 $file = "$fake_data_dir/graphics/egl-es/eglinfo-x11-3.txt";
+			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-wayland-intel-c30.txt";
+			# $file = "$fake_data_dir/grapOhics/egl-es/eglinfo-2022-x11-nvidia-egl1.5.txt";
+			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-wayland-intel-nvidia-radu.txt";
+			 $file = "$fake_data_dir/graphics/egl-es/eglinfo-intel-atom-dell_studio-bm.txt";
+			 $file = "$fake_data_dir/graphics/egl-es/eglinfo-asus_1025c-atom-bm.txt";
+			$gl_data = main::reader($file,'','ref');
+		}
+	}
+	# print join("\n", @$gl_data),"\n";
+	if (!$gl_data || !@$gl_data){
+		if ($dbg[56] || $b_log){
+			$msg = "No data found for GL Source: $source" if $dbg[56];
+			print "$msg\n" if $dbg[56];
+			push(@$results,$msg) if $b_log;
+		}
+		return 0;
+	}
+	# some error cases have only a few top value but not empty
+	elsif ($source eq 'glx' && scalar @$gl_data > 5){
+		$gl->{'glx'}{'source'} = $source;
+	}
+	set_mesa_drivers() if $source eq 'egl' && !%mesa_drivers;
+	my ($b_device,$b_platform,$b_mem_info,$b_rend_info,$device,$platform,
+	$value,$value2,@working);
+	foreach my $line (@$gl_data){
+		next if (!$b_rend_info && !$b_mem_info) && $line =~ /^(\s|0x)/;
+		if (($b_rend_info || $b_mem_info) && $line =~ /^\S/){
+			($b_mem_info,$b_rend_info) = ();
+		}
+		@working = split(/\s*:\s*/,$line,2);
+		next if !@working;
+		if ($dbg[56] || $b_log){
+			$msg = $line;
+			print "$msg\n" if $dbg[56];
+			push(@$results,$msg) if $b_log;
+		}
+		if ($source eq 'egl'){
+			# eglinfo: eglInitialize failed
+			# This is first line after platform fail for devices, but for Device 
+			# it would be the second or later line. The Device platform can fail, or 
+			# specific device can fail
+			if ($b_platform){
+				$value = ($line =~ /Initialize failed/) ? 'inactive': 'active';
+				push(@{$gl->{'egl'}{'data'}{'platforms'}{$value}},$platform);
+				$gl->{'egl'}{'platforms'}{$platform}{'status'} = $value;
+				$b_platform = 0;
+			}
+			# note: can be sub item: Platform Device platform:; Platform Device:
+			elsif ($working[0] =~ /^(\S+) platform/i){
+				$platform = lc($1);
+				undef $device;
+				$b_platform = 1;
+			}
+			if ($platform && defined $device && $working[0] eq 'eglinfo'){
+				push(@{$gl->{'egl'}{'data'}{'platforms'}{'inactive'}},"$platform-$device");
+				undef $device;
+			}
+			if ($platform && $platform eq 'device' && $working[0] =~ /^Device #(\d+)/){
+				$device = $1;
+			}
+			if ($working[0] eq 'EGL API version'){
+				if (!defined $platform){
+					$gl->{'egl'}{'data'}{'api-version'} = $working[1];
+				}
+				elsif (defined $device){ 
+					$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'api-version'} = $working[1];
+				}
+				else {
+					$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'api-version'} = $working[1];
+				}
+			}
+			elsif ($working[0] eq 'EGL version string'){
+				if (!defined $platform){
+					$gl->{'egl'}{'data'}{'version'} = $working[1];
+				}
+				elsif (defined $device){ 
+					$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'version'} = $working[1];
+				}
+				else {
+					$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'version'} = $working[1];
+				}
+				$value = (defined $device) ? "$platform-$device": $platform;
+				push(@{$gl->{'egl'}{'data'}{'versions'}{$working[1]}},$value);
+				if (!$gl->{'egl'}{'data'}{'version'} || 
+				$working[1] > $gl->{'egl'}{'data'}{'version'}){
+					$gl->{'egl'}{'data'}{'version'} = $working[1];
+				}
+			}
+			elsif ($working[0] eq 'EGL vendor string'){
+				$working[1] = lc($working[1]);
+				$working[1] =~ s/^(\S+)(\s.+|$)/$1/;
+				if (!defined $platform){
+					$gl->{'egl'}{'data'}{'vendor'} = $working[1];
+				}
+				elsif (defined $device){ 
+					$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'vendor'} = $working[1];
+					if ($working[1] eq 'nvidia'){
+						$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'driver'} = $working[1];
+					}
+				}
+				else {
+					$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'vendor'} = $working[1];
+					if ($working[1] eq 'nvidia'){
+						$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'driver'} = $working[1];
+					}
+				}
+				push(@{$gl->{'egl'}{'data'}{'vendors'}},$working[1]);
+				if ($working[1] eq 'nvidia'){
+					$value = (defined $device) ? "$platform-$device": $platform;
+					push(@{$gl->{'egl'}{'data'}{'drivers'}{$working[1]}},$value);
+					$gl->{'egl'}{'data'}{'hw'}{$working[1]} = $working[1];
+				}
+			}
+			elsif ($working[0] eq 'EGL driver name'){
+				if (!defined $device){ 
+					$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'driver'} = $working[1];
+					if ($mesa_drivers{$working[1]}){
+						$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'hw'} = $mesa_drivers{$working[1]};
+					}
+				}
+				else {
+					$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'driver'} = $working[1];
+					if ($mesa_drivers{$working[1]}){
+						$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'hw'} = $mesa_drivers{$working[1]};
+					}
+				}
+				$value = (defined $device) ? "$platform-$device": $platform;
+				push(@{$gl->{'egl'}{'data'}{'drivers'}{$working[1]}},$value);
+				if ($mesa_drivers{$working[1]}){
+					$gl->{'egl'}{'data'}{'hw'}{$working[1]} = $mesa_drivers{$working[1]};
+				}
+			}
+			if ($working[0] eq 'EGL client APIs'){
+				if (defined $device){ 
+					$gl->{'egl'}{'platforms'}{$platform}{$device}{'egl'}{'client-apis'} = [split(/\s+/,$working[1])];
+				}
+				else {
+					$gl->{'egl'}{'platforms'}{$platform}{'egl'}{'client-apis'} = [split(/\s+/,$working[1])];
+				}
+			}
+		}
+		# glx specific values, only found in glxinfo
+		else {
+			if (lc($working[0]) eq 'direct rendering'){
+				$working[1] = lc($working[1]);
+				if (!$gl->{'glx'}{'direct-renderers'} || 
+				!(grep {$_ eq $working[1]} @{$gl->{'glx'}{'direct-renders'}})){
+					push(@{$gl->{'glx'}{'direct-renders'}}, $working[1]);
+				}
+			}
+			# name of display: does not always list the screen number
+			elsif (lc($working[0]) eq 'display'){
+				if ($working[1] =~ /^(:\d+)\s+screen:\s+(\d+)/){
+					$gl->{'glx'}{'display-id'} = $1 . '.' . $2; 
+				}
+			}
+			elsif (lc($working[0]) eq 'glx version'){
+				if (!$gl->{'glx'}{'glx-version'}){
+					$gl->{'glx'}{'glx-version'} = $working[1];
+				}
+			}
+			elsif (!$b_rend_info && $working[0] =~ /^Extended renderer info/i){
+				$b_rend_info = 1;
+			}
+			# only check Memory info if no prior device memory found
+			elsif (!$b_mem_info && $working[0] =~ /^Memory info/i){
+				$b_mem_info = (!$gl->{'glx'}{'info'} || !$gl->{'glx'}{'info'}{'device-memory'}) ? 1 : 0;
+			}
+			elsif ($b_rend_info){
+				if ($line =~ /^\s+Vendor:\s+.*?\(0x([\da-f]+)\)$/){
+					$gl->{'glx'}{'info'}{'vendor-id'} = sprintf("%04s",$1);
+				}
+				elsif ($line =~ /^\s+Device:\s+.*?\(0x([\da-f]+)\)$/){
+					$gl->{'glx'}{'info'}{'device-id'} = sprintf("%04s",$1);
+				}
+				elsif ($line =~ /^\s+Video memory:\s+(\d+\s?[MG]B)$/){
+					my $size = main::translate_size($1);
+					$gl->{'glx'}{'info'}{'device-memory'} = main::get_size($size,'string');
+				}
+				elsif ($line =~ /^\s+Unified memory:\s+(\S+)$/){
+					$gl->{'glx'}{'info'}{'unified-memory'} = lc($1);
+				}
+			}
+			elsif ($b_mem_info){
+				# fallback, nvidia does not seem to have Extended renderer info 
+				if ($line =~ /^\s+Dedicated video memory:\s+(\d+\s?[MG]B)$/){
+					my $size = main::translate_size($1);
+					$gl->{'glx'}{'info'}{'device-memory'} = main::get_size($size,'string');
+					$b_mem_info = 0;
+				}
+				# we're in the wrong memory block! 
+				elsif ($line =~ /^\s+(VBO|Texture)/){
+					$b_mem_info = 0;
+				}
+			}
+			elsif (lc($working[0]) eq 'opengl vendor string'){
+				if ($working[1] =~ /^([^\s]+)(\s+\S+)?/){
+					my $vendor = lc($1);
+					$vendor =~ s/(^mesa\/|[\.,]$)//; # Seen Mesa/X.org
+					if (!$gl->{'glx'}{'opengl'}{'vendor'}){
+						$gl->{'glx'}{'opengl'}{'vendor'} = $vendor;
+					}
+				}
+			}
+			elsif (lc($working[0]) eq 'opengl renderer string'){
+				if ($working[1]){
+					$working[1] = main::clean($working[1]);
+				}
+				# note: seen cases where gl drivers are missing, with empty field value.
+				else {
+					$gl->{'glx'}{'no-gl'} = 1;
+					$working[1] = main::message('glx-value-empty');
+				}
+				if (!$gl->{'glx'}{'opengl'}{'renderers'} || 
+				!(grep {$_ eq $working[1]} @{$gl->{'glx'}{'opengl'}{'renderers'}})){
+					push(@{$gl->{'glx'}{'opengl'}{'renderers'}}, $working[1]) ;
+				}
+			}
+			# Dropping all conditions from this test to just show full mesa information
+			# there is a user case where not f and mesa apply, atom mobo
+			# This can be the compatibility version, or just the version the hardware
+			# supports. Core version will override always if present.
+			elsif (lc($working[0]) eq 'opengl version string'){
+				if ($working[1]){
+					# first grab the actual gl version
+					# non free drivers like nvidia may only show their driver version info 
+					if ($working[1] =~ /^(\S+)(\s|$)/){
+						push(@{$gl->{'glx'}{'opengl'}{'versions'}}, $1);
+					}
+					# handle legacy format: 1.2 (1.5 Mesa 6.5.1) as well as more current:
+					# 4.5 (Compatibility Profile) Mesa 22.3.6
+					# Note: legacy: fglrx starting adding compat strings but they don't
+					# change this result:
+					# 4.5 Compatibility Profile Context Mesa 15.3.6
+					if ($working[1] =~ /(Mesa|NVIDIA)\s(\S+?)\)?$/i){
+						if ($1 && $2 && !$gl->{'glx'}{'opengl'}{'driver'}){
+							$gl->{'glx'}{'opengl'}{'driver'}{'vendor'} = lc($1);
+							$gl->{'glx'}{'opengl'}{'driver'}{'version'} = $2;
+						}
+					}
+				}
+				elsif (!$gl->{'glx'}{'no-gl'}){
+					$gl->{'glx'}{'no-gl'} = 1;
+					push(@{$gl->{'glx'}{'opengl'}{'versions'}},main::message('glx-value-empty'));
+				}
+			}
+			# if -B was always available, we could skip this, but it is not
+			elsif ($line =~ /GLX Visuals/){
+				last;
+			}
+		}
+		# eglinfo/glxinfo share these
+		if ($b_opengl){
+			if ($working[0] =~ /^OpenGL (compatibility|core) profile version( string)?$/){
+				$value = lc($1);
+				# note: no need to apply empty message here since we don't have the data
+				# anyway
+				if ($working[1]){
+					# non free drivers like nvidia only show their driver version info
+					if ($working[1] =~ /^(\S+)(\s|$)/){
+						push(@{$gl->{'glx'}{'opengl'}{$value}{'versions'}}, $1);
+					}
+					# fglrx started appearing with this extra string, does not appear 
+					# to communicate anything of value
+					if ($working[1] =~ /\s+(Mesa|NVIDIA)\s+(\S+)$/){
+						if ($1 && $2 && !$gl->{'glx'}{'opengl'}{$value}{'vendor'}){
+							$gl->{'glx'}{'opengl'}{$value}{'driver'}{'vendor'} = lc($1);
+							$gl->{'glx'}{'opengl'}{$value}{'driver'}{'version'} = $2;
+						}
+						if ($source eq 'egl' && $platform){
+							if (defined $device){
+								$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{$value}{'vendor'} = lc($1);
+								$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{$value}{'version'} = $2;
+							}
+							else {
+								$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{$value}{'vendor'} = lc($1);
+								$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{$value}{'version'} = $2;
+							}
+						}
+					}
+				}
+			}
+			elsif ($working[0] =~ /^OpenGL (compatibility|core) profile renderer?$/){
+				$value = lc($1);
+				if ($working[1]){
+					$working[1] = main::clean($working[1]);
+				}
+				# note: seen cases where gl drivers are missing, with empty field value.
+				else {
+					$gl->{'glx'}{'no-gl'} = 1;
+					$working[1] = main::message('glx-value-empty');
+				}
+				if (!$gl->{'glx'}{'opengl'}{$value}{'renderers'} || 
+				!(grep {$_ eq $working[1]} @{$gl->{'glx'}{'opengl'}{$value}{'renderers'}})){
+					push(@{$gl->{'glx'}{'opengl'}{$value}{'renderers'}}, $working[1]) ;
+				}
+				if ($source eq 'egl' && $platform){
+					if ($value eq 'core'){
+						$value2 = (defined $device) ? "$platform-$device": $platform;
+						push(@{$gl->{'egl'}{'data'}{'renderers'}{$working[1]}},$value2);
+					}
+					if (defined $device){
+						$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{$value}{'renderer'} = $working[1];
+					}
+					else {
+						$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{$value}{'renderer'} = $working[1];
+					}
+				}
+			}
+			elsif ($working[0] =~ /^OpenGL (compatibility|core) profile vendor$/){
+				$value = lc($1);
+				if (!$gl->{'glx'}{'opengl'}{$value}{'vendors'} || 
+				!(grep {$_ eq $working[1]} @{$gl->{'glx'}{'opengl'}{$value}{'vendors'}})){
+					push(@{$gl->{'glx'}{'opengl'}{$value}{'vendors'}}, $working[1]) ;
+				}
+				if ($source eq 'egl' && $platform){
+					if (defined $device){
+						$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{$value}{'vendor'} = $working[1];
+					}
+					else {
+						$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{$value}{'vendor'} = $working[1];
+					}
+					
+				}
+			}
+			elsif (lc($working[0]) eq 'opengl es profile version string'){
+				if ($working[1] && !$gl->{'glx'}{'es-version'}){
+					# OpenGL ES 3.2 Mesa 23.0.3
+					if ($working[1] =~ /^OpenGL ES (\S+) Mesa (\S+)/){
+						$gl->{'glx'}{'es'}{'version'} = $1;
+						if ($2 && !$gl->{'glx'}{'es'}{'mesa-version'}){
+							$gl->{'glx'}{'es'}{'mesa-version'} = $2;
+						}
+						if ($source eq 'egl' && $platform){
+							if (defined $device){
+								$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{'es'}{'vendor'} = 'mesa';
+								$gl->{'egl'}{'platforms'}{$platform}{$device}{'opengl'}{'es'}{'version'} = $working[1];
+							}
+							else {
+								$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{'es'}{'vendor'} = 'mesa';
+								$gl->{'egl'}{'platforms'}{$platform}{'opengl'}{'es'}{'version'} = $working[1];
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	main::log_data('dump',"$source \$results",$results) if $b_log;
+	if ($source eq 'egl'){
+		print "GL Data: $source: ", Data::Dumper::Dumper $gl if $dbg[57];
+		main::log_data('dump',"GL data: $source:",$gl) if $b_log;
+	}
+	else {
+		print "GL Data: $source: ", Data::Dumper::Dumper $gl->{'glx'} if $dbg[57];
+		main::log_data('dump',"GLX data: $source:",$gl->{'glx'}) if $b_log;
+	}
+	eval $end if $b_log;
+}
+
+sub process_glx_data {
+	eval $start if $b_log;
+	my ($glx,$b_glx) = @_;
+	my $value;
+	# Remember: if you test for a hash ref hash ref, you create the first hash ref!
+	if ($glx->{'direct-renders'}){
+		$glx->{'direct-render'} = join(', ',  @{$glx->{'direct-renders'}});
+	}
+	if (!$glx->{'opengl'}{'renderers'} && $glx->{'opengl'}{'compatibility'} &&
+	$glx->{'opengl'}{'compatibility'}{'renderers'}){
+		$glx->{'opengl'}{'renderers'} = $glx->{'opengl'}{'compatibility'}{'renderers'};
+	}
+	# This is tricky, GLX OpenGL version string can be compatibility version,
+	# but usually they are the same. Just in case, try this. Note these are 
+	# x.y.z type numbering formats generally so use string compare
+	if ($glx->{'opengl'}{'core'} && $glx->{'opengl'}{'core'}{'versions'}){
+		$glx->{'opengl'}{'version'} = (sort @{$glx->{'opengl'}{'core'}{'versions'}})[-1];
+	}
+	elsif ($glx->{'opengl'}{'versions'}){
+		$glx->{'opengl'}{'version'} = (sort @{$glx->{'opengl'}{'versions'}})[-1];
+	}
+	if ($glx->{'opengl'}{'version'} && 
+	($glx->{'opengl'}{'compatibility'} || $glx->{'opengl'}{'versions'})){
+		# print "v: $glx->{'opengl'}{'version'}\n";
+		# print Data::Dumper::Dumper $glx->{'opengl'}{'versions'};
+		# print 'v1: ', (sort @{$glx->{'opengl'}{'versions'}})[0], "\n";
+		# here we look for different versions, and determine most likely compat one
+		if ($glx->{'opengl'}{'compatibility'} && 
+		$glx->{'opengl'}{'compatibility'}{'versions'} &&
+		(sort @{$glx->{'opengl'}{'compatibility'}{'versions'}})[0] ne $glx->{'opengl'}{'version'}){
+			$value = (sort @{$glx->{'opengl'}{'compatibility'}{'versions'}})[0];
+			$glx->{'opengl'}{'compatibility'}{'version'} = $value;
+		}
+		elsif ($glx->{'opengl'}{'versions'} &&
+		(sort @{$glx->{'opengl'}{'versions'}})[0] ne $glx->{'opengl'}{'version'}){
+			$value = (sort @{$glx->{'opengl'}{'versions'}})[0];
+			$glx->{'opengl'}{'compatibility'}{'version'} = $value;
+		}
+	}
+	if ($glx->{'opengl'}{'renderers'}){
+		$glx->{'opengl'}{'renderer'} = join(', ', @{$glx->{'opengl'}{'renderers'}});
+	}
+	# likely eglinfo or advanced glxinfo
+	if ($glx->{'opengl'}{'vendor'} && 
+	$glx->{'opengl'}{'core'} && 
+	$glx->{'opengl'}{'core'}{'driver'} && 
+	$glx->{'opengl'}{'core'}{'driver'}{'vendor'} && 
+	$glx->{'opengl'}{'core'}{'driver'}{'vendor'} eq 'mesa' && 
+	$glx->{'opengl'}{'vendor'} ne $glx->{'opengl'}{'core'}{'driver'}{'vendor'}){
+		$value = $glx->{'opengl'}{'vendor'} . ' ';
+		$value .= $glx->{'opengl'}{'core'}{'driver'}{'vendor'};
+		$glx->{'opengl'}{'vendor'} = $value;
+	}
+	# this can be glxinfo only case, no eglinfo
+	elsif ($glx->{'opengl'}{'vendor'} && 
+	$glx->{'opengl'}{'driver'} && 
+	$glx->{'opengl'}{'driver'}{'vendor'} && 
+	$glx->{'opengl'}{'driver'}{'vendor'} eq 'mesa' && 
+	$glx->{'opengl'}{'vendor'} ne $glx->{'opengl'}{'driver'}{'vendor'}){
+		$value = $glx->{'opengl'}{'vendor'} . ' ';
+		$value .= $glx->{'opengl'}{'driver'}{'vendor'};
+		$glx->{'opengl'}{'vendor'} = $value;
+	}
+	elsif (!$glx->{'opengl'}{'vendor'} && 
+	$glx->{'opengl'}{'core'}  && $glx->{'opengl'}{'core'}{'driver'} &&
+	$glx->{'opengl'}{'core'}{'driver'}{'vendor'}){
+		$glx->{'opengl'}{'vendor'} = $glx->{'opengl'}{'core'}{'driver'}{'vendor'};
+	}
+	if ((!$glx->{'opengl'}{'driver'} ||
+	!$glx->{'opengl'}{'driver'}{'version'}) && 
+	$glx->{'opengl'}{'core'} &&
+	$glx->{'opengl'}{'core'}{'driver'} && 
+	$glx->{'opengl'}{'core'}{'driver'}{'version'}){
+		$value = $glx->{'opengl'}{'core'}{'driver'}{'version'};
+		$glx->{'opengl'}{'driver'}{'version'} = $value;
+	}
+	# only tripped when glx filled by eglinfo
+	if (!$glx->{'source'}){
+		my $type;
+		if (!$b_glx){
+			$type = 'glx-egl-missing';
+		}
+		elsif ($b_display){
+			$type = 'glx-egl';
+		}
+		else {
+			$type = 'glx-egl-console';
+		}
+		$glx->{'note'} = main::message($type);
+	}
+	print "GLX Data: ", Data::Dumper::Dumper $glx if $dbg[57];
+	main::log_data('dump',"GLX data:",$glx) if $b_log;
+	eval $end if $b_log;
+}
+
+sub vulkan_data {
+	eval $start if $b_log;
+	my ($program,$vulkan) = @_;
+	my ($data,$msg,@working);
+	my ($results) = ([]);
+	if ($dbg[56] || $b_log){
+		$msg = "${line1}Vulkan Data\n${line3}";
+		print $msg if $dbg[56];
+		push(@$results,$msg) if $b_log;
+	}
+	if (!$fake{'vulkan'}){
+		$data = main::grabber("$program 2>/dev/null",'','','ref');
+	}
+	else {
+		my $file;
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-llvm-1.txt";
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-nvidia-1.txt";
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-1.txt";
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-amd-dz.txt";
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-mali-3.txt";
+		$data = main::reader($file,'','ref');
+	}
+	if (!$data){
+		if ($dbg[56] || $b_log){
+			$msg = "No Vulkan data found" if $dbg[56];
+			print "$msg\n" if $dbg[56];
+			push(@$results,$msg) if $b_log;
+		}
+		return 0;
+	}
+	set_mesa_drivers() if !%mesa_drivers;
+	my ($id,%active);
+	foreach my $line (@$data){
+		next if $line =~ /^(\s*|-+|=+)$/;
+		@working = split(/\s*:\s*/,$line,2);
+		next if !@working;
+		if ($line =~ /^\S/){
+			if ($active{'start'}){undef $active{'start'}}
+			if ($active{'layers'}){undef $active{'layers'}}
+			if ($active{'groups'}){undef $active{'groups'}}
+			if ($active{'limits'}){undef $active{'limits'}}
+			if ($active{'features'}){undef $active{'features'}}
+			if ($active{'extensions'}){undef $active{'extensions'}}
+			if ($active{'format'}){undef $active{'format'}}
+			if ($active{'driver'}){($active{'driver'},$id) = ()}
+		}
+		next if $active{'start'};
+		next if $active{'groups'};
+		next if $active{'limits'};
+		next if $active{'features'};
+		next if $active{'extensions'};
+		next if $active{'format'};
+		if ($dbg[56] || $b_log){
+			$msg = $line;
+			print "$msg\n" if $dbg[56];
+			push(@$results,$msg) if $b_log;
+		}
+		if ($working[0] eq 'Vulkan Instance Version'){
+			$vulkan->{'data'}{'version'} = $working[1];
+			$active{'start'} = 1;
+		}
+		elsif ($working[0] eq 'Layers'){
+			if ($working[1] =~ /count\s*=\s*(\d+)/){
+				$vulkan->{'data'}{'layers'} = $1;
+			}
+			$active{'layers'} = 1;
+		}
+		# note: can't close this because Intel didn't use proper indentation
+		elsif ($working[0] eq 'Presentable Surfaces'){
+			$active{'surfaces'} = 1;
+		}
+		elsif ($working[0] eq 'Device Groups'){
+			$active{'groups'} = 1;
+			$active{'surfaces'} = 0;
+		}
+		elsif ($working[0] eq 'Device Properties and Extensions'){
+			$active{'devices'} = 1;
+			$active{'surfaces'} = 0;
+			undef $id;
+		}
+		elsif ($working[0] eq 'VkPhysicalDeviceProperties'){
+			$active{'props'} = 1;
+		}
+		elsif ($working[0] eq 'VkPhysicalDeviceDriverProperties'){
+			$active{'driver'} = 1;
+		}
+		elsif ($working[0] =~ /^\S+Features/i){
+			$active{'features'} = 1;
+		}
+		# seen as line starter string or inner VkPhysicalDeviceProperties
+		elsif ($working[0] =~ /^\s*\S+Limits/i){
+			$active{'limits'} = 1;
+		}
+		elsif ($working[0] =~ /^FORMAT_/){
+			$active{'format'} = 1;
+		}
+		elsif ($working[0] =~ /^(Device|Instance) Extensions/){
+			$active{'extensions'} = 1;
+		}
+		if ($active{'surfaces'}){
+			if ($working[0] eq 'GPU id'){
+				if ($working[1] =~ /^(\d+)\s+\((.*?)\):?$/){
+					$id = $1;
+					$vulkan->{'devices'}{$id}{'model'} = main::clean($2);
+				}
+			}
+			if (defined $id){
+				# seen leading space, no leading space 
+				if ($line =~ /^\s*Surface type/){
+					$active{'surface-type'} = 1;
+				}
+				if ($active{'surface-type'} && $line =~ /\S+_(\S+)_surface$/){
+					if (!$vulkan->{'devices'}{$id}{'surfaces'} || 
+					!(grep {$_ eq $1} @{$vulkan->{'devices'}{$id}{'surfaces'}})){
+						push(@{$vulkan->{'devices'}{$id}{'surfaces'}},$1);
+					}
+					if (!$vulkan->{'data'}{'surfaces'} || 
+					!(grep {$_ eq $1} @{$vulkan->{'data'}{'surfaces'}})){
+						push(@{$vulkan->{'data'}{'surfaces'}},$1);
+					}
+				}
+				if ($working[0] =~ /^\s*Formats/){
+					undef $active{'surface-type'};
+				}
+			}
+		}
+		if ($active{'devices'}){
+			if ($working[0] =~ /^GPU(\d+)/){
+				$id = $1;
+			}
+			elsif (defined $id){
+				# apiVersion=4194528 (1.0.224); 1.3.246 (4206838); 79695971 (0x4c01063)
+				if ($line =~ /^\s+apiVersion\s*=\s*(\S+)(\s+\(([^)]+)\))?/i){
+					my ($a,$b) = ($1,$3);
+					my $api = (!$b || $b =~ /^(0x)?\d+$/) ? $a : $b;
+					$vulkan->{'devices'}{$id}{'device-api-version'} = $api;
+				}
+				elsif ($line =~ /^\s+driverVersion\s*=\s*(\S+)/i){
+					$vulkan->{'devices'}{$id}{'device-driver-version'} = $1;
+				}
+				elsif ($line =~ /^\s+vendorID\s*=\s*0x(\S+)/i){
+					$vulkan->{'devices'}{$id}{'vendor-id'} = $1;
+				}
+				elsif ($line =~ /^\s+deviceID\s*=\s*0x(\S+)/i){
+					$vulkan->{'devices'}{$id}{'device-id'} = $1;
+				}
+				# deviceType=DISCRETE_GPU; PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
+				elsif ($line =~ /^\s+deviceType\s*=\s*(\S+?_TYPE_)?(\S+)$/i){
+					$vulkan->{'devices'}{$id}{'device-type'} = lc($2);
+					$vulkan->{'devices'}{$id}{'device-type'} =~ s/_/-/g;
+				}
+				# deviceName=AMD Radeon RX 6700 XT (RADV NAVI22); AMD RADV HAWAII
+				# lvmpipe (LLVM 15.0.6, 256 bits); NVIDIA GeForce GTX 1650 Ti
+				elsif ($line =~ /^\s+deviceName\s*=\s*(\S+)(\s.*|$)/i){
+					$vulkan->{'devices'}{$id}{'device-vendor'} = main::clean(lc($1));
+					$vulkan->{'devices'}{$id}{'device-name'} = main::clean($1 . $2);
+				}
+			}
+		}
+		if ($active{'driver'}){
+			if (defined $id){
+				# driverName=llvmpipe; radv; 
+				if ($line =~ /^\s+driverName\s*=\s*(\S+)(\s|$)/i){
+					my $driver = lc($1);
+					if ($mesa_drivers{$driver}){
+						$vulkan->{'devices'}{$id}{'hw'} = $mesa_drivers{$driver};
+					}
+					$vulkan->{'devices'}{$id}{'driver-name'} = $driver;
+					if (!$vulkan->{'data'}{'drivers'} || 
+					!(grep {$_ eq $driver} @{$vulkan->{'data'}{'drivers'}})){
+						push(@{$vulkan->{'data'}{'drivers'}},$driver);
+					}
+				}
+				# driverInfo=Mesa 23.1.3 (LLVM 15.0.7); 525.89.02; Mesa 23.1.3
+				elsif ($line =~ /^\s+driverInfo\s*=\s*((Mesa)\s)?(.*)/i){
+					$vulkan->{'devices'}{$id}{'mesa'} = lc($2) if $2;
+					$vulkan->{'devices'}{$id}{'driver-info'} = $3;
+				}
+			}
+		}
+	}
+	main::log_data('dump','$results',$results) if $b_log;
+	print 'Vulkan Data: ', Data::Dumper::Dumper $vulkan if $dbg[57];
+	main::log_data('dump','$vulkan',$vulkan) if $b_log;
 	eval $end if $b_log;
 }
 
@@ -15869,7 +16916,7 @@ sub wlinfo_data {
 		$data = main::grabber("$program 2>/dev/null",'','strip','ref');
 	}
 	else {
-		$file = "$fake_data_dir/wayland/weston-info-2-mon-1.txt";
+		$file = "$fake_data_dir/graphics/wayland/weston-info-2-mon-1.txt";
 		$data = main::reader($file,'strip','ref');
 	}
 	print 'wayland/weston-info raw: ', Data::Dumper::Dumper $data if $dbg[46]; 
@@ -16004,7 +17051,7 @@ sub swaymsg_data {
 	}
 	else {
 		undef $monitor_ids;
-		$file = "$fake_data_dir/wayland/swaymsg-2-monitor-1.txt";
+		$file = "$fake_data_dir/graphics/wayland/swaymsg-2-monitor-1.txt";
 		@data = main::reader($file,'strip');
 	}
 	print 'swaymsg: ', Data::Dumper::Dumper \@data if $dbg[46]; 
@@ -16118,7 +17165,7 @@ sub wlrrandr_data {
 	}
 	else {
 		undef $monitor_ids;
-		$file = "$fake_data_dir/wayland/wlr-randr-2-monitor-1.txt";
+		$file = "$fake_data_dir/graphics/wayland/wlr-randr-2-monitor-1.txt";
 		$data = main::reader($file,'strip','ref');
 	}
 	foreach (@$data){
@@ -16805,6 +17852,29 @@ sub display_drivers_x {
 	# print 'source: ', Data::Dumper::Dumper $driver_data;
 	return $driver_data;
 }
+sub set_mesa_drivers {
+	%mesa_drivers = (
+	'anv' => 'intel',
+	'crocus' => 'intel',
+	'etnaviv' => 'vivante',
+	'freedreno' => 'qualcomm',
+	'i915' => 'intel',
+	'i965' => 'intel',
+	'iris' => 'intel',
+	'lima' => 'mali',
+	'nouveau' => 'nvidia',
+	'panfrost' => 'mali/bifrost',
+	'r200' => 'amd',
+	'r300' => 'amd',
+	'r600' => 'amd',
+	'radeonsi' => 'amd',
+	'radv' => 'amd',
+	'svga3d' => 'vmware',
+	'v3d' => 'broadcom',
+	'v3dv' => 'broadcom',
+	'vc4' => 'broadcom',
+	);
+}
 
 ## GPU DATA ##
 sub set_amd_data {
@@ -16925,7 +17995,7 @@ sub set_amd_data {
 	'689b|689c|689d|689e|68a0|68a1|68a8|68a9|68b8|68b9|68ba|68be|68bf|68c0|68c1|' .
 	'68c7|68c8|68c9|68d8|68d9|68da|68de|68e0|68e1|68e4|68e5|68e8|68e9|68f1|68f2|' .
 	'68f8|68f9|68fa|68fe|9640|9641|9642|9643|9644|9645|9647|9648|9649|964a|964b|' .
-	'964c|964e|964f|9802|9803|9804|9805|9806|9807|9808|9809|980a',
+	'964c|964e|964f|9802|9803|9804|9805|9806|9807|9808|9809|980a|9925|9926',
 	'code' => 'Evergreen',
 	'process' => 'TSMC 32-40nm',
 	'years' => '2009-15',
@@ -16955,14 +18025,15 @@ sub set_amd_data {
 	'1312|1313|1315|1316|1317|1318|131b|131c|131d|6640|6641|6646|6647|6649|664d|' .
 	'6650|6651|6658|665c|665d|665f|67a0|67a1|67a2|67a8|67a9|67aa|67b0|67b1|67b8|' .
 	'67b9|67be|9830|9831|9832|9833|9834|9835|9836|9837|9838|9839|983d|9850|9851|' .
-	'9852|9853|9854|9855|9856|9857|9858|9859|985a|985b|985c|985d|985e|985f|9920',
+	'9852|9853|9854|9855|9856|9857|9858|9859|985a|985b|985c|985d|985e|985f|991e|' .
+	'9920|9922',
 	'code' => 'Sea Islands',
 	'process' => 'GF/TSMC 16-28nm',
 	'years' => '2013-17',
 	},
 	{'arch' => 'GCN-3',
 	'ids' => '6900|6901|6902|6907|6920|6921|6929|692b|692f|6930|6938|6939|693b|' .
-	'7300|730f|9874|98e4',
+	'7300|730f|9874|98c0|98e4',
 	'code' => 'Volcanic Islands',
 	'process' => 'TSMC 28nm',
 	'years' => '2014-19',
@@ -17006,16 +18077,22 @@ sub set_amd_data {
 	'years' => '2020-22',
 	},
 	{'arch' => 'RDNA-3',
-	'ids' => '73a8|73f0|7448|744c|745e|7480|7483|7489',
+	'ids' => '73a8|73c4|73c5|73c8|7448|744c|745e|7460|7461|7470|7478|747e',
 	'code' => 'Navi-3x',
 	'process' => 'TSMC n5 (5nm)',
 	'years' => '2022+',
 	},
 	{'arch' => 'RDNA-3',
-	'ids' => '15bf|15c8|164f',
+	'ids' => '73f0|7480|7481|7483|7487|7489|748b|749f',
+	'code' => 'Navi-33',
+	'process' => 'TSMC n6 (6nm)',
+	'years' => '2023+',
+	},
+	{'arch' => 'RDNA-3',
+	'ids' => '15bf|15c8|164f|1900|1901',
 	'code' => 'Phoenix',
 	'process' => 'TSMC n4 (4nm)',
-	'years' => '2022+',
+	'years' => '2023+',
 	},
 	{'arch' => 'CDNA-1',
 	'ids' => '7388|738c|738e',
@@ -17161,15 +18238,16 @@ sub set_intel_data {
 	},
 	# gen10 was cancelled., 
 	{'arch' => 'Gen-11',
-	'ids' => '0d16|0d26|0d36|4555|4571|4e55|4e61|4e71|8a50|8a51|8a52|8a53|8a54|' .
-	'8a56|8a57|8a58|8a59|8a5a|8a5b|8a5c|8a5d|8a71|9840|9841',
+	'ids' => '0d16|0d26|0d36|4541|4551|4555|4557|4571|4e51|4e55|4e57|4e61|4e71|' .
+	'8a50|8a51|8a52|8a53|8a54|8a56|8a57|8a58|8a59|8a5a|8a5b|8a5c|8a5d|8a70|8a71|' .
+	'9840|9841',
 	'code' => '',
 	'process' => 'Intel 10nm',
 	'years' => '2019-21',
 	},
 	{'arch' => 'Gen-12.1',
-	'ids' => '4905|4908|4c8a|4c8b|4c8c|4c90|4c9a|9a40|9a49|9a60|9a68|9a70|9a78|' .
-	'9ac0|9ac9|9ad9|9af8',
+	'ids' => '4905|4907|4908|4c80|4c8a|4c8b|4c8c|4c90|4c9a|9a40|9a49|9a59|9a60|' .
+	'9a68|9a70|9a78|9ac0|9ac9|9ad9|9af8',
 	'code' => '',
 	'process' => 'Intel 10nm',
 	'years' => '2020-21',
@@ -17182,29 +18260,28 @@ sub set_intel_data {
 	'years' => '2021-22+',
 	},
 	{'arch' => 'Gen-12.5',
-	'ids' => '',
-	'code' => 'Arctic Sound',
-	'pattern' => 'Arctic',
+	'ids' => '0bd0|0bd5|0bd6|0bd7|0bd9|0bda|0bdb',
+	'code' => '',
 	'process' => 'Intel 10nm',
-	'years' => '2021-22+',
+	'years' => '2021-23+',
 	},
 	# Jupiter Sound cancelled?
 	{'arch' => 'Gen-12.7',
-	'ids' => '5690|5691|5692|5693|5694|5698|56a0|56a1|56a3|56a4|56a5|56a6|56a7|' .
-	'56a8|56a9',
+	'ids' => '5690|5691|5692|5693|5694|5695|5696|5697|5698|56a0|56a1|56a3|56a4|' .
+	'56a5|56a6|56a7|56a8|56a9|56b0|56b1|56b2|56b3',
 	'code' => 'Alchemist',
 	'process' => 'TSMC n6 (7nm)',
 	'years' => '2022+',
 	},
 	{'arch' => 'Gen-12.7',
 	'ids' => '56c0|56c1',
-	'code' => 'XeHPG',
+	'code' => '',
 	'process' => 'TSMC n6 (7nm)',
 	'years' => '2022+',
 	},
 	{'arch' => 'Gen-13',
-	'ids' => 'a720|a721|a780|a781|a782|a783|a788|a789|a78a|a78b|a7a0|a7a1|a7a8|' .
-	'a7a9',
+	'ids' => 'a720|a721|a74d|a780|a781|a782|a783|a788|a789|a78a|a78b|a7a0|a7a1|' .
+	'a7a8|a7a9|a7aa|a7ab|a7ac|a7ad',
 	'code' => '',
 	'process' => 'Intel 7 (10nm)',
 	'years' => '2022+',
@@ -17224,7 +18301,7 @@ sub set_nv_data {
 	# 0008|0009|0010|0018|0019
 	# and these are vendor id: 10de for 73.14
 	# 0020|0028|0029|002c|002d|00a0|0100|0101|0103|0150|0151|0152|0153
-	my $status_eol = main::message('nv-legacy-eol');
+	# generic fallback if we don't have the actual EOL termination date
 	my $date = $self_date;
 	$date =~ s/-\d+$//;
 	my $status_current = main::message('nv-current',$date);
@@ -17240,7 +18317,7 @@ sub set_nv_data {
 	'process' => 'TSMC 220-350nm',
 	'release' => '71.86.15',
 	'series' => '71.86.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2011-08-xx'),
 	'xorg' => '1.7',
 	'years' => '1998-2000',
 	},
@@ -17252,7 +18329,7 @@ sub set_nv_data {
 	'process' => 'TSMC 150-220nm',
 	'release' => '71.86.15',
 	'series' => '71.86.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2011-08-xx'),
 	'xorg' => '1.7',
 	'years' => '1999-2005',
 	},
@@ -17265,7 +18342,7 @@ sub set_nv_data {
 	'process' => 'TSMC 150-220nm',
 	'release' => '96.43.23',
 	'series' => '96.43.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2012-09-xx'),
 	'xorg' => '1.12',
 	'years' => '1999-2005',
 	},
@@ -17273,17 +18350,18 @@ sub set_nv_data {
 	'ids' => '0170|0171|0172|0173|0174|0175|0176|0177|0178|0179|017a|017c|017d|' .
 	'0181|0182|0183|0185|0188|018a|018b|018c|01f0|0200|0201|0202|0203|0250|0251|' .
 	'0253|0258|0259|025b|0280|0281|0282|0286|0288|0289|028c',
-	'code' => 'NV[12]x',
+	'code' => 'NV2x',
 	'kernel' => '3.6',
 	'legacy' => 1,
 	'process' => 'TSMC 150nm',
 	'release' => '96.43.23',
 	'series' => '96.43.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2012-09-xx'),
 	'xorg' => '1.12',
-	'years' => '2001-03',
+	'years' => '2001-2003',
 	},
 	## Legacy 173.14.xx
+	# process: IBM 130, TSMC 130-150
 	{'arch' => 'Rankine',
 	'ids' => '00fa|00fb|00fc|00fd|00fe|0301|0302|0308|0309|0311|0312|0314|031a|' .
 	'031b|031c|0320|0321|0322|0323|0324|0325|0326|0327|0328|032a|032b|032c|032d|' .
@@ -17291,14 +18369,16 @@ sub set_nv_data {
 	'code' => 'NV3x',
 	'kernel' => '3.12',
 	'legacy' => 1,
-	'process' => '130-150nm', # IBM 130, TSMC 130-150
+	'process' => '130-150nm',
 	'release' => '173.14.39',
 	'series' => '173.14.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2013-12-xx'),
 	'xorg' => '1.15',
-	'years' => '2003-05',
+	'years' => '2003-2005',
 	},
 	## Legacy 304.xx
+	# code: hard to get these, roughly MCP[567]x/NV4x/G7x
+	# process: IBM 130, TSMC 90-110
 	{'arch' => 'Curie',
 	'ids' => '0040|0041|0042|0043|0044|0045|0046|0047|0048|004e|0090|0091|0092|' .
 	'0093|0095|0098|0099|009d|00c0|00c1|00c2|00c3|00c8|00c9|00cc|00cd|00ce|00f1|' .
@@ -17309,18 +18389,20 @@ sub set_nv_data {
 	'0292|0293|0294|0295|0297|0298|0299|029a|029b|029c|029d|029e|029f|02e0|02e1|' .
 	'02e2|02e3|02e4|038b|0390|0391|0392|0393|0394|0395|0397|0398|0399|039c|039e|' .
 	'03d0|03d1|03d2|03d5|03d6|0531|0533|053a|053b|053e|07e0|07e1|07e2|07e3|07e5',
-	'code' => '', # hard to get these, roughly MCP[567]x/NV4x/G7x
+	'code' => '', 
 	'kernel' => '4.13',
 	'legacy' => 1,
-	'process' => '90-130nm', # IBM 130, TSMC 90-110
+	'process' => '90-130nm', 
 	'release' => '304.137',
 	'series' => '304.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2017-09-xx'),
 	'xorg' => '1.19',
-	'years' => '2003-13',
+	'years' => '2003-2013',
 	},
 	## Legacy 340.xx
 	# these are both Tesla and Tesla 2.0
+	# code: not clear, 8800/GT2xx/maybe G7x
+	# years: 2006-2010 Tesla 2007-2013 Tesla 2.0
 	{'arch' => 'Tesla',
 	'ids' => '0191|0193|0194|0197|019d|019e|0400|0401|0402|0403|0404|0405|0406|' .
 	'0407|0408|0409|040a|040b|040c|040d|040e|040f|0410|0420|0421|0422|0423|0424|' .
@@ -17339,28 +18421,28 @@ sub set_nv_data {
 	'0a65|0a66|0a67|0a68|0a69|0a6a|0a6c|0a6e|0a6f|0a70|0a71|0a72|0a73|0a74|0a75|' .
 	'0a76|0a78|0a7a|0a7c|0ca0|0ca2|0ca3|0ca4|0ca5|0ca7|0ca8|0ca9|0cac|0caf|0cb0|' .
 	'0cb1|0cbc|10c0|10c3|10c5|10d8',
-	'code' => '', # not clear, 8800/GT2xx/maybe G7x
+	'code' => '', 
 	'kernel' => '5.4',
 	'legacy' => 1,
 	'process' => '40-80nm',
 	'release' => '340.108',
 	'series' => '340.xx',
-	'status' => $status_eol,
+	'status' => main::message('nv-legacy-eol','2019-12-xx'),
 	'xorg' => '1.20',
-	'years' => '2006-13',
+	'years' => '2006-2013',
 	},
 	## Legacy 367.xx
 	{'arch' => 'Kepler',
 	'ids' => '0fef|0ff2|11bf',
 	'code' => 'GKxxx',
-	'kernel' => '',
+	'kernel' => '5.4',
 	'legacy' => 1,
 	'process' => 'TSMC 28nm',
 	'release' => '',
 	'series' => '367.xx',
-	'status' => main::message('nv-legacy-active','late 2022'),
-	'xorg' => '',
-	'years' => '2012-18',
+	'status' => main::message('nv-legacy-eol','2017'),
+	'xorg' => '1.20',
+	'years' => '2012-2018',
 	},
 	## Legacy 390.xx
 	# this is Fermi, Fermi 2.0
@@ -17375,14 +18457,14 @@ sub set_nv_data {
 	'1207|1208|1210|1211|1212|1213|1241|1243|1244|1245|1246|1247|1248|1249|124b|' .
 	'124d|1251',
 	'code' => 'GF1xx',
-	'kernel' => '',
+	'kernel' => '6.0',
 	'legacy' => 1,
 	'process' => '40/28nm',
-	'release' => '',
+	'release' => '390.157',
 	'series' => '390.xx+',
-	'status' => main::message('nv-legacy-active','late 2022'),
-	'xorg' => '',
-	'years' => '2010-16',
+	'status' => main::message('nv-legacy-eol','2022-11-22'),
+	'xorg' => '1.21',
+	'years' => '2010-2016',
 	},
 	## Legacy 470.xx
 	{'arch' => 'Fermi 2',
@@ -17393,10 +18475,12 @@ sub set_nv_data {
 	'process' => 'TSMC 28nm',
 	'release' => '',
 	'series' => '470.xx+',
-	'status' => main::message('nv-legacy-active','2023/24'),
+	'status' => main::message('nv-legacy-active','2024-09-xx'),
 	'xorg' => '',
-	'years' => '2010-16',
+	'years' => '2010-2016',
 	},
+	# GT 720M and 805A/810A are the same cpu id.
+	# years: 2012-2018 Kepler 2013-2015 Kepler 2.0
 	{'arch' => 'Kepler',
 	'ids' => '0fc6|0fc8|0fc9|0fcd|0fce|0fd1|0fd2|0fd3|0fd4|0fd5|0fd8|0fd9|0fdf|' .
 	'0fe0|0fe1|0fe2|0fe3|0fe4|0fe9|0fea|0fed|0fee|0ff6|0ff8|0ff9|0ffa|0ffb|0ffc|' .
@@ -17412,9 +18496,9 @@ sub set_nv_data {
 	'process' => 'TSMC 28nm',
 	'release' => '',
 	'series' => '470.xx+',
-	'status' => main::message('nv-legacy-active','2023/24'),
+	'status' => main::message('nv-legacy-active','2024-09-xx'),
 	'xorg' => '',
-	'years' => '2012-18',
+	'years' => '2012-2018',
 	},
 	## Current Active Series
 	# load microarch data, as stuff goes legacy, these will form new legacy items.
@@ -17423,47 +18507,45 @@ sub set_nv_data {
 	'1380|1381|1382|1390|1391|1392|1393|1398|1399|139a|139b|139c|139d|13b0|13b1|' .
 	'13b2|13b3|13b4|13b6|13b9|13ba|13bb|13bc|13c0|13c2|13d7|13d8|13d9|13da|13f0|' .
 	'13f1|13f2|13f3|13f8|13f9|13fa|13fb|1401|1402|1406|1407|1427|1430|1431|1436|' .
-	'1617|1618|1619|161a|1667|174d|174e|179c|17c8|17f0|17f1|17fd|1c8c|1c8d|1c90|' .
-	'1c91|1d10|1d12|1e91|1ed1|1ed3|1f14|1f54',
+	'1617|1618|1619|161a|1667|174d|174e|179c|17c8|17f0|17f1|17fd|1c90|1d10|1d12',
 	'code' => 'GMxxx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC 28nm',
 	'release' => '',
-	'series' => '535.xx+',
-	'status' => $status_current,
+	'series' => '545.xx+',
+	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
-	'years' => '2014-19',
+	'years' => '2014-2019',
 	},
 	{'arch' => 'Pascal',
 	'ids' => '15f0|15f7|15f8|15f9|17c2|1b00|1b02|1b06|1b30|1b38|1b80|1b81|1b82|' .
-	'1b83|1b84|1b87|1ba0|1ba1|1ba2|1bb0|1bb1|1bb4|1bb5|1bb6|1bb7|1bb8|1bb9|1bbb|' .
-	'1bc7|1be0|1be1|1c02|1c03|1c04|1c06|1c07|1c09|1c20|1c21|1c22|1c23|1c30|1c31|' .
-	'1c60|1c61|1c62|1c81|1c82|1c83|1c8c|1c8d|1c8f|1c90|1c91|1c92|1c94|1c96|1cb1|' .
-	'1cb2|1cb3|1cb6|1cba|1cbb|1cbc|1cbd|1cfa|1cfb|1d01|1d02|1d11|1d13|1d16|1d33|' .
-	'1d34|1d52',
+	'1b83|1b84|1b87|1ba0|1ba1|1ba2|1bb0|1bb1|1bb3|1bb4|1bb5|1bb6|1bb7|1bb8|1bb9|' .
+	'1bbb|1bc7|1be0|1be1|1c02|1c03|1c04|1c06|1c07|1c09|1c20|1c21|1c22|1c23|1c30|' .
+	'1c31|1c60|1c61|1c62|1c81|1c82|1c83|1c8c|1c8d|1c8f|1c90|1c91|1c92|1c94|1c96|' .
+	'1cb1|1cb2|1cb3|1cb6|1cba|1cbb|1cbc|1cbd|1cfa|1cfb|1d01|1d02|1d11|1d13|1d16|' .
+	'1d33|1d34|1d52',
 	'code' => 'GP10x',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC 16nm',
 	'release' => '',
-	'series' => '535.xx+',
-	'status' => $status_current,
+	'series' => '545.xx+',
+	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
-	'years' => '2016-21',
+	'years' => '2016-2021',
 	},
 	{'arch' => 'Volta',
-	'ids' => '1d81|1db1|1db3|1db4|1db5|1db6|1db7|1db8|1dba|1df0|1df2|1df6|1fb0|' .
-	'20b0|20b6',
+	'ids' => '1d81|1db1|1db3|1db4|1db5|1db6|1db7|1db8|1dba|1df0|1df2|1df6|1fb0',
 	'code' => 'GV1xx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC 12nm',
 	'release' => '',
-	'series' => '535.xx+',
-	'status' => $status_current,
+	'series' => '545.xx+',
+	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
-	'years' => '2017-20',
+	'years' => '2017-2020',
 	},
 	{'arch' => 'Turing',
 	'ids' => '1e02|1e04|1e07|1e09|1e30|1e36|1e78|1e81|1e82|1e84|1e87|1e89|1e90|' .
@@ -17471,59 +18553,61 @@ sub set_nv_data {
 	'1f07|1f08|1f0a|1f0b|1f10|1f11|1f12|1f14|1f15|1f36|1f42|1f47|1f50|1f51|1f54|' .
 	'1f55|1f76|1f82|1f83|1f91|1f95|1f96|1f97|1f98|1f99|1f9c|1f9d|1f9f|1fa0|1fb0|' .
 	'1fb1|1fb2|1fb6|1fb7|1fb8|1fb9|1fba|1fbb|1fbc|1fdd|1ff0|1ff2|1ff9|2182|2184|' .
-	'2187|2188|2189|2191|2192|21c4|21d1|25a6|25a7|25a9|25aa|25ad|25ed|28b8',
+	'2187|2188|2189|2191|2192|21c4|21d1|25a6|25a7|25a9|25aa|25ad|25ed|28b8|28f8',
 	'code' => 'TUxxx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC 12nm FF',
 	'release' => '',
-	'series' => '535.xx+',
-	'status' => $status_current,
+	'series' => '545.xx+',
+	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
-	'years' => '2018-22',
+	'years' => '2018-2022',
 	},
 	{'arch' => 'Ampere',
-	'ids' => '20b0|20b2|20b3|20b5|20b7|20f1|20f3|20f5|2203|2204|2206|2207|2208|' .
-	'220a|220d|2216|2230|2231|2232|2233|2235|2236|2237|2238|2414|2420|2438|2460|' .
-	'2482|2484|2486|2487|2488|2489|248a|249c|249d|24a0|24b0|24b1|24b6|24b7|24b8|' .
-	'24b9|24ba|24bb|24c7|24c9|24dc|24dd|24e0|24fa|2503|2504|2507|2508|2520|2521|' .
-	'2523|2531|2544|2560|2563|2571|2582|25a0|25a2|25a5|25ab|25ac|25b6|25b8|25b9|' .
-	'25ba|25bb|25bc|25bd|25e0|25e2|25e5|25ec|25f9|25fa|25fb|2838',
+	'ids' => '20b0|20b2|20b3|20b5|20b6|20b7|20bd|20f1|20f3|20f5|20f6|2203|2204|' .
+	'2206|2207|2208|220a|220d|2216|2230|2231|2232|2233|2235|2236|2237|2238|2414|' .
+	'2420|2438|2460|2482|2484|2486|2487|2488|2489|248a|249c|249d|24a0|24b0|24b1|' .
+	'24b6|24b7|24b8|24b9|24ba|24bb|24c7|24c9|24dc|24dd|24e0|24fa|2503|2504|2507|' .
+	'2508|2520|2521|2523|2531|2544|2560|2563|2571|2582|25a0|25a2|25a5|25ab|25ac|' .
+	'25b6|25b8|25b9|25ba|25bb|25bc|25bd|25e0|25e2|25e5|25ec|25f9|25fa|25fb|2838',
 	'code' => 'GAxxx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n7 (7nm)',
 	'release' => '',
-	'series' => '535.xx+',
-	'status' => $status_current,
+	'series' => '545.xx+',
+	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
-	'years' => '2020-22',
+	'years' => '2020-2023',
 	},
 	{'arch' => 'Hopper',
-	'ids' => '2330|2331|2339',
+	'ids' => '2321|2322|2324|2330|2331|2339|233a|2342',
 	'code' => 'GH1xx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n4 (5nm)',
 	'release' => '',
-	'series' => '535.xx+',
+	'series' => '545.xx+',
 	'status' => $status_current,
 	'xorg' => '',
 	'years' => '2022+',
 	},
 	{'arch' => 'Lovelace',
-	'ids' => '2684|26b1|26b5|2704|2717|2757|2782|2786|27a0|27b8|27e0|2803|2820|' .
-	'2860|28a0|28a1|28e0|28e1',
+	'ids' => '2684|26b1|26b2|26b5|26b9|2704|2717|2730|2757|2770|2782|2786|27a0|' .
+	'27b0|27b1|27b2|27b8|27ba|27bb|27e0|27fb|2803|2805|2820|2860|2882|28a0|28a1|' .
+	'28e0|28e1',
 	'code' => 'AD1xx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n4 (5nm)',
 	'release' => '',
-	'series' => '535.xx+',
+	'series' => '545.xx+',
 	'status' => $status_current,
 	'xorg' => '',
-	'years' => '2022-23+',
+	'years' => '2022+',
 	},
+
 	],
 }
 
@@ -18307,7 +19391,7 @@ sub lvm_data {
 	PartitionData::set() if !$loaded{'partition-data'};
 	main::set_mapper() if !$loaded{'mapper'};
 	if ($fake{'logical'}){
-		# my $file = "$fake_data_dir/lvm/lvs-test-1.txt";
+		# my $file = "$fake_data_dir/raid-logical/lvm/lvs-test-1.txt";
 		# @data = main::reader($file,'strip');
 	}
 	else {
@@ -18684,8 +19768,8 @@ sub machine_data_fruid {
 	}
 	else {
 		# my $file;
-		# $file = "$fake_data_dir/fruid/fruid-e904-1_full.txt";
-		# $file = "$fake_data_dir/fruid/fruid-e804-1_full.txt";
+		# $file = "$fake_data_dir/machine/fruid/fruid-e904-1_full.txt";
+		# $file = "$fake_data_dir/machine/fruid/fruid-e804-1_full.txt";
 		# @fruid = main::reader($file,'strip');
 	}
 	# print Data::Dumper::Dumper \@fruid;
@@ -19467,6 +20551,7 @@ sub advanced_data_sys {
 		@paths = main::globber('/sys/class/net/*');
 	}
 	@paths = grep {!/\/lo$/} @paths;
+	# push(@paths,'/sys/class/net/ppp0'); # fake IF if needed to match test data
 	if ($count > 0 && $count < scalar @paths){
 		@paths = splice(@paths, $count, scalar @paths);
 	}
@@ -19627,9 +20712,8 @@ sub if_ip {
 	eval $start if $b_log;
 	my ($rows,$type,$if) = @_;
 	my ($working_if);
-	my ($cont_ip,$ind_ip) = (3,4);
-	my $num = 0;
-	my $j = 0;
+	my ($cont_ip,$ind_ip,$if_cnt) = (3,4,0);
+	my ($j,$num) = (0,0);
 	$b_ip_run = 1;
 	if ($type eq 'IF-ID'){
 		($cont_ip,$ind_ip) = (2,3);
@@ -19642,11 +20726,13 @@ sub if_ip {
 			next;
 		} 
 		if ($working_if eq $if){
+			$if_cnt = 0;
 			# print "if $if item:\n", Data::Dumper::Dumper $item;
 			foreach my $data2 (@$item){
 				$j = scalar @$rows;
 				$num = 1;
-				if ($limit > 0 && $j >= $limit){
+				$if_cnt++;
+				if ($limit > 0 && $if_cnt > $limit){
 					push(@$rows, {
 					main::key($num++,0,$cont_ip,'Message') => main::message('output-limit',scalar @$item),
 					});
@@ -19717,15 +20803,16 @@ sub wan_ip {
 	my ($b_dig,$b_html,$ip,$ua);
 	my $num = 0;
 	# time: 0.06 - 0.07 seconds
-	# cisco opendns.com may be terminating supporting this one, sometimes works, sometimes not: 
-	# use -4/6 to force ipv 4 or 6, but generally we want the 'natural' native
-	# ip returned.
-	# dig +short +time=1 +tries=1 myip.opendns.com @resolver1.opendns.com 
-	# dig +short @ns1-1.akamaitech.net ANY whoami.akamai.net
-	# this one can take forever, and sometimes requires explicit -4 or -6
-	# dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com
+	# Cisco opendns.com may be terminating supporting this one, sometimes works, sometimes not: 
+	# use -4/6 to force ipv 4 or 6, but generally we want the 'natural' native ip returned.
+	# dig +short +time=1 +tries=1 myip.opendns.com @resolver1.opendns.com :: 0.021s
+	# Works but is slow:
+	# dig +short @ns1-1.akamaitech.net ANY whoami.akamai.net :: 0.156s
+	# This one can take forever, and sometimes requires explicit -4 or -6
+	# dig -4 TXT +short o-o.myaddr.l.google.com @ns1.google.com :: 0.026s; 1.087ss
 	if (!$force{'no-dig'} && (my $program = main::check_program('dig'))){
 		$ip = (main::grabber("$program +short +time=1 +tries=1 \@ns1-1.akamaitech.net ANY whoami.akamai.net 2>/dev/null"))[0];
+		$ip =~ s/"//g if $ip; # some return IP in quotes, when using TXT
 		$b_dig = 1;
 	}
 	if (!$ip && !$force{'no-html-wan'}){
@@ -19733,16 +20820,19 @@ sub wan_ip {
 		if (!defined $dl{'no-ssl'}){
 			main::set_downloader();
 		}
-		# note: tests: akamai: 0.055 - 0.065 icanhazip.com: 0.177 0.164
-		# smxi: 0.525, so almost 10x slower. Dig is fast too
+		# note: tests: akamai: 0.015 - 0.025 icanhazip.com: 0.020 0.030
+		# smxi: 0.230, so ~10x slower. Dig is not as fast as you'd expect
+		# dig: 0.167s 0.156s
 		# leaving smxi as last test because I know it will always be up.
 		# --wan-ip-url replaces values with user supplied arg
-		# 0.059s: http://whatismyip.akamai.com/
-		# 0.255s: https://get.geojs.io/v1/ip
-		# 0.371s: http://icanhazip.com/
-		# 0.430s: https://smxi.org/opt/ip.php
+		# 0.020s: http://whatismyip.akamai.com/
+		# 0.136s: https://get.geojs.io/v1/ip
+		# 0.024s: http://icanhazip.com/
+		# 0.027s: ifconfig.io
+		# 0.230s: https://smxi.org/opt/ip.php
+		# 0.023s: https://api.ipify.org :: NOTE: hangs, widely variable times, don't use
 		my @urls = (!$wan_url) ? qw(http://whatismyip.akamai.com/ 
-		 http://icanhazip.com/ https://smxi.org/opt/ip.php) : ($wan_url);
+		http://icanhazip.com/ https://smxi.org/opt/ip.php) : ($wan_url);
 		foreach (@urls){
 			$ua = 'ip' if $_ =~ /smxi/;
 			$ip = main::download_file('stdout',$_,'',$ua);
@@ -20299,9 +21389,9 @@ sub set_partitions {
 	}
 	else {
 		 my $file;
-		# $file = "$fake_data_dir/df/df-kTP-cygwin-1.txt";
-		 $file = "$fake_data_dir/df/df-kT-wrapped-1.txt";
-		 @partitions_working = main::reader($file);
+		# $file = "$fake_data_dir/block-devices/df/df-kTP-cygwin-1.txt";
+		# $file = "$fake_data_dir/block-devices/df/df-kT-wrapped-1.txt";
+		# @partitions_working = main::reader($file);
 	}
 	# print Data::Dumper::Dumper \@partitions_working;
 	# Determine positions
@@ -20468,7 +21558,7 @@ sub set_partitions {
 				$fs = ($b_fs) ? $row[1]: get_mounts_fs($row[0],\@mount);
 			}
 			# assuming that all null/nullfs are parts of a logical fs
-			$b_logical = 1 if $fs && $fs =~ /^(btrfs|hammer|null|wekafs|zfs)/; 
+			$b_logical = 1 if $fs && $fs =~ /^(btrfs|hammer|null|zfs)/; 
 			$id = join(' ', @row[$cols .. $#row]);
 			$size = $row[$cols - $back_size];
 			if ($b_admin && -e "/sys/block/"){
@@ -20569,7 +21659,8 @@ sub swap_data {
 	my (@data,@working);
 	my ($block_size,$cache_pressure,$dev_base,$dev_mapped,$dev_type,$label,
 	$maj_min,$mount,$path,$pattern1,$pattern2,$percent_used,$priority,
-	$size,$swap_type,$swappiness,$used,$uuid);
+	$size,$swap_type,$swappiness,$used,$uuid,$zram_comp,$zram_mcs,
+	$zswap_enabled,$zram_comp_avail,$zswap_comp,$zswap_mpp);
 	my ($s,$j,$size_id,$used_id) = (1,0,2,3);
 	if (!$bsd_type){
 		# faster, avoid subshell, same as swapon -s
@@ -20582,9 +21673,8 @@ sub swap_data {
 			@working = main::grabber("$path -s 2>/dev/null");
 		}
 		if ($b_admin){
-			@data = swap_advanced_data();
-			$swappiness = $data[0];
-			$cache_pressure = $data[1];
+			swap_advanced_data(\$swappiness,\$cache_pressure,\$zswap_enabled,
+			\$zswap_comp,\$zswap_mpp);
 		}
 		if (($show{'label'} || $show{'uuid'}) && !$loaded{'label-uuid'}){
 			set_label_uuid();
@@ -20607,12 +21697,19 @@ sub swap_data {
 	foreach (@working){
 		#next if ! /^\/dev/ || /^\/dev\/(ramzwap|zram)/;
 		next if /^(Device|Filename|no swap)/;
-		($block_size,$dev_base,$dev_mapped,$dev_type,$label,$maj_min,$mount,$priority,
-		$swap_type,$uuid) = ('','','','','','','',undef,'partition','');
+		($block_size,$dev_base,$dev_mapped,$dev_type,$label,$maj_min,$mount,
+		$swap_type,$uuid) = ('','','','','','','','partition','');
+		($priority,$zram_comp_avail,$zram_comp,$zram_mcs) = ();
 		@data = split(/\s+/, $_);
-		if (/^\/dev\/(block\/)?(compcache|ramzwap|zram)/i){
+		# /dev/zramX; ramzswapX == compcache, legacy version of zram.
+		# /run/initramfs/dev/zram0; /dev/ramzswap0 
+		if (/^\/(dev|run).*?\/((compcache|ramzwap|zram)\d+)/i){
+			$dev_base = $2;
 			$swap_type = 'zram';
 			$dev_type = 'dev';
+			if ($b_admin){
+				zram_data($dev_base,\$zram_comp,\$zram_comp_avail,\$zram_mcs);
+			}
 		}
 		elsif ($data[1] && $data[1] eq 'ram'){
 			$swap_type = 'ram';
@@ -20675,6 +21772,12 @@ sub swap_data {
 		'swap-type' => $swap_type,
 		'used' => $used,
 		'uuid' => $uuid,
+		'zram-comp' => $zram_comp,
+		'zram-comp-avail' => $zram_comp_avail,
+		'zram-max-comp-streams' => $zram_mcs,
+		'zswap-enabled' => $zswap_enabled,
+		'zswap-compressor' => $zswap_comp,
+		'zswap-max-pool-percent' => $zswap_mpp,
 		});
 		$s++;
 	}
@@ -20683,23 +21786,59 @@ sub swap_data {
 	eval $end if $b_log;
 }
 
+# Alll by ref: 0: $swappiness; 1: $cache_pressure; 2: $zswap_enabled;
+# 3: $zswap_comp; 4: $zswap_mpp
 sub swap_advanced_data {
 	eval $start if $b_log;
-	my ($swappiness,$cache_pressure) = ();
 	if (-r '/proc/sys/vm/swappiness'){
-		$swappiness = main::reader('/proc/sys/vm/swappiness','',0);
-		if (defined $swappiness){
-			$swappiness .= ($swappiness == 60) ? ' (default)' : ' (default 60)' ;
+		${$_[0]} = main::reader('/proc/sys/vm/swappiness','',0);
+		if (defined ${$_[0]}){
+			${$_[0]} .= (${$_[0]} == 60) ? ' (default)' : ' (default 60)' ;
 		}
 	}
 	if (-r '/proc/sys/vm/vfs_cache_pressure'){
-		$cache_pressure = main::reader('/proc/sys/vm/vfs_cache_pressure','',0);
-		if (defined $cache_pressure){
-			$cache_pressure .= ($cache_pressure == 100) ? ' (default)' : ' (default 100)' ;
+		${$_[1]} = main::reader('/proc/sys/vm/vfs_cache_pressure','',0);
+		if (defined ${$_[1]}){
+			${$_[1]} .= (${$_[1]}== 100) ? ' (default)' : ' (default 100)' ;
 		}
 	}
+	if (-r '/sys/module/zswap/parameters/enabled'){
+		${$_[2]} = main::reader('/sys/module/zswap/parameters/enabled','',0);
+		if (${$_[2]} =~ /^(Y|yes|true|1)$/){
+			${$_[2]} = 'yes';
+		}
+		elsif (${$_[2]} =~ /^(N|no|false|0)$/){
+			${$_[2]} = 'no';
+		}
+		else {
+			${$_[2]} = 'unset';
+		}
+	}
+	if (-r '/sys/module/zswap/parameters/compressor'){
+		${$_[3]} = main::reader('/sys/module/zswap/parameters/compressor','',0);
+	}
+	if (-r '/sys/module/zswap/parameters/max_pool_percent'){
+		${$_[4]} = main::reader('/sys/module/zswap/parameters/max_pool_percent','',0);
+	}
 	eval $end if $b_log;
-	return ($swappiness,$cache_pressure);
+}
+
+# 0: device id [zram0]; by ref: 1: $zram_comp; 2: $zram_comp_avail; 3: $zram_mcs; 
+sub zram_data {
+	if (-r "/sys/block/$_[0]/comp_algorithm"){
+		${$_[2]} = main::reader("/sys/block/$_[0]/comp_algorithm",'',0);
+		# current is in [..] in list
+		if (${$_[2]} =~ /\[(\S+)\]/){
+			${$_[1]} = $1;
+			# dump the active one, and leave the available
+			${$_[2]} =~ s/\[${$_[1]}\]//;
+			${$_[2]} =~ s/^\s+|\s+$//g;
+			${$_[2]} =~ s/\s+/,/g;
+		}
+	}
+	if (-r "/sys/block/$_[0]/max_comp_streams"){
+		${$_[3]} = main::reader("/sys/block/$_[0]/max_comp_streams",'',0);
+	}
 }
 
 # Handle cases of hidden file systems
@@ -20789,13 +21928,13 @@ sub set_filters {
 	#  hdfs, httpdirfs, hubicfuse, ipfs, juice, k(osmos)?fs, .*lafs, lizardfs,
 	#  lustre, magma, mapr, moosefs, nfs[34], objective, ocfs\d{0,2}, onefs, 
 	#  orangefs, panfs, pnfs, pvfs\d{0,2}, rclone, restic, rozofs, s3fs, scality,
-	#  sfs, sheepdogfs, spfs, sshfs, smbfs, v9fs, vdfs, vmfs, xtreemfs
+	#  sfs, sheepdogfs, spfs, sshfs, smbfs, v9fs, vdfs, vmfs, wekafs, xtreemfs
 	# Stackable/Union: aufs, e?cryptfs, encfs, erofs, gocryptfs, ifs, lofs, 
 	#  mergerfs, mhddfs, overla(id|y)(fs)?, squashfs, unionfs;
 	# ISO/Archive: archive(mount)?, atlas, avfs. borg, erofs, fuse-archive, 
 	#  fuseiso, gzipfs, iso9660, lofs, vdfuse, wimmountfs, xbfuse
-	# FUSE: adbfs, apfs-fuse, gvfs, gvfs-mtp, ifuse, jmtpfs, mtpfs, ptpfs,
-	#  simple-mtpfs, vramfs, xmlfs
+	# FUSE: adbfs, apfs-fuse, atomfs, gvfs, gvfs-mtp, ifuse, jmtpfs, mtpfs, ptpfs, 
+	#  puzzlefs, simple-mtpfs, vramfs, xmlfs
 	# System fs: cgmfs, configfs, debugfs, devfs, devtmpfs, efivarfs, fdescfs, 
 	#  hugetlbfs, kernfs, linprocfs, linsysfs, lxcfs, procfs, ptyfs, run, 
 	#  securityfs, shm, swap, sys, sysfs, tmpfs, tracefs, type, udev, vartmp
@@ -20805,12 +21944,13 @@ sub set_filters {
 	my @all = qw%au av e?crypt enc ero gocrypt i (fuse-?)?iso iso9660 lo merger 
 	mhdd overla(id|y) splitview(-?fuse)? squash union xbfuse%;
 	## These are fuse/archive/distributed/remote/clustered mostly
-	my @exclude = (@all,qw%9p (open-?)?a adb archive(mount)? astream atlas 
+	my @exclude = (@all,qw%9p (open-?)?a adb archive(mount)? astream atlas atom
 	beeg borg c ceph chiron ci cloudstore curlftp d dav dce 
 	g gdrive gfarm git gluster gmail gocrypt google-drive-ocaml gp gphoto gv gzip
 	hd httpd hubic ip juice k(osmos)? .*la lizard lustre magma mapr moose .*mtp 
-	null p?n objective oc one orange pan .*ptp pv rclone restic rozo 
-	s s3 scality sheepdog sp ssh smb v9 vd vm vram wim(mount)? xb xml xtreem%);
+	null p?n objective oc one orange pan .*ptp puzzle pv rclone restic rozo 
+	s s3 scality sheepdog sp ssh smb v9 vd vm vram weka wim(mount)? xb xml 
+	xtreem%);
 	# Various RAM based system FS
 	my @partition = (@all,qw%cgroup.* cgm config debug dev devtmp efivar fdesc 
 	hugetlb kern linproc linsys lxc none proc pty run security shm swap sys 
@@ -21829,14 +22969,14 @@ sub md_data {
 	my ($mdstat) = @_;
 	my $j = 0;
 	if ($fake{'raid-md'}){
-		#$mdstat = "$fake_data_dir/raid/md-4-device-1.txt";
-		#$mdstat = "$fake_data_dir/raid/md-rebuild-1.txt";
-		#$mdstat = "$fake_data_dir/raid/md-2-mirror-fserver2-1.txt";
-		#$mdstat = "$fake_data_dir/raid/md-2-raid10-abucodonosor.txt";
-		#$mdstat = "$fake_data_dir/raid/md-2-raid10-ant.txt";
-		#$mdstat = "$fake_data_dir/raid/md-inactive-weird-syntax.txt";
-		#$mdstat = "$fake_data_dir/raid/md-inactive-active-syntax.txt";
-		#$mdstat = "$fake_data_dir/raid/md-inactive-active-spare-syntax.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-4-device-1.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-rebuild-1.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-2-mirror-fserver2-1.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-2-raid10-abucodonosor.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-2-raid10-ant.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-inactive-weird-syntax.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-inactive-active-syntax.txt";
+		#$mdstat = "$fake_data_dir/raid-logical/md/md-inactive-active-spare-syntax.txt";
 	}
 	my @working = main::reader($mdstat,'strip');
 	# print Data::Dumper::Dumper \@working;
@@ -22121,11 +23261,11 @@ sub zfs_data {
 	my ($i,$j,$k) = (0,0,0);
 	if ($fake{'raid-zfs'}){
 		# my $file;
-		# $file = "$fake_data_dir/raid/zpool-list-1-mirror-main-solestar.txt";
-		# $file = "$fake_data_dir/raid/zpool-list-2-mirror-main-solestar.txt";
-		# $file = "$fake_data_dir/raid/zpool-list-v-tank-1.txt";
-		# $file = "$fake_data_dir/raid/zpool-list-v-gojev-1.txt";
-		# $file = "$fake_data_dir/raid/zpool-list-v-w-spares-1.txt";
+		# $file = "$fake_data_dir/raid-logical/zfs/zpool-list-1-mirror-main-solestar.txt";
+		# $file = "$fake_data_dir/raid-logical/zfs/zpool-list-2-mirror-main-solestar.txt";
+		# $file = "$fake_data_dir/raid-logical/zfs/zpool-list-v-tank-1.txt";
+		# $file = "$fake_data_dir/raid-logical/zfs/zpool-list-v-gojev-1.txt";
+		# $file = "$fake_data_dir/raid-logical/zfs/zpool-list-v-w-spares-1.txt";
 		#@working = main::reader($file);$zpool = '';
 	}
 	else {
@@ -22334,9 +23474,9 @@ sub zfs_status {
 		$k = 0;
 		if ($fake{'raid-zfs'}){
 			my $file;
-			# $file = "$fake_data_dir/raid/zpool-status-1-mirror-main-solestar.txt";
-			# $file = "$fake_data_dir/raid/zpool-status-2-mirror-main-solestar.txt";
-			# $file = "$fake_data_dir/raid/zpool-status-tank-1.txt";
+			# $file = "$fake_data_dir/raid-logical/zfs/zpool-status-1-mirror-main-solestar.txt";
+			# $file = "$fake_data_dir/raid-logical/zfs/zpool-status-2-mirror-main-solestar.txt";
+			# $file = "$fake_data_dir/raid-logical/zfs/zpool-status-tank-1.txt";
 			#@pool_status = main::reader($file,'strip');
 		}
 		else {
@@ -23335,6 +24475,7 @@ sub speed_mapper {
 	return ($speeds{$type}) ?  $speeds{$type} . ' MT/s' : $type;
 }
 
+
 ## START RAM VENDOR ##
 sub set_ram_vendors {
 	$vendors = [
@@ -23355,6 +24496,7 @@ sub set_ram_vendors {
 	['^(G[A-Z]|Geil)','Geil','Geil',''],
 	# Note: FA- but make loose FA
 	['^(F4|G[\s\.-]?Skill)','G[\s\.-]?Skill','G.Skill',''], 
+	['^(GJN)','GJN','GJN',''],
 	['^(HP)','','HP',''], # no IDs found
 	['^(HX|HyperX)','HyperX','HyperX',''],
 	# Qimonda spun out of Infineon, same ids
@@ -23371,9 +24513,11 @@ sub set_ram_vendors {
 	# Before patriot just in case
 	['^(MN\d|PNY)','PNY\s','PNY',''],
 	['^(P[A-Z]|Patriot)','Patriot','Patriot',''],
+	['^RAMOS','^RAMOS','RAmos',''],
 	['^(K[1-6][ABLT]|K\d|M[\d]{3}[A-Z]|Samsung)','Samsung','Samsung',''],
 	['^(SP|Silicon[\s-]?Power)','Silicon[\s-]?Power','Silicon Power',''],
 	['^(STK|Simtek)','Simtek','Simtek',''],
+	['^(Simmtronics|Gamex)','^Simmtronics','Simmtronics',''],
 	['^(HM[ACT]|SK[\s-]?Hynix)','SK[\s-]?Hynix','SK-Hynix',''],
 	# TED TTZD TLRD TDZAD TF4D4 TPD4 TXKD4 seen: HMT but could by skh
 	#['^(T(ED|D[PZ]|F\d|LZ|P[DR]T[CZ]|XK)|Team[\s-]?Group)','Team[\s-]?Group','TeamGroup',''],
@@ -24651,7 +25795,7 @@ sub sensors_output {
 	@fan_main = @{$sensors->{'fan-main'}} if $sensors->{'fan-main'};
 	@fan_default = @{$sensors->{'fan-default'}} if $sensors->{'fan-default'};
 	my $fan_def = (!@fan_main && !@fan_default) ? 'N/A' : '';
-	$rows->[$j]{main::key($num++,1,$l1,'Fan Speeds (RPM)')} = $fan_def;
+	$rows->[$j]{main::key($num++,1,$l1,'Fan Speeds (rpm)')} = $fan_def;
 	my $b_cpu = 0;
 	for (my $i = 0; $i < scalar @fan_main; $i++){
 		next if $i == 0;# starts at 1, not 0
@@ -24772,19 +25916,19 @@ sub ipmi_data {
 	my $sensors = {};
 	if ($fake{'ipmi'}){
 		## ipmitool ##
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensors-archerseven-1.txt";$program='ipmitool';
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensors-epyc-1.txt";$program='ipmitool';
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensors-RK016013.txt";$program='ipmitool';
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensors-freebsd-offsite-backup.txt";
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensor-shom-1.txt";$program='ipmitool';
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensor-shom-2.txt";$program='ipmitool';
-		# $file = "$fake_data_dir/ipmitool/ipmitool-sensor-tyan-1.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensors/ipmitool/ipmitool-sensors-archerseven-1.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensors-epyc-1.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensors-RK016013.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensors-freebsd-offsite-backup.txt";
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensor-shom-1.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensor-shom-2.txt";$program='ipmitool';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmitool-sensor-tyan-1.txt";$program='ipmitool';
 		# ($b_ipmitool,$i_key,$i_value,$i_unit) = (1,0,1,2); # ipmitool sensors
 		## ipmi-sensors ##
-		# $file = "$fake_data_dir/ipmitool/ipmi-sensors-epyc-1.txt";$program='ipmi-sensors';
-		# $file = "$fake_data_dir/ipmitool/ipmi-sensors-lathander.txt";$program='ipmi-sensors';
-		# $file = "$fake_data_dir/ipmitool/ipmi-sensors-zwerg.txt";$program='ipmi-sensors';
-		# $file = "$fake_data_dir/ipmitool/ipmi-sensors-arm-server-1.txt";$program='ipmi-sensors';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmi-sensors-epyc-1.txt";$program='ipmi-sensors';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmi-sensors-lathander.txt";$program='ipmi-sensors';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmi-sensors-zwerg.txt";$program='ipmi-sensors';
+		# $file = "$fake_data_dir/sensorsipmitool/ipmi-sensors-arm-server-1.txt";$program='ipmi-sensors';
 		# ($b_ipmitool,$i_key,$i_value,$i_unit) = (0,1,3,4); # ipmi-sensors
 		# @data = main::reader($file);
 	}
@@ -25168,20 +26312,20 @@ sub load_lm_sensors {
 	my ($adapter,$holder,$type) = ('','','');
 		if ($fake{'sensors'}){
 		# my $file;
-		# $file = "$fake_data_dir/sensors/amdgpu-w-fan-speed-stretch-k10.txt";
-		# $file = "$fake_data_dir/sensors/peci-tin-geggo.txt";
-		# $file = "$fake_data_dir/sensors/sensors-w-other-biker.txt";
-		# $file = "$fake_data_dir/sensors/sensors-asus-chassis-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-devnull-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-jammin1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-mx-incorrect-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-maximus-arch-1.txt";
-		# $file = "$fake_data_dir/sensors/kernel-58-sensors-ant-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-zenpower-nvme-2.txt";
-		# $file = "$fake_data_dir/sensors/sensors-pch-intel-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-ppc-sr71.txt";
-		# $file = "$fake_data_dir/sensors/sensors-coretemp-acpitz-1.txt";
-		# $file = "$fake_data_dir/sensors/sensors-applesmc-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/amdgpu-w-fan-speed-stretch-k10.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/peci-tin-geggo.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-w-other-biker.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-asus-chassis-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-devnull-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-jammin1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-mx-incorrect-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-maximus-arch-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/kernel-58-sensors-ant-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-zenpower-nvme-2.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-pch-intel-1.txt";
+		# $file = "$fake_data_dir/sensors/slm-sensors/ensors-ppc-sr71.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-coretemp-acpitz-1.txt";
+		# $file = "$fake_data_dir/sensors/lm-sensors/sensors-applesmc-1.txt";
 		# @sensors_data = main::reader($file);
 	}
 	else {
@@ -25347,13 +26491,14 @@ sub load_sys_data {
 		$adapter .= '-' . $hwmons{$hwmon}->{'device'};
 		($unit,$value,@values) = ();
 		foreach my $item (@{$hwmons{$hwmon}->{'sensors'}}){
+			next if !defined $item->{'id'};
 			my $name = ($item->{'label'}) ? $item->{'label'}: $item->{'id'};
 			if ($item->{'id'} =~ /^temp/){
 				$unit = 'C';
 				$value = sprintf('%0.1f',$item->{'value'}/1000);
 			}
 			elsif ($item->{'id'} =~ /^fan/){
-				$unit = 'RPM';
+				$unit = 'rpm';
 				$value = $item->{'value'};
 			}
 			# note: many sensors require further math on value, so these will be wrong
@@ -26227,6 +27372,16 @@ sub create_output {
 				if (defined $row->{'cache-pressure'}){
 					$rows->[$j]{main::key($num++,0,2,'cache-pressure')} = $row->{'cache-pressure'};
 				}
+				$row->{'zswap-enabled'} ||= 'N/A';
+				$rows->[$j]{main::key($num++,1,2,'zswap')} = $row->{'zswap-enabled'};
+				if ($row->{'zswap-enabled'} eq 'yes'){
+					if (defined $row->{'zswap-compressor'}){
+						$rows->[$j]{main::key($num++,0,1,'compressor')} = $row->{'zswap-compressor'};
+					}
+					if (defined $row->{'zswap-max-pool-percent'}){
+						$rows->[$j]{main::key($num++,0,1,'max-pool')} = $row->{'zswap-max-pool-percent'} . '%';
+					}
+				}
 			}
 			else {
 				$rows->[$j]{main::key($num++,0,1,'Message')} = main::message('swap-admin');
@@ -26257,6 +27412,17 @@ sub create_output {
 		}
 		if ($extra > 1 && defined $row->{'priority'}){
 			$rows->[$j]{main::key($num++,0,2,'priority')} = $row->{'priority'};
+		}
+		if ($b_admin && $row->{'swap-type'} eq 'zram'){
+			if ($row->{'zram-comp'}){
+				$rows->[$j]{main::key($num++,1,2,'comp')} = $row->{'zram-comp'};
+				if ($row->{'zram-comp-avail'}){
+					$rows->[$j]{main::key($num++,0,3,'avail')} = $row->{'zram-comp-avail'};
+				}
+			}
+			if ($row->{'zram-max-comp-streams'}){
+				$rows->[$j]{main::key($num++,0,3,'max-streams')} = $row->{'zram-max-comp-streams'};
+			}
 		}
 		$row->{'mount'} =~ s|/home/[^/]+/(.*)|/home/$filter_string/$1| if $row->{'mount'} && $use{'filter'};
 		$rows->[$j]{main::key($num++,1,2,$dev)} = ($row->{'mount'}) ? $row->{'mount'} : 'N/A';
@@ -27504,14 +28670,13 @@ package CompilerVersion;
 
 sub get {
 	eval $start if $b_log;
-	my $compiler;
+	my $compiler = []; # we want an array ref to return if not set
 	if (my $file = $system_files{'proc-version'}){
-		version_proc(\$compiler,$file);
+		version_proc($compiler,$file);
 	}
 	elsif ($bsd_type){
-		version_bsd(\$compiler);
+		version_bsd($compiler);
 	}
-	$compiler ||= []; # we want an array ref to return if not set
 	eval $end if $b_log;
 	return $compiler;
 }
@@ -27530,17 +28695,17 @@ sub version_bsd {
 				if (/^kern.compiler_version/){
 					@working = split(/:\s*/, $_);
 					$working[1] =~ /.*(gcc|clang)\sversion\s([\S]+)\s.*/;
-					$$compiler = [$1,$2];
+					@$compiler = ($1,$2);
 					last;
 				}
 			}
 		}
 		# OpenBSD doesn't show compiler data in sysctl or dboot but it's going to
 		# be Clang until way into the future, and it will be the installed version.
-		if (!@$compiler){
+		if (ref $compiler ne 'ARRAY' || !@$compiler){
 			if (my $path = main::check_program('clang')){
-				 $compiler->[0] = 'clang';
-				 $compiler->[1] = main::program_version($path,'clang',3,'--version');
+				$compiler->[0] = 'clang';
+				$compiler->[1] =main::program_version($path,'clang',3,'--version');
 			}
 		}
 	}
@@ -27569,12 +28734,12 @@ sub version_proc {
 		if ($result =~ /(gcc|clang).*version\s([^,\s\)]+)/){
 			$version = $2;
 			$version ||= 'N/A'; 
-			$$compiler = [$1,$version];
+			@$compiler = ($1,$version);
 		}
 		elsif ($result =~ /\((gcc|clang)[^\(]*\([^\)]+\)\s+([0-9\.]+)(\s[^.]*)?,\s*/){
 			$version = $2;
 			$version ||= 'N/A'; 
-			$$compiler = [$1,$version];
+			@$compiler = ($1,$version);
 		}
 	}
 	main::log_data('dump','@$compiler',$compiler) if $b_log;
@@ -27591,14 +28756,14 @@ sub set_dboot_data {
 		$file = $system_files{'dmesg-boot'};
 	}
 	else {
-		# $file = "$fake_data_dir/dmesg-boot/bsd-disks-diabolus.txt";
-		# $file = "$fake_data_dir/dmesg-boot/freebsd-disks-solestar.txt";
-		# $file = "$fake_data_dir/dmesg-boot/freebsd-enceladus-1.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/bsd-disks-diabolus.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/freebsd-disks-solestar.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/freebsd-enceladus-1.txt";
 		## matches: toshiba: openbsd-5.6-sysctl-2.txt
-		# $file = "$fake_data_dir/dmesg-boot/openbsd-5.6-dmesg.boot-1.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/openbsd-5.6-dmesg.boot-1.txt";
 		## matches: compaq: openbsd-5.6-sysctl-1.txt"
-		# $file = "$fake_data_dir/dmesg-boot/openbsd-dmesg.boot-1.txt";
-		$file = "$fake_data_dir/dmesg-boot/openbsd-6.8-battery-sensors-1.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/openbsd-dmesg.boot-1.txt";
+		# $file = "$fake_data_dir/bsd/dmesg-boot/openbsd-6.8-battery-sensors-1.txt";
 	}
 	if ($file){
 		return if ! -r $file;
@@ -28623,8 +29788,8 @@ sub lspci_n_data {
 		$b_lspci_n = 1;
 		my (@data);
 		if ($fake{'lspci'}){
-			# my $file = "$fake_data_dir/lspci/steve-mint-topaz-lspci-n.txt";
-			# my $file = "$fake_data_dir/lspci/ben81-hwraid-lspci-n.txt";
+			# my $file = "$fake_data_dir/pci/lspci/steve-mint-topaz-lspci-n.txt";
+			# my $file = "$fake_data_dir/pci/lspci/ben81-hwraid-lspci-n.txt";
 			# @data = main::reader($file,'strip');
 		}
 		else {
@@ -28849,15 +30014,15 @@ sub pci_grabber {
 		$pattern = q/^[0-9a-f:]+:/; # i only added perl 5.14, don't use
 	}
 	if ($fake{'lspci'} || $fake{'pciconf'} || $fake{'pcictl'} || $fake{'pcidump'}){
-		# my $file = "$fake_data_dir/pciconf/pci-freebsd-8.2-2";
-		# my $file = "$fake_data_dir/pcidump/pci-openbsd-6.1-vm.txt";
-		# my $file = "$fake_data_dir/pcictl/pci-netbsd-9.1-vm.txt";
-		# my $file = "$fake_data_dir/lspci/racermach-1-knnv.txt";
-		# my $file = "$fake_data_dir/lspci/rk016013-knnv.txt";
-		# my $file = "$fake_data_dir/lspci/kot--book-lspci-nnv.txt";
-		# my $file = "$fake_data_dir/lspci/steve-mint-topaz-lspci-nnkv.txt";
-		# my $file = "$fake_data_dir/lspci/ben81-hwraid-lspci-nnv.txt";
-		# my $file = "$fake_data_dir/lspci/gx78b-lspci-nnv.txt";
+		# my $file = "$fake_data_dir/pci/pciconf/pci-freebsd-8.2-2";
+		# my $file = "$fake_data_dir/pci/pcidump/pci-openbsd-6.1-vm.txt";
+		# my $file = "$fake_data_dir/pci/pcictl/pci-netbsd-9.1-vm.txt";
+		# my $file = "$fake_data_dir/pci/lspci/racermach-1-knnv.txt";
+		# my $file = "$fake_data_dir/pci/lspci/rk016013-knnv.txt";
+		# my $file = "$fake_data_dir/pci/lspci/kot--book-lspci-nnv.txt";
+		# my $file = "$fake_data_dir/pci/lspci/steve-mint-topaz-lspci-nnkv.txt";
+		# my $file = "$fake_data_dir/pci/lspci/ben81-hwraid-lspci-nnv.txt";
+		# my $file = "$fake_data_dir/pci/lspci/gx78b-lspci-nnv.txt";
 		# $data = main::reader($file,'strip','ref');
 	}
 	else {
@@ -29701,6 +30866,8 @@ sub get_bsd_os {
 }
 
 sub get_linux_distro {
+	# NOTE: increasingly no distro release files are present, so this logic is 
+	# deprecated, but still works often.
 	# order matters!
 	my @derived = qw(antix-version aptosid-version bodhibuilder.conf kanotix-version 
 	knoppix-version pclinuxos-release mandrake-release manjaro-release mx-version 
@@ -29723,11 +30890,8 @@ sub get_linux_distro {
 	$osr_good .= 'raspberry pi os|slint|zorin';
 	# Force use of pretty name because that's only location of derived distro name
 	my $osr_pretty = 'zinc';
-	
  	my ($b_issue,$b_lsb,$b_osr_pretty,$b_skip_issue,$b_skip_osr);
 	my ($issue,$lsb_release) = ('/etc/issue','/etc/lsb-release');
-	$b_issue = 1 if -f $issue;
-	$b_lsb = 1 if -f $lsb_release;
 	# Note: OpenSuse Tumbleweed 2018-05 has made /etc/issue created by sym link to /run/issue
 	# and then made that resulting file 700 permissions, which is obviously a mistake
 	$etc_issue = main::reader($issue,'strip',0) if -r $issue;
@@ -29739,9 +30903,17 @@ sub get_linux_distro {
 	# Wait to handle since crunchbang file is one of the few in the world that 
 	# uses this method
 	@distro_files = main::globber('/etc/*[-_]{[rR]elease,[vV]ersion,issue}*');
-	push(@distro_files, '/etc/bodhibuilder.conf') if -r '/etc/bodhibuilder.conf';
+	push(@distro_files, '/etc/bodhibuilder.conf') if -r '/etc/bodhibuilder.conf'; # legacy
 	@osr = main::reader($os_release) if -r $os_release;
-	if ($etc_issue){
+	if (-f '/etc/bodhi/info'){
+		$lsb_release = '/etc/bodhi/info';
+		$distro_file = $lsb_release;
+		$b_skip_issue = 1;
+		push(@distro_files, $lsb_release);
+	}
+	$b_issue = 1 if -f $issue;
+	$b_lsb = 1 if -f $lsb_release;
+	if (!$b_skip_issue && $etc_issue){
 		$lc_issue = lc($etc_issue);
 		if ($lc_issue =~ /(antergos|grml|linux lite|openmediavault)/){
 			$distro_id = $1;
@@ -29823,7 +30995,8 @@ sub get_linux_distro {
 	# be preferred, but this is a good backup.
 	elsif ($distro_file && $b_lsb && 
 	($distro_file =~ /\/etc\/($lsb_good_s)$/ || $distro_file eq $lsb_release)){
-		$distro = get_lsb_release();
+	print "df: $distro_file lf: $lsb_release\n";
+		$distro = get_lsb_release($lsb_release);
 	}
 	elsif ($distro_file && $distro_file eq $os_release){
 		$distro = get_os_release($b_osr_pretty);
@@ -30001,10 +31174,10 @@ sub system_base {
 	$base_distro_arch .= '|talkingarch|theshell|ubos|velt|xero';
 	my $base_file_debian_version = 'sidux';
 	# detect debian steamos before arch steamos
-	my $base_osr_debian_version = '\belive|lmde|neptune|parrot|pureos|rescatux|';
-	$base_osr_debian_version .= 'septor|sparky|steamos|tails';
+	my $base_osr_debian_version = '\belive|lmde|neptune|nitrux|parrot|pureos|';
+	$base_osr_debian_version .= 'rescatux|septor|sparky|steamos|tails';
 	# osr has base ids
-	my $base_default = 'antix-version|mx-version'; 
+	my $base_default = 'antix-version|bodhi|mx-version'; 
 	# base only found in issue
 	my $base_issue = 'bunsen'; 
 	# synthesize, no direct data available
@@ -30100,11 +31273,21 @@ sub system_base {
 	eval $end if $b_log;
 }
 
+# Note: corner case when parsing the bodhi distro file
+# args: 0: file name
 sub get_lsb_release {
 	eval $start if $b_log;
 	my ($lsb_file) = @_;
 	$lsb_file ||= '/etc/lsb-release';
 	my ($distro_lsb,$id,$release,$codename,$description) = ('','','','','');
+	my ($dist_id,$dist_release,$dist_code,$dist_desc) = ('DISTRIB_ID',
+	'DISTRIB_RELEASE','DISTRIB_CODENAME','DISTRIB_DESCRIPTION');
+	if ($lsb_file eq '/etc/bodhi/info'){
+		$id = 'Bodhi Linux';
+		# note: No ID field, hard code
+		($dist_id,$dist_release,$dist_code,$dist_desc) = ('ID','RELEASE',
+		'CODENAME','DESCRIPTION');
+	}
 	my @content = main::reader($lsb_file);
 	main::log_data('dump','@content',\@content) if $b_log;
 	@content = map {s/,|\*|\\||\"|[:\47]|^\s+|\s+$|n\/a//ig; $_} @content if @content;
@@ -30112,7 +31295,7 @@ sub get_lsb_release {
 		next if /^\s*$/;
 		my @working = split(/\s*=\s*/, $_);
 		next if !$working[0];
-		if ($working[0] eq 'DISTRIB_ID' && $working[1]){
+		if ($working[0] eq $dist_id && $working[1]){
 			if ($working[1] =~ /^Manjaro/i){
 				$id = 'Manjaro Linux';
 			}
@@ -30124,15 +31307,15 @@ sub get_lsb_release {
 				$id = $working[1];
 			}
 		}
-		elsif ($working[0] eq 'DISTRIB_RELEASE' && $working[1]){
+		elsif ($working[0] eq $dist_release && $working[1]){
 			$release = $working[1];
 		}
-		elsif ($working[0] eq 'DISTRIB_CODENAME' && $working[1]){
+		elsif ($working[0] eq $dist_code && $working[1]){
 			$codename = $working[1];
 		}
 		# sometimes some distros cannot do their lsb-release files correctly, 
 		# so here is one last chance to get it right.
-		elsif ($working[0] eq 'DISTRIB_DESCRIPTION' && $working[1]){
+		elsif ($working[0] eq $dist_desc && $working[1]){
 			$description = $working[1];
 		}
 	}
@@ -30325,8 +31508,9 @@ sub ubuntu_id {
 	my ($id) = ('');
 	# xx.04, xx.10
 	my %codenames = (
+	# '??' => '25.04',
 	# '??' => '24.10',
-	# '??' => '24.04 LTS',
+	'noble' => '24.04 LTS',
 	'mantic' => '23.10',
 	'lunar' => '23.04',
 	'kinetic' => '22.10',
@@ -30457,7 +31641,9 @@ sub generate_data {
 }
 }
 
-# return all device modules not including driver
+# args: 0: driver; 1: modules, comma separated, return only modules 
+# which do not equal the driver string itself. Sometimes the module
+# name is different from the driver name, even though it's the same thing.
 sub get_driver_modules {
 	eval $start if $b_log;
 	my ($driver,$modules) = @_;
@@ -30473,9 +31659,7 @@ sub get_driver_modules {
 	return $modules;
 }
 
-# args: 0: driver; 1: modules, comma separated, return only modules 
-# which do not equal the driver string itself. Sometimes the module
-# name is different from the driver name, even though it's the same thing.
+# Return all detected gcc versions
 sub get_gcc_data {
 	eval $start if $b_log;
 	my ($gcc,@data,@temp);
@@ -30799,10 +31983,11 @@ package IpData;
 
 sub set {
 	eval $start if $b_log;
-	if ($alerts{'ip'}->{'action'} eq 'use'){
+	if ($force{'ip'} || 
+	(!$force{'ifconfig'} && $alerts{'ip'}->{'action'} eq 'use')){
 		set_ip_addr();
 	}
-	elsif ($alerts{'ifconfig'}->{'action'} eq 'use'){
+	elsif ($force{'ifconfig'} || $alerts{'ifconfig'}->{'action'} eq 'use'){
 		set_ifconfig();
 	}
 	eval $end if $b_log;
@@ -30811,17 +31996,21 @@ sub set {
 sub set_ip_addr {
 	eval $start if $b_log;
 	my @data = main::grabber($alerts{'ip'}->{'path'} . " addr 2>/dev/null",'\n','strip');
-	# my $file = "$fake_data_dir/if/scope-ipaddr-1.txt";
-	# my $file = "$fake_data_dir/networking/ip-addr-blue-advance.txt";
-	# my @data = reader($file,'strip') or die $!;
-	my ($b_skip,$broadcast,$if,$ip,@ips,$scope,$if_id,$type,@temp,@temp2);
+	if ($fake{'ip-if'}){
+		# my $file = "$fake_data_dir/if/scope-ipaddr-1.txt";
+		# my $file = "$fake_data_dir/network/ip-addr-blue-advance.txt";
+		# my $file = "$fake_data_dir/network/ppoe/ppoe-ip-address-1.txt";
+		# my $file = "$fake_data_dir/network/ppoe/ppoe-ip-addr-2.txt";
+		# my $file = "$fake_data_dir/network/ppoe/ppoe-ip-addr-3.txt";
+		# @data = main::reader($file,'strip') or die $!;
+	}
+	my ($b_skip,$broadcast,$if,$if_id,$ip,@ips,$scope,$type,@temp,@temp2);
 	foreach (@data){
 		if (/^[0-9]/){
 			# print "$_\n";
 			if (@ips){
-			# print "$if\n";
-				@temp = ($if,[@ips]);
-				push(@ifs,@temp);
+				# print "$if\n";
+				push(@ifs,($if,[@ips]));
 				@ips = ();
 			}
 			@temp = split(/:\s+/, $_);
@@ -30831,13 +32020,12 @@ sub set_ip_addr {
 				$if = '';
 				next;
 			}
-			$b_skip = 0;
-			@temp = ();
+			($b_skip,@temp) = ();
 		}
 		elsif (!$b_skip && /^inet/){
 			# print "$_\n";
+			($broadcast,$ip,$scope,$if_id,$type) = ();
 			@temp = split(/\s+/, $_);
-			($broadcast,$ip,$scope,$if_id,$type) = ('','','','','');
 			$ip = $temp[1];
 			$type = ($temp[0] eq 'inet') ? 4 : 6 ;
 			if ($temp[2] eq 'brd'){
@@ -30847,25 +32035,27 @@ sub set_ip_addr {
 				$scope = $1;
 				$if_id = $3;
 			}
-			@temp = ($type,$ip,$broadcast,$scope,$if_id);
-			push(@ips,[@temp]);
+			push(@ips,[$type,$ip,$broadcast,$scope,$if_id]);
 			# print Data::Dumper::Dumper \@ips;
 		}
 	}
-	# print Data::Dumper::Dumper \@ips if $dbg[4];
 	if (@ips){
-		@temp = ($if,[@ips]);
-		push(@ifs,@temp);
+		push(@ifs,($if,[@ips]));
 	}
 	main::log_data('dump','@ifs',\@ifs) if $b_log;
-	print Data::Dumper::Dumper \@ifs if $dbg[3];
+	print 'ip addr: ', Data::Dumper::Dumper \@ifs if $dbg[3];
 	eval $end if $b_log;
 }
 
 sub set_ifconfig {
 	eval $start if $b_log;
+	# whitespace matters!! Don't use strip
 	my @data = main::grabber($alerts{'ifconfig'}->{'path'} . " 2>/dev/null",'\n','');
-	# my @data = reader("$fake_data_dir/if/vps-ifconfig-1.txt",'') or die $!;
+	if ($fake{'ip-if'}){
+		#  my $file = "$fake_data_dir/network/ppoe/ppoe-ifconfig-all-1.txt";
+		# my $file = "$fake_data_dir/network/vps-ifconfig-1.txt";
+		# @data = main::reader($file) or die $!;
+	}
 	my ($b_skip,$broadcast,$if,@ips_bsd,$ip,@ips,$scope,$if_id,$type,@temp,@temp2);
 	my ($state,$speed,$duplex,$mac);
 	foreach (@data){
@@ -30873,13 +32063,11 @@ sub set_ifconfig {
 			# print "$_\n";
 			if (@ips){
 			# print "here\n";
-				@temp = ($if,[@ips]);
-				push(@ifs,@temp);
+				push(@ifs,($if,[@ips]));
 				@ips = ();
 			}
 			if ($mac){
-				@temp = ($if,[($state,$speed,$duplex,$mac)]);
-				push(@ifs_bsd,@temp);
+				push(@ifs_bsd,($if,[$state,$speed,$duplex,$mac]));
 				($state,$speed,$duplex,$mac,$if_id) = ('','','','','');
 			}
 			$if = (split(/\s+/, $_))[0];
@@ -30949,12 +32137,11 @@ sub set_ifconfig {
 		push(@ifs,($if,[@ips]));
 	}
 	if ($mac){
-		@temp = ($if,[($state,$speed,$duplex,$mac)]);
-		push(@ifs_bsd,@temp);
+		push(@ifs_bsd,($if,[$state,$speed,$duplex,$mac]));
 		($state,$speed,$duplex,$mac) = ('','','','');
 	}
-	print Data::Dumper::Dumper \@ifs if $dbg[3];
-	print Data::Dumper::Dumper \@ifs_bsd if $dbg[3];
+	print 'ifconfig: ', Data::Dumper::Dumper \@ifs if $dbg[3];
+	print 'ifconfig bsd: ', Data::Dumper::Dumper \@ifs_bsd if $dbg[3];
 	main::log_data('dump','@ifs',\@ifs) if $b_log;
 	main::log_data('dump','@ifs_bsd',\@ifs_bsd) if $b_log;
 	eval $end if $b_log;
@@ -30985,6 +32172,24 @@ sub get_kernel_bits {
 	$bits ||= 'N/A';
 	eval $end if $b_log;
 	return $bits;
+}
+
+# arg: 0: $cs_curr, by ref; 1: $cs_avail, by ref.
+sub get_kernel_clocksource {
+	eval $start if $b_log;
+	if (-r '/sys/devices/system/clocksource/clocksource0/current_clocksource'){
+		${$_[0]} = reader('/sys/devices/system/clocksource/clocksource0/current_clocksource','',0);
+		if ($b_admin &&
+		-r '/sys/devices/system/clocksource/clocksource0/available_clocksource'){
+			${$_[1]} = reader('/sys/devices/system/clocksource/clocksource0/available_clocksource','',0);
+			if (${$_[0]} && ${$_[1]}){
+				my @temp = split(/\s+/,${$_[1]});
+				@temp = grep {$_ ne ${$_[0]}} @temp;
+				${$_[1]} = join(',', @temp);
+			}
+		}
+	}
+	eval $end if $b_log;
 }
 
 sub get_kernel_data {
@@ -31761,6 +32966,7 @@ sub gpu_ram_arm {
 }
 }
 
+# args: 0: module to get version of
 sub get_module_version {
 	eval $start if $b_log;
 	my ($module) = @_;
@@ -32783,7 +33989,7 @@ sub proc_data {
 	eval $start if $b_log;
 	my $file = $_[0];
 	if ($fake{'partitions'}){
-		# $file = "$fake_data_dir/proc-partitions-1.txt";
+		# $file = "$fake_data_dir/block-devices/proc-partitions/proc-partitions-1.txt";
 	}
 	my @parts = main::reader($file,'strip');
 	# print Data::Dumper::Dumper \@parts;
@@ -33581,14 +34787,14 @@ sub set_sysctl_data {
 	}
 	else {
 		my $file;
-		# $file = "$fake_data_dir/sysctl/obsd_6.1_sysctl_soekris6501_root.txt";
-		# $file = "$fake_data_dir/sysctl/obsd_6.1sysctl_lenovot500_user.txt";
+		# $file = "$fake_data_dir/bsd/sysctl/obsd_6.1_sysctl_soekris6501_root.txt";
+		# $file = "$fake_data_dir/bsd/sysctl/obsd_6.1sysctl_lenovot500_user.txt";
 		## matches: compaq: openbsd-dmesg.boot-1.txt
-		# $file = "$fake_data_dir/sysctl/openbsd-5.6-sysctl-1.txt"; 
+		# $file = "$fake_data_dir/bsd/sysctl/openbsd-5.6-sysctl-1.txt"; 
 		## matches: toshiba: openbsd-5.6-dmesg.boot-1.txt
-		# $file = "$fake_data_dir/sysctl/openbsd-5.6-sysctl-2.txt"; 
-		$file = "$fake_data_dir/sysctl/obsd-6.8-sysctl-a-battery-sensor-1.txt"; 
-		@temp = reader($file);
+		# $file = "$fake_data_dir/bsd/sysctl/openbsd-5.6-sysctl-2.txt"; 
+		# $file = "$fake_data_dir/bsd/sysctl/obsd-6.8-sysctl-a-battery-sensor-1.txt"; 
+		# @temp = reader($file);
 	}
 	foreach (@temp){
 		$_ =~ s/\s*=\s*|:\s+/:/;
@@ -33615,12 +34821,12 @@ sub set_sysctl_data {
 			/^dev\.cpu/ || /^machdep\.(cpu|hlt_logical_cpus)/)){
 			push(@{$sysctl{'cpu'}}, $_);
 		}
-		# only activate if using the diskname feature in dboot!!
+		# only activate if using the diskname feature in dboot!! note assign to $dboot.
 		elsif ($use{'bsd-disk'} && /^hw\.disknames/){
 			push(@{$dboot{'disk'}}, $_);
 		}
 		elsif ($use{'bsd-kernel'} && /^kern.compiler_version/){
-			push(@{$dboot{'kernel'}}, $_);
+			push(@{$sysctl{'kernel'}}, $_);
 		}
 		elsif ($use{'bsd-machine'} && 
 		 /^(hw\.|machdep\.dmi\.(bios|board|system)-)(date|product|serial(no)?|uuid|vendor|version)/){
@@ -33786,6 +34992,13 @@ sub set {
 		main::log_data('dump','$usb{graphics}: ',$usb{'graphics'});
 		main::log_data('dump','$usb{network}: ',$usb{'network'});
 	}
+	if ($dbg[55]){
+		print '$usb{audio}: ', Data::Dumper::Dumper $usb{'audio'};
+		print '$usb{bluetooth}: ', Data::Dumper::Dumper $usb{'bluetooth'};
+		print '$usb{disk}: ', Data::Dumper::Dumper $usb{'disk'};
+		print '$usb{graphics}: ', Data::Dumper::Dumper $usb{'graphics'};
+		print '$usb{network}: ', Data::Dumper::Dumper $usb{'network'};
+	}
 	eval $end if $b_log;
 }
 
@@ -33814,7 +35027,6 @@ sub lsusb_data {
 		$chip_id = $working[5];
 		@temp = @working[6..$#working];
 		$name = main::remove_duplicates(join(' ', @temp));
-		$name = $name;
 		# $type = check_type($name,'','');
 		$type ||= '';
 		# do NOT set bus_id_alpha here!!
@@ -33843,9 +35055,9 @@ sub lsusb_data {
 		push(@{$usb{'main'}},[@working]);
 		# print join("\n",@working),"\n\n=====\n";
 	}
-	print Data::Dumper::Dumper $usb{'main'} if $dbg[6];
+	print 'lsusb-pre-sys: ', Data::Dumper::Dumper $usb{'main'} if $dbg[6];
 	sys_data('lsusb') if $usb{'main'};
-	print Data::Dumper::Dumper $usb{'main'} if $dbg[6];
+	print 'lsusb-w-sys: ', Data::Dumper::Dumper $usb{'main'} if $dbg[6];
 	main::log_data('dump','$usb{main}: plain',$usb{'main'}) if $b_log;
 	eval $end if $b_log;
 }
@@ -33954,7 +35166,7 @@ sub usbconfig_data {
 		}
 	}
 	main::log_data('dump','$usb{main}: usbconfig',$usb{'main'}) if $b_log;
-	print Data::Dumper::Dumper $usb{'main'} if $dbg[6];
+	print 'usbconfig: ', Data::Dumper::Dumper $usb{'main'} if $dbg[6];
 	eval $end if $b_log;
 }
 
@@ -34130,7 +35342,7 @@ sub usbdevs_data {
 		}
 	}
 	main::log_data('dump','$usb{main}: usbdevs',$usb{'main'}) if $b_log;
-	print Data::Dumper::Dumper $usb{'main'} if $dbg[6];
+	print 'usbdevs: ', Data::Dumper::Dumper $usb{'main'} if $dbg[6];
 	eval $end if $b_log;
 }
 
@@ -34159,13 +35371,13 @@ sub usb_grabber {
 	else {
 		my $file;
 		if ($fake{'usbdevs'}){
-			$file = "$fake_data_dir/lsusb/bsd-usbdevs-v-1.txt";
+			$file = "$fake_data_dir/usb/usbdevs/bsd-usbdevs-v-1.txt";
 		}
 		elsif ($fake{'usbconfig'}){
-			$file = "$fake_data_dir/lsusb/bsd-usbconfig-list-v-1.txt";
+			$file = "$fake_data_dir/usb/usbconfig/bsd-usbconfig-list-v-1.txt";
 		}
 		else {
-			$file = "$fake_data_dir/lsusb/mdmarmer-lsusb.txt";
+			$file = "$fake_data_dir/usb/lsusb/mdmarmer-lsusb.txt";
 		}
 		@data = main::reader($file,'strip');
 	}
@@ -34249,7 +35461,6 @@ sub sys_data {
 						if (!$b_hub && $usb{'main'}->[$i][13] && (!$type || $type eq '<vendor specific>')){
 							$type = check_type($usb{'main'}->[$i][13],$driver,$type);
 						}
-						# print $type,"\n";
 						$usb{'main'}->[$i][0] = $bus_id_alpha;
 						$usb{'main'}->[$i][2] = $path_id;
 						$usb{'main'}->[$i][3] = $file;
@@ -34345,7 +35556,7 @@ sub sys_data {
 			# print "$path_id ids: $bus_id:$device_id driver: $driver ports: $ports\n==========\n"; # if $dbg[6];;
 		}
 	}
-	print Data::Dumper::Dumper $usb{'main'} if $source eq 'main' && $dbg[6];
+	print 'usb-sys: ', Data::Dumper::Dumper $usb{'main'} if $source eq 'main' && $dbg[6];
 	main::log_data('dump','$usb{main}: sys',$usb{'main'}) if $source eq 'main' && $b_log;
 	eval $end if $b_log;
 }
@@ -34421,7 +35632,7 @@ sub assign_usb_type {
 	# although nested hubs of course can be > 1 too. No need to build these if 
 	# none of lines are showing.
 	if (($row->[4] && $row->[4] eq '09') || 
-	($row->[14] && $row->[14] eq 'hub') || $row->[1] <= 1 ||
+	($row->[14] && lc($row->[14]) eq 'hub') || $row->[1] <= 1 ||
 	(!$show{'audio'} && !$show{'bluetooth'} && !$show{'disk'} && 
 	!$show{'graphic'} && !$show{'network'})){
 		return;
@@ -34432,30 +35643,41 @@ sub assign_usb_type {
 	set_asound_ids() if $show{'audio'} && !$b_asound;
 	set_network_regex() if $show{'network'} && !$network_regex;
 	# NOTE: a device, like camera, can be audio+graphic
+	# NOTE: 13, 14 can be upper/lower case, so use i.
 	if ($show{'audio'} && (
 	(@asound_ids && $row->[7] && (grep {$row->[7] eq $_} @asound_ids)) ||
-	($row->[14] =~ /audio/) || ($row->[15] && $row->[15] =~ /audio/) ||
-	($row->[13] && lc($row->[13]) =~ /(audio|\bdac[0-9]*\b|headphone|\bmic(rophone)?\b)/))){
+	($row->[14] && $row->[14] =~ /audio/i) || 
+	($row->[15] && $row->[15] =~ /audio/) ||
+	($row->[13] && lc($row->[13]) =~ /(audio|\bdac[0-9]*\b|headphone|\bmic(rophone)?\b)/i)
+	)){
 		push(@{$usb{'audio'}},$row);
 	}
-	if ($show{'graphic'} && ($row->[14] && ($row->[14] =~ /video/) ||
+	if ($show{'graphic'} && (
+	($row->[14] && $row->[14] =~ /video/i) ||
 	($row->[15] && $row->[15] =~ /video/) || 
-	($row->[13] && lc($row->[13]) =~ /(camera|\bdvb-t|\b(pc)?tv\b|video|webcam)/))){
+	($row->[13] && lc($row->[13]) =~ /(camera|\bdvb-t|\b(pc)?tv\b|video|webcam)/i)
+	)){
 		push(@{$usb{'graphics'}},$row);
 	}
-	elsif ($show{'bluetooth'} && ($row->[14] && $row->[14] =~ /bluetooth/ || 
-	($row->[15] && $row->[15] =~ /\b(btusb|ubt)\b/))){
+	# we want to catch bluetooth devices, which otherwise can trip network regex
+	elsif (($show{'bluetooth'} || $show{'network'}) && (
+	($row->[14] && $row->[14] =~ /bluetooth/i) || 
+	($row->[15] && $row->[15] =~ /\b(btusb|ubt)\b/) ||
+	($row->[13] && $row->[13] =~ /bluetooth/i)
+	)){
 		push(@{$usb{'bluetooth'}},$row);
 	}
-	elsif ($show{'disk'} && ($row->[14] && $row->[14] =~ /mass storage/ || 
-	($row->[15] && $row->[15] =~ /storage/))){
+	elsif ($show{'disk'} && (
+	($row->[14] && $row->[14] =~ /mass storage/i) || 
+	($row->[15] && $row->[15] =~ /storage/)
+	)){
 		push(@{$usb{'disk'}},$row);
 	}
 	elsif ($show{'network'} && (
-	($row->[14] && $row->[14] =~ /(ethernet|network|wifi)/) ||
+	($row->[14] && $row->[14] =~ /(ethernet|network|wifi)/i) ||
 	($row->[15] && $row->[15] =~ /(^ipw|^iwl|wifi)/) || 
-	($row->[13] && $row->[13] =~ /($network_regex)/i))){
-		# print "$1\n";
+	($row->[13] && $row->[13] =~ /($network_regex)/i)
+	)){
 		push(@{$usb{'network'}},$row);
 	}
 }
@@ -34571,12 +35793,12 @@ sub check_type {
 	$name =~ /(camera|display|\bdvb-t|\b(pc)?tv\bvideo|webcam)/){
 		$type = 'Video';
 	}
-	elsif ($name =~ /(wlan|wi-?fi|802\.1[15]|(11|54|108|240|300|450|1300)\s?mbps|(11|54|108|240)g\b|wireless[\s-][gn]\b|wireless.*adapter)/){
+	elsif ($name =~ /(wlan|wi-?fi|802\.1[15]|(11|54|108|240|300|433|450|900|1300)\s?mbps|(11|54|108|240)g\b|wireless[\s-][bgn]\b|wireless.*adapter)/){
 		$type = 'WiFi';
 	}
 	# note, until freebsd match to actual drivers, these top level driver matches aren't interesting
 	elsif (($driver && $bsd_type && $driver =~ /\b(muge)\b/) || 
-	 $name =~ /(ethernet|\blan|802\.3|100?\/1000?|gigabit)/){
+	 $name =~ /(ethernet|\blan|802\.3|100?\/1000?|gigabit|10\s?G(b|ig)?E)/){
 		$type = 'Ethernet';
 	}
 	# note: audio devices show HID sometimes, not sure why
@@ -34611,14 +35833,15 @@ sub set_asound_ids {
 sub set_network_regex {
 	# belkin=050d; d-link=07d1; netgear=0846; ralink=148f; realtek=0bda; 
 	# Atmel, Atheros make other stuff. NOTE: exclude 'networks': IMC Networks
-	# ralink has bluetooth as well as networking; (WG|WND?A)[0-9][0-9][0-9] netgear IDs
+	# intel, ralink bluetooth as well as networking; (WG|WND?A)[0-9][0-9][0-9] netgear IDs
 	$network_regex = 'Ethernet|gigabit|\bISDN|\bLAN\b|Mobile\s?Broadband|';
 	$network_regex .= '\bNIC\b|wi-?fi|Wireless[\s-][GN]\b|WLAN|';
 	$network_regex .= '802\.(1[15]|3)|(10|11|54|108|240|300|450|1300)\s?Mbps|(11|54|108|240)g\b|100?\/1000?|';
 	$network_regex .= '(100?|N)Base-?T\b|';
 	$network_regex .= '(Actiontec|AirLink|Asus|Belkin|Buffalo|Dell|D-Link|DWA-|ENUWI-|';
-	$network_regex .= 'Ralink|Realtek|Rosewill|RNX-|Samsung|Sony|TEW-|TP-Link';
+	$network_regex .= 'Ralink|Realtek|Rosewill|RNX-|Samsung|Sony|TEW-|TP-Link|';
 	$network_regex .= 'Zonet.*ZEW.*).*Wireless|';
+	# Note: Intel Bluetooth wireless interface < should be caught by bluetooth tests
 	$network_regex .= '(\bD-Link|Network(ing)?|Wireless).*(Adapter|Interface)|';
 	$network_regex .= '(Linksys|Netgear|Davicom)|';
 	$network_regex .= 'Range(Booster|Max)|Samsung.*LinkStick|\b(WG|WND?A)[0-9][0-9][0-9]|';
@@ -34849,12 +36072,16 @@ sub process_power {
 }
 }
 
-# note: seen instance in android where reading file hangs endlessly!!!
+# note: seen android instance where reading file wakeup_count hangs endlessly.
+# Some systems also report > 1 wakeup events per wakeup with 
+# /sys/power/wakeup_count, thus, we are using /sys/power/suspend_stats/success 
+# which does not appear to have that issue.
 sub get_wakeups {
 	eval $start if $b_log;
 	return if %risc;
-	my ($wakeups);
-	my $path = '/sys/power/wakeup_count';
+	my ($path,$wakeups);
+	# this increments on suspend, but you can't see it until wake, numbers work.
+	$path = '/sys/power/suspend_stats/success';
 	$wakeups = reader($path,'strip',0) if -r $path;
 	eval $end if $b_log;
 	return $wakeups;
@@ -35239,7 +36466,7 @@ sub system_item {
 	my ($index);
 	my $data_name = main::key($prefix++,1,0,'System');
 	my ($desktop,$desktop_info,$desktop_key,$dm_key,$toolkit,$wm) = ('','','Desktop','dm','','');
-	my (@desktop_data,$desktop_version,$tk_version,$wm_version);
+	my (@desktop_data,$cs_curr,$cs_avail,$desktop_version,$tk_version,$wm_version);
 	my $data = {
 	$data_name => [{}],
 	};
@@ -35261,6 +36488,14 @@ sub system_item {
 		if ($compiler->[0] ne 'N/A'){
 			$compiler->[1] ||= 'N/A';
 			$data->{$data_name}[$index]{main::key($num++,0,3,'v')} = $compiler->[1];
+		}
+	}
+	if ($extra > 2){
+		main::get_kernel_clocksource(\$cs_curr,\$cs_avail);
+		$cs_curr ||= 'N/A';
+		$data->{$data_name}[$index]{main::key($num++,1,2,'clocksource')} = $cs_curr;
+		if ($b_admin && $cs_avail){
+			$data->{$data_name}[$index]{main::key($num++,0,3,'available')} = $cs_avail;
 		}
 	}
 	if ($b_admin && (my $params = KernelParameters::get())){
