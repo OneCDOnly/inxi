@@ -1,5 +1,5 @@
 .\"  inxi.1 - manpage for inxi system information tool
-.\"  Copyright (C) 2023 Harald Hope
+.\"  Copyright (C) 2024 Harald Hope
 .\"
 .\"  This program is free software; you can redistribute it and/or modify
 .\"  it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 .\"  with this program; if not, write to the Free Software Foundation, Inc.,
 .\"  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 .\"  
-.TH INXI 1 "2023\-10\-31" "inxi" "inxi manual"
+.TH INXI 1 "2024\-04-13"inxi" "inxi manual"
 
 .SH NAME
 inxi \- Command line system information script for console and IRC
@@ -23,17 +23,17 @@ inxi \- Command line system information script for console and IRC
 .SH SYNOPSIS
 \fBinxi\fR
 
-\fBinxi\fR [\fB\-AbBCdDEfFGhiIjJlLmMnNopPrRsSuUVwyYzZ\fR]
+\fBinxi\fR [\fB\-AbBCdDEfFGhiIjJlLmMnNopPrRsSuUwyYzZ\fR]
 
 \fBinxi\fR [\fB\-c -NUMBER\fR]
 [\fB\-\-sensors\-exclude SENSORS\fR] [\fB\-\-sensors\-use SENSORS\fR] 
 [\fB\-t\fR [\fBc\fR|\fBm\fR|\fBcm\fR|\fBmc\fR][\fBNUMBER\fR]] 
-[\fB\-v NUMBER\fR] [\fB\-W LOCATION\fR] 
+[\fB\-v NUMBER\fR] [\fB\-w [LOCATION]\fR] 
 [\fB\-\-weather\-unit\fR {\fBm\fR|\fBi\fR|\fBmi\fR|\fBim\fR}] [\fB\-y WIDTH\fR] 
 
 \fBinxi\fR [\fB\-\-edid\fR] [\fB\-\-memory\-modules\fR] 
 [\fB\-\-memory\-short\fR] [\fB\-\-recommends\fR] [\fB\-\-sensors\-default\fR] 
-[\fB\-\-slots\fR]
+[\fB\-\-slots\fR] [\fB\-\-version\fR]  [\fB\-\-version\-short\fR] 
 
 \fBinxi\fB [\fB\-x\fR|\fB\-xx\fR|\fB\-xxx\fR|\fB\-a\fR] \fB\-OPTION(s)\fR
 
@@ -43,9 +43,9 @@ advanced options.
 .SH DESCRIPTION
 \fBinxi\fR is a command line system information script built for console and 
 IRC. It is also used a debugging tool for forum technical support to quickly 
-ascertain users' system configurations and hardware. inxi shows system 
-hardware, CPU, drivers, Xorg, Desktop, Kernel, gcc version(s), Processes, RAM 
-usage, and a wide variety of other useful information.
+ascertain users' system configurations and hardware. inxi shows system hardware, 
+CPU, drivers, Xorg, Desktop, Kernel, compiler version(s), Processes, RAM usage, 
+and a wide variety of other useful information.
 
 \fBinxi\fR output varies depending on whether it is being used on CLI or IRC,
 with some default filters and color options applied only for IRC use.
@@ -147,7 +147,7 @@ see API/sound server tools.
   Device\-3: AMD Family 17h HD Audio driver: snd_hda_intel
   API: ALSA v: k5.19.0\-16.2\-liquorix\-amd64 status: kernel\-api
   Server\-1: PulseAudio v: 16.1 status: active\fR
-.if
+.fi
 
 .TP
 .B \-b \fR, \fB\-\-basic\fR
@@ -327,14 +327,9 @@ in order to avoid spamming. ARM CPUs: show \fBfeatures\fR items.
 .TP
 .B \-F \fR, \fB\-\-full\fR
 Show Full output for inxi. Includes all Upper Case line letters (except 
-\fB\-J\fR and \fB\-W\fR) plus \fB\-\-swap\fR, \fB\-s\fR and \fB\-n\fR. Does not 
-show extra verbose options such as \fB\-d \-f \-i -J \-l \-m \-o \-p \-r \-t \-u 
-\-x\fR unless you use those arguments in the command, e.g.: 
-\fBinxi \-Frmxx\fR
-
-.TP
-.B \-\-gpu\fR
-Deprecated. See \fB\-G \-a\fR. 
+\fB\-J\fR, plus \fB\-\-swap\fR, \fB\-s\fR and \fB\-n\fR. Does not show extra 
+verbose options such as \fB\-d \-f \-i -J \-l \-m \-o \-p \-r \-t \-u \-x\fR 
+unless you use those arguments in the command, e.g.: \fBinxi \-Frmxx\fR
 
 .TP
 .B \-G \fR, \fB\-\-graphics\fR
@@ -383,6 +378,11 @@ Show WAN IP address and local interfaces (latter requires \fBifconfig\fR or
 Shows both IPv4 and IPv6 link IP addresses.
 
 .TP
+.B \-\-ip\-limit\fR, \fB\-\-limit [\-1 \- x]\fR
+Raise or lower max output limit of IP addresses for \fB\-i\fR. \fB\-1\fR 
+removes limit.
+
+.TP
 .B \-I \fR, \fB\-\-info\fR
 Show Information: processes, uptime, memory, IRC client (or shell type if run 
 in shell, not IRC), inxi version. See \fB\-Ix\fR, \fB\-Ixx\fR, and \fB\-Ia\fR
@@ -426,7 +426,7 @@ base 2 Bytes/s speeds. \fB\-Ja\fR adds USB mode.
 .TP
 .B \-l \fR, \fB\-\-label\fR
 Show partition labels. Use with \fB\-j\fR, \fB\-o\fR, \fB\-p\fR, and \fB\-P\fR 
-to show partition labels. Does nothing without one of those options.
+to show partition labels. Requires one of those options.
 
 Sample: \fB\-ojpl\fR.
 
@@ -511,16 +511,30 @@ Physical memory array data shows array capacity, number of devices supported,
 and Error Correction information. Devices shows locator data (highly variable in 
 syntax), type (eg: \fBtype: DDR3\fR)size, speed.
 
-Note: \fB\-m\fR uses \fBdmidecode\fR, which must be run as root (or start 
-\fBinxi\fR with \fBdoas/sudo\fR), unless you figure out how to set up doas/sudo 
-to permit dmidecode to read \fB/dev/mem\fR as user. \fBspeed\fR and 
-\fBbus\-width\fR will not show if \fBNo Module Installed\fR is found in 
-\fBsize\fR.
+Note: \fBinxi \-m\fR uses either \fBdboot\fR (BSDs), \fBdmidecode\fR, or 
+\fBudevadm\fR (Linux) to collect the RAM data. Not all boards have DMI RAM data 
+available.
+
+\fBdmidecode\fR must be run as root (or start \fBinxi\fR with \fBdoas/sudo\fR), 
+unless you figure out how to set up doas/sudo to permit dmidecode to read 
+\fB/dev/mem\fR as user. 
+
+\fBudevadm\fR can be run by non\-superuser, or if dmidecode is not installed 
+(Linux only). It has a slightly less reliable dmi table outut, and does not seem 
+to support more than 1 board memory array, but is pretty good. Voltages may be 
+wrong however.
+
+Both \fBdmidecode\fR and \fBudevadm\fR need a DMI table with RAM data to create 
+the report. Most SBC/SOC boards don't have dmi based RAM data. But most other 
+machines do.
+
+\fBspeed\fR and \fBbus\-width\fR will not show if \fBno module installed\fR is 
+found in \fBsize\fR.
 
 Note: If \fB\-m\fR is triggered RAM available/used report will appear in this 
 section, not in \fB\-I\fR or \fB\-tm\fR items.
 
-Because \fBdmidecode\fR data is extremely unreliable, inxi will try to make 
+Because \fBdmi\fR source data is somewhat unreliable, inxi will try to make 
 best guesses. If you see \fB(check)\fR after the capacity number, you should 
 check it with the specifications. \fB(est)\fR is slightly more reliable, but 
 you should still check the real specifications before buying RAM. Unfortunately 
@@ -528,11 +542,11 @@ there is nothing \fBinxi\fR can do to get truly reliable data about the system
 RAM; maybe one day the kernel devs will put this data into \fB/sys\fR, and make 
 it real data, taken from the actual system, not dmi data. For most people, the 
 data will be right, but a significant percentage of users will have either a 
-wrong max module size, if present, or max capacity.
+wrong max module size, if available, or max capacity.
 
-Under dmidecode, \fBSpeed:\fR is the expected speed of the memory 
-(what is advertised on the memory spec sheet) and \fBConfigured Clock Speed:\fR
-is what the actual speed is now. To handle this, if speed and configured speed 
+Under dmidecode/udevadm, \fBspeed:\fR is the expected speed of the memory 
+(\fBspec:\fR, what is advertised on the memory spec sheet) and \fBactual:\fR, 
+what the actual speed is now. To handle this, if speed and configured speed 
 values are different, you will see this instead:
 
 \fBspeed: spec: [specified speed] MT/s actual: [actual] MT/s\fR
@@ -645,11 +659,6 @@ Show Advanced Network device information in addition to that produced by
 .B \-N \fR, \fB\-\-network\fR
 Show Network device(s) information, including device driver. With \fB\-x\fR, 
 shows Bus ID, Port number.
-
-.TP
-.B \-\-nvidia\fR, \fB\-\-nv\fR
-.br
-Deprecated. See \fB\-Ga\fR.
     
 .TP
 .B \-o \fR, \fB\-\-unmounted\fR
@@ -675,6 +684,31 @@ partitions).
 
 To show partition labels or UUIDs (when available and relevant), use with 
 \fB\-l\fR or\fB \-u\fR.
+
+.TP
+.B \-\-partitions\-sort\fR, \fB\-\-ps\fR \
+[dev\-base|fs|id|label|percent\-used|size|uuid|used]\fR
+Change default sort order of partition output. Corresponds to 
+\fBPARTITION_SORT\fR configuration item. These are the available sort options:
+
+\fBdev\-base\fR - \fB/dev\fR partition identifier, like \fB/dev/sda1\fR. 
+Note that it's an alphabetic sort, so \fBsda12\fR is before \fBsda2\fR.
+
+\fBfs\fR \- Partition filesystem. Note that sorts will be somewhat random if 
+all filesystems are the same.
+
+\fBid\fR \- Mount point of partition (default).
+
+\fBlabel\fR \- Label of partition. If partitions have no labels, 
+sort will be random.
+
+\fBpercent\-used\fR - Percentage of partition size used.
+
+\fBsize\fR \- KiB size of partition.
+
+\fBuuid\fR \- UUID of the partition.
+
+\fBused\fR \- KiB used of partition.
 
 .TP
 .B \-P \fR, \fB\-\-partitions\fR
@@ -734,6 +768,8 @@ apt distros like PCLinuxOS or Alt\-Linux)
 \fBSLPKG\fR (Slackware + derived versions)
 
 \fBTCE\fR (TinyCore)
+
+\fBTAZPKG\fR (Slitaz)
 
 \fBURPMI\fR (Mandriva, Mageia + derived versions)
 
@@ -830,8 +866,8 @@ same line.
 
 .TP
 .B \-u \fR, \fB\-\-uuid\fR
-Show partition UUIDs. Use with \fB\-j\fR, \fB\-o\fR, \fB\-p\fR, and \fB\-P\fR 
-to show partition labels. Does nothing without one of those options.
+Show UUIDs. Use with \fB\-j\fR, \fB\-M\fR \fB\-o\fR, \fB\-p\fR, and \fB\-P\fR to 
+show partition/system board (not common) UUIDs. Requires one of those options.
 
 Sample: \fB\-opju\fR.
 
@@ -866,7 +902,7 @@ straight FTP to get the file from smxi.org server.
 [http|https|ftp] \- Get a version of $self_name from your own server. Use the 
 full download path, e.g.
 
-\fB\inxi -U ^https://myserver.com/inxi\fR
+\fB\inxi -U https://myserver.com/inxi\fR
 
 For failed downloads, use the debug option \fB\-\-dbg 1\fR in addition to get 
 more verbose failure reports.
@@ -875,16 +911,6 @@ more verbose failure reports.
 .B \-\-usb\fR
 .br
 See \fB\-J\fR.
-
-.TP
-.B \-V\fR, \fB\-\-version\fR
-inxi full version and license information. Prints information then exits.
-
-.TP
-.B \-\-version\-short\fR, \fB\-\-vs\fR
-inxi single line version information. Prints information if not short form 
-(which shows version info already). Does not exit unless used without any other 
-options. Can be used with normal line options.
 
 .TP
 .B \-v \fR, \fB\-\-verbosity\fR
@@ -944,49 +970,53 @@ of optical drives.
 from your system.
 
 .TP
-.B \-w \fR, \fB\-\-weather\fR
-Adds weather line. To get weather for an alternate location, use \fB\-W 
-[location]\fR. See also \fB\-x\fR, \fB\-xx\fR, \fB\-xxx\fR options. Please note 
-that your distribution's maintainer may chose to disable this feature.
+.B \-\-version\fR, \fB\-\-vf\fR
+inxi full version and license information. Prints information then exits.
 
+.TP
+.B \-\-version\-short\fR, \fB\-\-vs\fR
+inxi single line version information. Prints information if not short form 
+(which shows version info already). Does not exit unless used without any other 
+options. Can be used with normal line options, and prints version info line as 
+first line of output.
+
+.TP
+.B \-w \fR, \fB\-\-weather [location]\fR
 DO NOT USE THIS FEATURE FOR AUTOMATED WEATHER UPDATES! Automated or excessive 
 use will lead to your being blocked from any further access. This feature is not 
 meant for widget type weather monitoring, or Conky type use. It is meant to get 
 weather when you need to see it, for example, on a remote server. If you did not
 type the weather option in manually, it's an automated request. 
 
-.TP
-.B \-W\fR, \fB\-\-weather\-location [location_string]\fR
-Get weather/time for an alternate location. Accepts postal/zip code[, country], 
-city,state pair, or latitude,longitude. Note: city/country/state names must 
-not contain spaces. Replace spaces with '\fB+\fR' sign. Don't place spaces 
-around any commas. Postal code is not reliable except for North America and 
-maybe the UK. Try postal codes with and without country code added. Note that 
-City,State applies only to USA, otherwise it's City,Country. If country name 
-(english) does not work, try 2 character country code (e.g. Spain: es; 
-Great Britain: gb). 
+Adds weather line for your current location (by IP address) if no location 
+requested. To get weather for an alternate location, add \fB[location]\fR. See 
+also \fB\-x\fR, \fB\-xx\fR, \fB\-xxx\fR options. Please note that your 
+distribution's maintainer may chose to disable this feature.
+
+With optional \fB[location]\fR \- get weather/time for an alternate location. 
+Accepts postal/zip code[, country], city,state pair, or latitude,longitude. 
+Note: city/country/state names must not contain spaces. Replace spaces with 
+the '\fB+\fR' sign. Don't place spaces around any commas. Postal code is not 
+reliable except for North America and maybe the UK. Try postal codes with and 
+without country code added. Note that City,State applies only to USA, otherwise 
+it's City,Country. If country name (english) does not work, try 2 character 
+country code (e.g. Spain: es; Great Britain: gb). 
 
 See \fIhttps://en.wikipedia.org/wiki/ISO_3166\-1_alpha\-2\fR for current 2 
 letter country codes.
 
 Use only ASCII letters in city/state/country names.
 
-Examples: \fB\-W 95623,us\fR OR \fB\-W Boston,MA\fR OR 
-\fB\-W 45.5234,\-122.6762\fR OR \fB\-W new+york,ny\fR OR \fB\-W bodo,norway\fR.
-
-DO NOT USE THIS FEATURE FOR AUTOMATED WEATHER UPDATES! Automated or excessive 
-use will lead to your being blocked from any further access. This feature is not 
-meant for widget type weather monitoring, or Conky type use. It is meant to get 
-weather when you need to see it, for example, on a remote server. If you did not
-type the weather option in manually, it's an automated request. 
+Examples: \fB\-w\fR OR \fB\-w 95623,us\fR OR \fB\-w Boston,MA\fR OR 
+\fB\-w 45.5234,\-122.6762\fR OR \fB\-w new+york,ny\fR OR \fB\-w bodo,norway\fR.
 
 .TP
-.B \-\-weather\-source\fR, \fB\-\-ws [unit]\fR
+.B \-\-weather\-source\fR, \fB\-\-ws [source-id]\fR
 [\fB1\-9\fR] Switches weather data source. Possible values are \fB1\-9\fR. 
 \fB1\-4\fR will generally be active, and \fB5\-9\fR may or may not be active, 
 so check. \fB1\fR may not support city / country names with spaces (even if 
 you use the \fB+\fR sign instead of space). \fB2\fR offers pretty good data, 
-but may not have all small city names for \fB\-W\fR. 
+but may not have all small city names for \fB\-w location\fR. 
 
 Please note that the data sources are not static per value, and can change any 
 time, or be removed, so always test to verify which source is being used for 
@@ -995,7 +1025,7 @@ on occasions, so try each one and see which you prefer. If you get unsupported
 source message, it means that number has not been implemented.
 
 .TP
-.B \-\-weather\-unit [unit]\fR
+.B \-\-weather\-unit\fR, \fB\-\-wu [unit]\fR
 [\fBm\fR|\fBi\fR|\fBmi\fR|\fBim\fR] Sets weather units to metric (\fBm\fR), 
 imperial (\fBi\fR), metric (imperial) (\fBmi\fR, default), imperial (metric) 
 (\fBim\fR). If metric or imperial not found,sets to default value, or \fBN/A\fR.
@@ -1053,8 +1083,9 @@ cases.
 
 .TP
 .B \-\-zu\fR, \fB\-\-filter\-uuid\fR
-Filter partition UUIDs from \fB\-j\fR, \fB\-o\fR, \fB\-p\fR, \fB\-P\fR, and 
-\fB\-Sa\fR (root=UUID=...). Generally only useful in very specialized cases.
+Filter partition UUIDs from \fB\-j\fR, \fB\-o\fR, \fB\-p\fR, \fB\-P\fR, 
+\fB\-Sa\fR (root=UUID=...), \fB\-Mxxx\fR board UUID. Useful in specialized 
+cases.
 
 .TP
 .B \-\-zv\fR, \fB\-\-filter\-v\fR, \fB\-\-filter\-vulnerabilities\fR 
@@ -1074,7 +1105,7 @@ The following options allow for modifying the output in various ways.
 Set color scheme. If no scheme number is supplied, 0 is assumed.
 
 .TP
-.B \-c \fR[\fB94\fR\-\fB99\fR]
+.B \-c \fR [\fB94\fR\-\fB99\fR]
 These color selectors run a color selector option prior to inxi starting 
 which lets you set the config file value for the selection.
 
@@ -1131,11 +1162,6 @@ level only applied if output width is less than max wrap width (see
 indents. Use configuration item \fBINDENTS\fR to make permanent.
 
 .TP
-.B \-\-limit [\-1 \- x]\fR
-Raise or lower max output limit of IP addresses for \fB\-i\fR. \fB\-1\fR 
-removes limit.
-
-.TP
 .B \-\-max\-wrap\fR, \fB\-\-wrap\-max [integer]\fR
 Overrides default or configuration set line starter wrap width value. Wrap max 
 is the maximum width that inxi will wrap line starters (e.g. \fBInfo:\fR) to 
@@ -1162,30 +1188,6 @@ then this feature is not meant for you.
 The given directory path must exist. The directory path given must exist,
 The \fBprint\fR options prints to stdout.
 Required for non\-screen \fB\-\-output\fR formats (json|xml).
-
-.TP
-.B \-\-partition\-sort [dev\-base|fs|id|label|percent\-used|size|uuid|used]\fR
-Change default sort order of partition output. Corresponds to 
-\fBPARTITION_SORT\fR configuration item. These are the available sort options:
-
-\fBdev\-base\fR - \fB/dev\fR partition identifier, like \fB/dev/sda1\fR. 
-Note that it's an alphabetic sort, so \fBsda12\fR is before \fBsda2\fR.
-
-\fBfs\fR \- Partition filesystem. Note that sorts will be somewhat random if 
-all filesystems are the same.
-
-\fBid\fR \- Mount point of partition (default).
-
-\fBlabel\fR \- Label of partition. If partitions have no labels, 
-sort will be random.
-
-\fBpercent\-used\fR - Percentage of partition size used.
-
-\fBsize\fR \- KiB size of partition.
-
-\fBuuid\fR \- UUID of the partition.
-
-\fBused\fR \- KiB used of partition.
 
 .TP
 .B \-\-separator\fR, \fB\-\-sep [character(s)]\fR
@@ -1435,8 +1437,8 @@ values, as with global temporary, and global temporary deprecated.
 \- Adds current init system (and init rc in some cases, like OpenRC).
 With \fB\-xx\fR, shows init/rc version number, if available.
 
-\- Adds default system gcc. With \fB\-xx\fR, also show other installed gcc
-versions.
+\- Adds default system compilers. With \fB\-xx\fR, also show other installed 
+compiler versions.
 
 \- Adds current runlevel/target (not available with all init systems).
 
@@ -1512,7 +1514,7 @@ bitmap (if present). Resync line, shows blocks synced/total blocks.
 
 .TP
 .B \-x \-S\fR
-\- Adds Kernel gcc version.
+\- Adds Kernel compiler version.
 
 \- Adds to \fBDistro:\fR \fBbase:\fR if detected. System base will only be 
 seen on a subset of distributions. The distro must be both derived from a 
@@ -1531,7 +1533,7 @@ found for each distribution system base detection.
 (\fB\-xt m\fR).
 
 .TP
-.B \-x \-w \fR, \fB\-W\fR
+.B \-x \-w\fR
 \- Adds humidity and barometric pressure.
 
 \- Adds wind speed and direction.
@@ -1692,9 +1694,15 @@ did not find an X11 display ID, the ID (e.g. \fB:0.0\fR) will show here instead.
 
 .TP
 .B \-xx \-I\fR
+\- Addes \fBPower:\fR parent for power data children \fBuptime:\fR and adds 
+\fBwakeups:\fR. Wakeups shows how many times the machine has been woken from 
+suspend state during current uptime period (if available, Linux only). 0 value 
+means the machine has not been suspended. 
+
 \- Adds init type version number (and rc if present).
 
-\- Adds other detected installed gcc versions (if present).
+\- Adds alternate (\fBalt:\fR) detected installed compiler versions (if 
+present).
 
 \- Adds system default runlevel/target, if detected. Supports Systemd / Upstart 
 /SysVinit type defaults.
@@ -1751,6 +1759,9 @@ this data available.
 \- Adds chassis information, if data is available. Also shows BIOS
 ROM size if using \fBdmidecode\fR.
 
+\- Adds board part number (\fBpart\-nu:\fR) if available. This is not commonly 
+found.
+
 .TP
 .B \-xx \-N\fR
 \- Adds vendor:product ID for each device.
@@ -1776,17 +1787,19 @@ shows progress bar.
 
 .TP
 .B \-xx \-S\fR
-\- Adds display manager (\fBdm\fR) type, if present. If none, shows N/A. 
-Supports most known display managers, including gdm, gdm3,
-idm, kdm, lightdm, lxdm, mdm, nodm, sddm, slim, tint, wdm, and xdm.
 
-\- Adds, if run in X, window manager type (\fBwm\fR), if available. Not all 
-window managers are supported. Some desktops support using more than one 
-window manager, so this can be useful to see what window manager is actually 
-running. If none found, shows nothing. Uses a less accurate fallback tool 
-\fBwmctrl\fR if \fBps\fR tests fail to find data.
+\- Adds desktop toolkit (\fBtk:\fR), if available (Xfce/KDE/Trinity/Gnome etc).
 
-\- Adds desktop toolkit (\fBtk\fR), if available (Xfce/KDE/Trinity).
+\- Adds, if run in X, window manager (\fBwm:\fR), if available. Not all window 
+managers are supported. File issue to request a missing one. Some desktops 
+support using more than one window manager, so this can be useful to see what 
+window manager is actually running. If none found, shows nothing. Uses a less 
+accurate fallback tool \fBwmctrl\fR if \fBps\fR tests fail to find data.
+
+\- Adds display/login manager (\fBdm:\fR/\fBlm:\fR), if present. If none, shows 
+N/A. Supports most known display/login managers, including elogind, entrance, 
+gdm, gdm3, greetd, kdm, lemurs, lightdm, lxdm, ly, mdm, mlogind, nodm, sddm, 
+seatd, slim, slimski,  tint, wdm, xdm, and several others, added as discovered.
 
 .TP
 .B \-xx \-\-slots\fR
@@ -1795,7 +1808,7 @@ running. If none found, shows nothing. Uses a less accurate fallback tool
 \- Adds slot voltage, if available.
 
 .TP
-.B \-xx \-w \fR, \fB\-W\fR
+.B \-xx \-w\fR
 \- Adds wind chill, heat index, and dew point, if available.
 
 \- Adds cloud cover, rain, snow, or precipitation (amount in previous hour 
@@ -1886,9 +1899,10 @@ displayed if device name is present with \fB\-a\fR).
 
 .TP
 .B \-xxx \-I\fR
-\- For \fBUptime:\fR adds \fBwakeups:\fR to show how many times the machine
-has been woken from suspend state during current uptime period (if available,
-Linux only). 0 value means the machine has not been suspended. 
+\- For \fBPower:\fR adds supported system power \fBstates:\fR, active 
+\fBsuspend:\fR type, active \fBhibernate:\fR type. See 
+\fIhttps://www.kernel.org/doc/html/v4.15/admin-guide/pm/sleep-states.html\fR 
+for full explanation of states and actions.
 
 \- For \fBShell:\fR adds \fB(su|sudo|login)\fR to shell name if present.
 
@@ -1930,6 +1944,11 @@ different from each other. If they are the identical, displays same as
 \fB\-xxm\fR voltage report. Use \fB\-ma\fR to always see them.
 
 .TP
+.B \-xxx \-M\fR
+\- Adds, if present, board/chassis UUID, This is also activated by 
+\fB\-\-uuid\fR.
+
+.TP
 .B \-xxx \-N\fR
 \- Adds, if present, serial number.
 
@@ -1949,21 +1968,25 @@ RAID events)
 .B \-xxx \-S\fR
 \- Adds current kernel clock source, if available (Linux only).
 
-\- Adds, if in X, or with \fB--display\fR, bar/dock/panel/tray items 
-(\fBinfo\fR). If none found, shows nothing. Supports desktop items like 
-gnome\-panel, lxpanel, xfce4\-panel, lxqt\-panel, tint2, cairo-dock, trayer, 
-and many others. 
-
 \- Adds (if present), window manager (\fBwm\fR) version number.
 
-\- Adds (if present), display manager (\fBdm\fR) version number.
+\- Adds, if in X, or with \fB--display\fR, bar/dock/menu/panel/tray components 
+(\fBwith:\fR). If none found, shows nothing. Examples:  cairo-dock, docky, 
+gnome\-panel, lxpanel, tint2, trayer, lxqt\-panel, xfce4\-panel and many 
+others. 
+
+\- Adds (if present) \fBtools:\fR item for all detected running screensavers, 
+screen lockers. Note that not all screen lockers run as daemons/services, some 
+are just programs called by other tools or actions.
 
 \- Adds (if available, and in display), virtual terminal (\fBvt\fR) number.
 These are the same as \fBctrl+alt+F[x]\fR numbers usually. Some systems
 have this, some don't, it varies.
 
+\- Adds (if present), display/login manager (\fBdm\fR) version number.
+
 .TP
-.B \-xxx \-w \fR, \fB\-W\fR
+.B \-xxx \-w \fR
 \- Adds location (city state country), observation altitude (if available), 
 weather observation time (if available), sunset/sunrise (if available).
 
@@ -2325,23 +2348,34 @@ Graphics:
 
 .TP
 .B \-a \-I\fR
+\- Adds to \fBPower:\fR other hibernate and suspend available (\fBavail:\fR) 
+states, hibernate suspend \fBimage:\fR size, and if any suspend failures 
+(\fBfails:\fR), how many.
+
+\- Adds power daemons/services (\fBservices:\fR) running. Note not all services 
+are daemons. 
+
 \- Adds to Packages number of lib packages detected per package manager. Also 
 adds detected package managers with 0 packages listed. Adds package manager 
 tools (supported: rpm, dpkg, pkgtool) Moves to \fBRepos\fR if \fB\-ra\fR.
 
-.nf
-\fBinxi \-aI
-Info:
-  ....
-  Init: systemd v: 245 target: graphical.target (5) default: graphical.target 
-  Compilers: gcc: 9.3.0 alt: 5/6/7/8/9 Packages: pm: apt pkgs: 3681 libs: 2096 
-  tools: apt, apt\-get,aptitude pm: rpm pkgs: 0 Shell: ksh v: A_2020.0.0 
-  default: Bash v: 5.0.16 running\-in: kate inxi: 3.1.04\fR
-.fi
-
 \- Adds service control tool, tested for in the following order: \fBsystemctl 
 rc\-service rcctl service sv /etc/rc.d /etc/init.d\fR. Can be useful to know 
 which you need when using an unfamiliar machine.
+
+.nf
+\fBinxi \-aI
+Info:
+  Memory: total: N/A available: 31.27 GiB used: 14.9 GiB (47.7%)
+  Processes: 651 Power: uptime: 8d 21h 32m states: freeze,mem,disk
+    suspend: deep avail: s2idle wakeups: 14 fails: 3 hibernate: platform
+    avail: shutdown,reboot,suspend,test_resume image: 12.49 GiB
+    services: upowerd,xfce4\-power\-manager Init: systemd v: 255
+    target: graphical (5) default: graphical tool: systemctl
+  Packages: pm: dpkg pkgs: 3960 libs: 2184 tools: apt,apt\-get,aptitude
+    pm: rpm pkgs: 0 Compilers: gcc: 13.2.0 alt: 5/6/8/9/10/11/12 Shell: Bash
+    v: 5.2.21 running\-in: xfce4\-terminal pinxi: 3.3.32\fR
+.fi
 
 .TP
 .B \-a \-j\fR (\fB\-\-swap\fR), \fB\-a \-P\fR [swap], \fB\-a \-P\fR [swap]
@@ -2408,6 +2442,8 @@ mapped name for logical components. Puts each component/device on its own line.
 .B \-a \-m\fR
 \- Expands volts to include curr/min/max values even if they are all identical.
 
+\- Adds RAM module firmware version, if detected. Not common.
+
 .TP
 .B \-a \-n\fR, \fB\-a \-N\fR, \fB\-a \-i\fR
 \- Adds, if present, possible \fBalternate:\fR kernel modules capable of driving 
@@ -2421,6 +2457,10 @@ or lanes, \fBlink\-max: gen: speed: lanes:\fR (only items different from primary
 shown).
 
 \- Adds for USB devices USB mode (Linux only).
+
+\- Adds \fBInfo:\fR line (\fB\-n\fR, \fB\-i\fR only), with running network type 
+\fBservices:\fR. Note not all services are daemons. For example, 
+\fBNetworkManager\fR can be started with \fB\-\-no\-daemon\fR flag.
 
 .TP
 .B \-a \-o\fR
@@ -2461,6 +2501,12 @@ Component report to 1 component per line.
 
 \- Adds kernel boot parameters to \fBKernel\fR section (if detected). Support 
 varies by OS type.
+
+\- Adds advanced desktop (\fBinfo:\fR) item, and version. Currently supports KDE 
+Frameworks and version. 
+
+\- Adds other available (\fBavail:\fR) screensavers/lockers in \fBtools:\fR 
+section. These are ones installed, but not necessarily active or running.
 
 .TP
 .B \-a \-\-slots\fR
@@ -2602,6 +2648,9 @@ lm\-sensors data was found anyway, but if \fBlm\-sensors\fR was installed, and
 returned no data, it's most likely if not nearly certain that \fB/sys\fR will 
 also not return data.
 
+\- \fBudevadm\fR \- Forces use of udevadm as data source (currently \fB\-m\fR 
+RAM data). 
+
 \- \fBusb\-sys\fR \- Forces the USB data generator to use \fB/sys\fR as data 
 source instead of \fBlsusb\fR (Linux only).
 
@@ -2668,10 +2717,10 @@ behavior.
 
 .TP
 .B \-\-no\-ssl\fR
-Skip SSL certificate checks for all downloader actions (\fB\-U\fR, \fB\-w\fR,
-\fB\-W\fR, \fB\-i\fR). Use if your system does not have current SSL certificate
-lists, or if you have problems making a connection for any reason. Works with
-\fBWget\fR, \fBCurl\fR, \fBPerl HTTP::Tiny\fR and \fBFetch\fR.
+Skip SSL certificate checks for all downloader actions (\fB\-U\fR, \fB\-w\fR, 
+\fB\-i\fR). Use if your system does not have current SSL certificate lists, or 
+if you have problems making a connection for any reason. Works with \fBWget\fR, 
+\fBCurl\fR, \fBPerl HTTP::Tiny\fR and \fBFetch\fR.
 
 .TP
 .B \-\-no\-sudo\fR
@@ -2964,12 +3013,16 @@ inxi will read its configuration/initialization files in the
 following order:
 
 \fB/etc/inxi.conf\fR contains the default configurations. These can be 
-overridden by creating a \fB/etc/inxi.d/inxi.conf\fR file (global override), 
-which will prevent distro packages from changing or overwriting your edits. This 
-method is recommended if you are using a distro packaged inxi and want to 
-override some global configuration items from the package's default 
+overridden by creating a \fB/etc/inxi.conf.d/inxi.conf\fR file (global 
+override), which will prevent distro packages from changing or overwriting your 
+edits. This method is recommended if you are using a distro packaged inxi and 
+want to override some global configuration items from the package's default 
 \fB/etc/inxi.conf\fR file but don't want to lose your changes on a package 
-update. 
+update.
+
+In case the distro is using either \fB/usr/etc\fR or \fB/usr/local/etc\fR as non 
+core tool default location, inxi will use those paths instead, with the 
+\fBinxi.conf.d/inxi.conf\fR override option.
 
 You can also override, per user, with a user configuration file found in one of 
 the following locations (inxi will store its config file using the following 
@@ -2979,8 +3032,11 @@ if \fB$XDG_CONFIG_HOME\fR is not empty, it will go there, else if
 \fB$HOME/.config/inxi.conf\fR exists, it will go there, and as a last default,
 the legacy location is used), i.e.:
 
-\fB$XDG_CONFIG_HOME/inxi.conf\fR > \fB$HOME/.config/inxi.conf\fR >
-\fB$HOME/.inxi/inxi.conf\fR > \fB/etc/inxi.d/inxi.conf\fR > \fB/etc/inxi.conf\fR
+\fB$XDG_CONFIG_HOME/inxi.conf\fR > \fB$HOME/.config/inxi.conf\fR > 
+\fB$HOME/.inxi/inxi.conf\fR > \fB/usr/etc/inxi.conf\fR > 
+\fB/usr/etc/inxi.conf.d/inxi.conf\fR > \fB/usr/local/etc/inxi.conf\fR > 
+\fB/usr/local/etc/inxi.conf.d/inxi.conf\fR > \fB/etc/inxi.conf.d/inxi.conf\fR > 
+\fB/etc/inxi.conf\fR
 
 .SH CONFIGURATION OPTIONS
 
@@ -3137,12 +3193,14 @@ You can also visit \fRchannel:\fI #smxi\fR to post issues on either network.
 
 .SH HOMEPAGE
 .I  https://codeberg.org/smxi/inxi
-\fR \- Home of the source code, and tech docs 
-(\fIinxi\-perl/docs\fR).
+\fR \- Home of inxi source repository
+
+.I  https://codeberg.org/smxi/pinxi
+\fR \- Home of pinxi (inxi development version), docs and data.
 
 .I  https://smxi.org/docs/inxi.htm
-\fR \- The main docs for inxi. See 
-\fIinxi\-perl/docs\fR for more technical docs.
+\fR \- The main docs for inxi. See pinxi repository for more technical 
+resources.
 
 .I https://fosstodon.org/@smxi
 \fR \- Follow @smxi on Mastodon!

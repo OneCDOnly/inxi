@@ -1,12 +1,16 @@
+================================================================================
 README for inxi - a command line system information tool
+================================================================================
+FILE:    README.txt
+VERSION: 6.1
+DATE:    2024-03-28
 
 The new faster, more powerful Perl inxi is here! File all issue reports with the 
-master branch. All support for versions prior to 3.0 is now ended, sorry. 
+master branch. All support for versions prior to 3.0 is ended. 
 
 Make sure to update to the current inxi from the master branch before filing any 
-issue reports. The code in pre 2.9 versions literally no longer exists in inxi 
-3. Bugs from earlier versions cannot usually be solved in the new version since 
-the pre 2.9 and the 2.9 and later versions are completely different internally.
+issue reports. Bugs from earlier versions cannot usually be solved in the new 
+version since too much changes intnernally release to release.
 
 --------------------------------------------------------------------------------
 CODEBERG SOURCE REPO
@@ -22,13 +26,8 @@ inxi-perl > https://codeberg.org/smxi/pinxi master
 master    > https://codeberg.org/smxi/inxi master
 tarballs  > https://codeberg.org/smxi/inxi-tarballs master
 
-inxi-perl has been rebuilt and now only contains the pinxi, pinxi.1 files, plus
-a minimal README.txt for github users. docs and tarballs have been deleted. The
-inxi-perl branch should not be used, and exists only so that current pinxi users 
-can update from there to get the new version with new URLs.
-
-inxi master and inxi-perl/pinxi will be mirrored until late 2023, then they will
-no longer get updates.
+No syncing to github smxi repos has been done since December, 2023. Github 
+versions are out of date.
 
 The inxi repo only contains master, plus the one, two branches, which are 
 obsolete. 
@@ -113,7 +112,7 @@ REPO: https://codeberg.org/smxi/inxi
 MAIN BRANCH: master
 DEVELOPMENT BRANCHES [not used]: one, two
 
-pinxi [development version for inxi]:
+pinxi [development version of inxi]:
 REPO: https://codeberg.org/smxi/pinxi
 MAIN BRANCH: master
 
@@ -142,7 +141,7 @@ is stable and is generally only updated when a new tagged version is completed.
 
 PACKAGERS: inxi has one and only one 'release', and that is the current tagged 
 version in the master branch (plus pinxi repo, of course, but pinxi should in 
-general not be packaged). 
+general not be packaged). No non-current versions of inxi are supported.
 
 --------------------------------------------------------------------------------
 MASTER BRANCH
@@ -229,7 +228,8 @@ wget -O binxi https://smxi.org/binxi
 
 This version will not be maintained, and it's unlikely that any time will be 
 spent on it in the future, but it is there in case it's of use or interest to 
-anyone.
+anyone. Please don't ask for any help with that, the reason inxi was rewritten 
+to Perl was to avoid ever needing to battle with bash/gawk again.
 
 This was kept for a long time as the inxi-legacy branch of inxi, but was moved 
 to the inxi-legacy repo 2021-09-24.
@@ -241,7 +241,8 @@ SUPPORT INFO
 Do not ask for basic help that reading the inxi -h / --help menus, or man page 
 would show you, and do not ask for features to be added that inxi already has. 
 Also do not ask for support if your distro won't update its inxi version, some 
-are bad about that.
+are bad about that. Yes, these are long, but inxi does a lot of stuff, not all 
+of it particularly ihtuitive.
 
 --------------------------------------------------------------------------------
 DOCUMENTATION
@@ -452,7 +453,7 @@ The fourth number, when used, will be alpha-numeric, a common version would be,
 in say, branch one: 2.2.28-b1-02, in other words: branch 1 patch version 2.
 
 In the past, now and then the 4th, or 'patch', number, was used in trunk/master 
-branches of inxi, but I've pretty much stopped doing that because it's 
+branches of inxi, but that practice has pretty much stopped because it's 
 confusing.
 
 inxi does not use the fiction of date based versioning because that imparts no 

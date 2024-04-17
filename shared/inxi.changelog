@@ -1,4 +1,1111 @@
 ================================================================================
+Version: 3.3.34
+Patch: 00
+Date: 2024-04-13
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+This is a nice point release that corrects and updates numerous smaller, and
+larger, features. Most pressing in terms of numbers affected was the failure
+to detect in display, non console, for Wayland without Xwayland running. But 
+updates will impact a fairly wide range of systems, though mostly are corner 
+case issues, but inxi is all about handling corner cases to make the handliing 
+of core stuff more robust and less prone to failure or error.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. RAID: Codeberg issue #301 from olegStreejak helped expose a long standing set
+of ZFS components bugs. This was superficially exposed by an unexpected 
+undefined value error in -o/--unmounted.
+
+2. PARTITIONS/SWAP: again raised in issue #301, partitions failed to handle 
+/dev/gpt/[gpt-lable] syntax, leading to undetected mounted partitions showwing 
+in unmounted, and label/uuid not working.
+
+3. UNMOUNTED: codeberg user kysh in issue #302 found a corner case that exposed
+bug 2, using raw data as regex pattern, without protecting it. But most 
+important, he took the time to report it.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. GRAPHICS/CPU: Intel data is really hard to track, and getting solid lists 
+of their gpu vs cpu generations is almost impossible, so these are just going 
+to lag a year or two fairly consistently. They also keep jumbling marketing 
+names up with physical hardware, making it even more difficult.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. RAID: zfs_data(): a series of small glitches led to certain cases of BSD 
+RAID ZFS component data generating undefined value errors in unexpected places.
+
+The bug and fixes required some careful corrections since there were more than 
+1 present, a bad regex pattern. 
+
+2. UNMOUNTED: weak regex fails when mount line item contains regex special 
+characters in its string, like: GDRIVE{**6Cm8i**}. Thanks codeberg issue poster 
+#302 for reporting this failure. This was already handled correctly in 
+partitions, so this was just an oversight.
+
+Solution was to pull apart some combined test arrays, and then use \Q$_\E 
+wrappers in the regex. Obviously using raw system data in a regex when you don't 
+know what it can contain was always a mistake, but this one just slipped by 
+since that syntax is not common.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. DRIVES: DiskItem::disk_vendor(): Fixed an overly loose SanDisk vendor ID that 
+led to a Seagate ST8000DM004-2CX188_WCT193ZX being ID'ed as a SanDisk. The 
+culprit was forgetting the 'starts with ^ in:
+^X[1-6]\d{2}
+Thanks Codebergy issue poster thatso in issue #299 for pointing this out.
+
+2. NETWORK: services: was missing nfsd because it's a kernel process, that's 
+corrected. Showed as: [nfsd]
+
+3. MAIN: primary DISPLAY test fails to check for WAYLAND_DISPLAY and other 
+desktop session environmental variables only present if X/Wayland are running 
+current display. This led to $b_display not getting set when for example Wayland 
+in Sway without Xwayland, so no $DISPLAY set.
+
+4. GlabelData: glabel status will right align column 1, which is not obvious 
+unless you have something like this:
+                                gpt/bootfs     N/A  ada0p1
+gptid/67d1a56b-7fb2-11ee-a7ba-002590ec5bf2     N/A  ada0p1
+                                gpt/efiesp     N/A  ada0p2
+                                
+This led to the expected splits being off by one. Fix is using 'strip' in 
+main::grabber.
+
+5. BSD: PARTITIONS/SWAP: failed to get mapped gpt data, which led to more false
+unmounted issues. These were exposed in codeberg issue #301. Added explicit 
+detections for /dev/gtp[^\]*/ which means relying on that literal path to be
+present. Note that can be gpt or gptid, the latter if it's a UUID type string.
+
+This also led to failures for UUID and LABEL for partitions and swap.
+
+6. SYSTEM: DistroData: changed blankon to use system base from debian_version 
+file version. Had as manual before, but when install gets old, that's deceptive
+since it will be an ancient Debian sid. Better to call it what it is in the 
+actual install.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1a. SYSTEM: DesktopData: Added support for yet another Deepin window manager,
+deepin-kwin_x11. Also for deepin-kwin_wayland.
+
+1b. SYSTEM: DesktopData: Added support for hyprlock, hyprland's screenlocker.
+
+1c. SYSTEM: DistroData: Added support for SolyD system base Debian detection.
+
+2. NETWORK: services: added mld. As with nfsd, it's a kernel process: [mld]
+
+3a. GRAPHICS: GPU DATA: added more gpu ids for nvidia, amd, intel.
+
+3b. GRAPHICS: Xorg drivers: added possible future rust nvidia nova driver. Not 
+in kernel yet but may be. Also added in various filter lists just in case. 
+Search for'nouveau' to find occurances. 
+
+4. CPU: Added more AMD, Intel CPU Ids. The Intel stuff is getting really 
+difficult to track, they refuse to adopt sane family updates, keeping it always 
+at 6, and thus cram more and more into finite 2 hexadecimal numbers, leaving 
+marketing terms in place of actual die process engineering. There's only so much 
+I can do to work around this, so if you find errors, do the research, and submit
+corrections, keeping in mind these things are super fuzzy.
+
+5. DRIVES: More disk vendors, the endless list. Unhandled list grows slowly, 
+maybe one day someone will step in and figure out what more of them are, 
+assuming they have a unique name string of course.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. No Changes.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. DOCS: inxi-network.txt: added notes for nfsd, mld
+
+1b. DOCS: inxi-desktop.txt: added de wm deepin-kwin_x11, deepin-kwin_wayland.
+
+1c. DOCS: inxi-power.txt: added hyperlock.
+
+2. DATA: data/machine/elbrus/sets: added bootdata/fruid sets. These are from a 
+while back but were not labeled consistently, so sorted them into what are 
+hopefully actual pairs of data files.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. PsData: Changed set_cmd() to set(), since all ps data is being set, not just 
+@ps_cmd. Changed $loaded{'ps-cmd'} to $loaded{'ps-data'} for same reason. Also 
+removed redundant check for loaded, and moved first load to IRC test, if not IRC 
+type scenario, then loads right before building the items.
+
+2. RAID: zfs_data(): cleaned up to make more debuggable ZFS component data. Some 
+of the items would never have worked due to bad regex, and also simplified by 
+shifting empty index 0 from @row to make values same as top sections for main 
+ZFS Array data. The regex was simply too convoluted to work reliably, so it 
+failed under certain cases, FreeBSD Linear ZFS mode for example.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Sat, 13 March 2024 19:00:08 -0800
+
+================================================================================
+Version: 3.3.33
+Patch: 00
+Date: 2024-02-06
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+A quick point release, one critical bug fix, and a few new features and 
+enhancements. Extended the running service from Info: Power: services: to 
+Network: Info: services:. The PsData refactor makes this quite easy to do. So
+why not?
+
+Also in terms of general usability, added an error handler for options that 
+require primary options to be meaningful, that was already there for --label and 
+--uuid, but there are several other similar modifier options that were not 
+handled.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. GRAPHICS: Codeberg user malcolmlewis, for being the first to find a fatal bug 
+(see BUGS 1) in the newly shipped inxi 3.3.32 codebase. Not complex bug, just 
+stupid coding error.
+
+2. OPTIONS: mrmazda has been wanting an options handler that tells users when 
+they use an option that only modifies another, without using the primary option. 
+That is now working.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. INFO/NETWORK: Terminology: daemon/service/process: following: 
+https://serverfault.com/questions/129055/is-there-a-difference-between-a-\
+daemon-and-a-service
+
+* A "Service" could refer to either a Daemon or a Service.
+
+* A daemon is a subset of services that always run in memory waiting to service 
+a request.
+
+For example, NetworkManager can be started with --no-daemon option, but still 
+be running as an active service, thus, there is a difference.
+
+Note that to remove this ambiguity we use the term: services:
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. GRAPHICS: GraphicsItem::map_monitor_ids(): a stray bit of old syntax tripped 
+an impossible data error. Cause was accidentally make a array index be an index 
+pointing to an array reference index, leading to failure. Thanks codeberg user 
+malcolmlewis for triggering this case, which is not super easy to trip. Never 
+tripped in any recent testing, but valid and a bug.
+https://codeberg.org/smxi/inxi/issues/298
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. DistroData: Removed a stray print debugger.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. SYSTEM: DistroData: Added final distro/base name cleaners, remove duplicate
+'words' that are not numbers from the distro name if they occur in base name.
+Also handles a corner case where name and base are the same string, then it 
+just sets base to empty. Only runs with -Sx and successful name and base 
+detection.
+
+2. OPTIONS: Moved and updated these from Output Control section to main options:
+
+* Added --ip-limit as synonym for --limit so it fits better with --ip.
+
+* Added --partition-sort, --ps to --partitions-sort, that makes it fit better 
+with --partition/--partition-full. It only shows --partitions*, but supports 
+either syntax so it doesn't matter how you remember it.
+
+* Added new error handler type: arg-modifier which is used to show missing 
+primary option when primary option modifier is used, like --sleep/-C, 
+-p/--partitions-sort, -l/-p, and so on.
+
+3. MACHINE: --uuid/-u now also activates UUID item, like partitions. Keeping 
+-a adding behavior since we want all that info, but make use of -u consistent
+now that using uuid in machine report. Not common though.
+
+4. NETWORK: -n/-i -a now trip a services: report, with a new line: 
+Info: services: [services]. These can be daemons or services, same as with Power 
+services:.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1a. MAN/OPTIONS: Re-arranged option locations, moved back to their modified 
+options in primary options. Those didn't fit there, they should have been next 
+to the options they modify.
+
+* Moved --partition-sort back up to --partitions [from Output Control sections]
+
+* Moved --limit to --ip-limit next to --ip [from Output Control sections]. 
+
+1b. MAN/OPTIONS: changed daemons: to services:
+
+2. INFO: changed Power:... daemons: to services: due to the fact not all 
+services are daemons, and some potential daemons can be started explicitly with 
+--no-daemon flag (like NetworkManager), which means it is false to say it's a 
+daemon. 
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. MAN/OPTIONS: See Change 1, moved --partitions-sort, --limit, back up to main 
+options they modify to make it more readily obvious they belong together.
+
+2a. DOCS: inxi-battery.txt: updated, added TLP/tlp-stat info.
+
+2b. DOCS: inxi-network.txt: added DAEMONS tools section.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1a. DEBUG: moved the DesktopData::de_wm_debugger() to 
+main::feature_debugger(). This is a useful tool and will be used for other 
+complex user data debugging requirements where clear output helps develop and 
+debug issue. Very useful for --dbg 63 so making general tool. Also used for new
+--dbg 66, DistroData, which works in similar way.
+
+1b. DEBUG: Added to SystemDebugger 'tlp-stat -s', forgot that one.
+
+1c. DEBUG: Added --dbg 66 for DistroData, like 63 for DesktopData.
+
+2. SYSTEM: DistroData: refactored to use primary $distro hash ref, this is also 
+what is passed back to the System line generator now. Switched most variables to
+be hash keys, this allows for debugging and tracking what trips the distro data
+for --dbg 66, for logging, and to more rapidly check/add/update distro/base IDs.
+
+3a. CORE: OptionsHandler: small refactor, moved pledge block to set_pledge(), 
+and moved all option modifier tests to check_modifiers(). This makes it more 
+obvious each set is its own set of actions, and is easier to maintain.
+
+3b. CORE: main::error_handler(): new type: arg-modifier: used in 3a.
+
+3c. CORE: main::make_list_value() replaces main::set_join_sep(), now lists that 
+can be too long and require a space after separator are generated all by 
+reference, making for easier and more consistent long value outputs.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Tue, 06 Feb 2024 15:16:01 -0800
+
+================================================================================
+Version: 3.3.32
+Patch: 00
+Date: 2024-01-30
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+PACKAGERS: The code repo for inxi is codeberg.org/smxi/inxi. If you have not yet 
+changed your packaging source url, you will need to do that. I have extended for 
+a few months the mirror of codeberg inxi to github, but I will turn that mirror 
+off fairly soon. The pinxi inxi-perl branch mirror is already turned off.
+
+--------------------------------------------------------------------------------
+
+This is a massive upgrade, featuring many core tool refactors, leading to 
+significantly enhanced abilities to debug and add support for various features,
+particularly desktop type data, but any software type version reports as well.
+
+Many parts of the core logic have been touched, and the testing has been the 
+most vigorous in recent memory, thanks to antiX and Slackware, and mrmazda, in 
+particular for their significant help making these new features and upgrades
+far less buggy out of the box than would have otherwise been possible.
+
+* Finally, a reasonable quality RAM report for Linux with dmi table RAM data, 
+without needing dmidecode or root! Uses udevadm, which despite some fairly 
+significant weak poinots, is ok, except for issues like module voltage, which 
+are stuck at a false value of 1. Also multi memory array system boards have poor 
+to no native handling, so inxi tries to work around that failing.
+
+* A big improvement in ability to match xrandr X port ID to DRM port IDs, using
+a stable value found in each. This has been a long standing weak spot for multi
+monitor display IDs.
+
+* Power data, for suspend/hibernate, screensavers, closes a recent issue #292 
+from chromer030. This also extended to running power daemons, and in -S, Desktop 
+report, added screensaver and lockers in tools:.
+
+* A huge upgrade to all core Desktop/wm data, including new data types, complete
+internal refactoring, including of all program version data, ps based data, etc.
+This will massively reduce the risk of errors, bugs, etc, in the future, and 
+also makes debugging and adding support for new de/wm far easier.
+
+* Note this change: Desktop info: has been repurposed to the new advanced DE 
+info report (KDE Frameworks only currently), and the old info:, which was never 
+well named, now is called with:, because it's a report on the various parts, or
+components, that make up the de/wm. Also the order was changed in the Desktop
+line: Desktop: v: [tk: [v:]] [info: v:] [wm: [v:]] [with:] [tools:] [dm:/lm:]. 
+
+* A big upgrade in the TinyX logic, which should work now to get resolutions for 
+TinyCore and possibly other tiny x using distros. That includes detections for 
+all known TinyX servers, not just Xvesa.
+
+* With TinyX fixes, now has full support for Slitaz, package manager, distro id, 
+repos. And Alpine Linux was enhanced and upgraded re support as well with these
+fixes.
+
+OPTIONS REMOVAL/DEPRECATION:
+To free up upper case single letter options, merged -W with -w and removed -W, 
+which now trips a removed option error. To prepare for -V being removed, that 
+shows a deprecated message then the full version. 
+
+Note that if you really care and want -V retained, file an issue, or contact 
+inxi and say so. It will only really take one person who has a preference to 
+retain -V to keep it. That will be decided next inxi, if nobody cared, then -V 
+will be removed. Ideally say why you care, and why typing --vf is too much. 
+
+The use of -W was always an error, forced I think by some options handling 
+limits of bash. -V was just to have a single letter --version, but I think given 
+-v is verbosity, -V is actually slightly confusing. Also, single letter options 
+are in short supply now, and there's no point in wasting them on stuff where 
+it's not really needed to get fast easy output for features.
+
+Also removed the long since deprecated --gpu, --nvidia, --nv, were removed, and 
+will show option removed message.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. GRAPHICS: Android compositor: Thanks codeberg.org/smxi/inxi issue poster 
+Mhowser for providing an Android data set from a rooted FxTec Pro1-X phone, 
+which gave enough info to polish up and add some more Android support. But only 
+on rooted devices, but Android doesn't let you learn much if the device is not 
+rooted. That issue is lost because it was put on pinxi issues, before pinxi 
+was switched to use inxi issues to avoid confusion.
+
+2. DOCS: data/audio/audio-datasets: mrmazda provided his large collection of 
+audio data debuggers, which have alsa, systemctl, pulse, etc, debugging data.
+
+3. ONGOING: mrmazda, for finding and forwarding subtle to not so subtle issues.
+See Bugs 4, Fixes 6b. In this case pointed me to the relevant forum posting that 
+exposed the error, which was enough to track it down.
+
+4. SYSTEM: DesktopData: The people over at antiX forums were really helpful 
+finding/testing the new desktop/wm etc logic. Many glitches, errors, bugs, etc, 
+found and corrected thanks to the excellent testing. ile and abc-nix in 
+particular found some significant issues that were finally resolved. Also thanks 
+to Brian Masinick, rokytnji, anticapitalista for helping making antiX for all 
+these years.
+
+https://www.antixforum.com/forums/topic/testing-pinxi-next-inxi-user-ram-\
+report-no-root-sudo-and-much-more/
+
+5. RAM: The new udevadm was significantly improved and corrected thanks to the 
+Slackware forums people. As is often the case, when it comes to having complex 
+non-standard hardware, they came though, and exposed some key problems which let 
+this new feature come out the door in much better shape than it would otherwise 
+have done.
+
+https://www.linuxquestions.org/questions/slackware-14/new-inxi-pinxi-\
+features-user-ram-reports-and-much-more-testers-4175732843/
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1a. SYSTEM: DistroData: no obvious way to detect edubuntu, bunsenlabs, sorry.
+
+1b. SYSTEM: CompilerVersion::version_proc(): the /proc/version string is far 
+too unreliable because distros keep making up new syntaxes, which makes regex
+parsing fail consistently over time. Ubuntu was the latest culprit. Need a 
+better data source, ideally from /sys. Latest breaks handled with much looser 
+regex, but only matter of time before a new string pattern breaks it.
+
+2. GRAPHICS: No API type data so far for non Xvesa TinyX servers. They don't 
+seem to support the -list option like Xvesa does.
+
+3a. CORE: very old busybox ps did not accept any arguments, so will always fail.
+However, this is not important since new busybox has supported that for a long 
+time.
+
+3b. CORE: in some cases, ps -wwjp $pppid truncates long command names, like 
+io.elementary.t[erminal]. No idea why since -ww is supposed to make it not 
+truncate.
+
+4. CPU: for at least AMD Threadripper 2950x 16 core, 2 die, core counts are 
+wrong, but since I never got the required data, and can't guess, that will 
+remain wrong until I get data from a comparable CPU to debug it using the CPU 
+data pairs required to figure it out. Why people file issues that only their 
+system data can resolve, then refuse to supply that data, is beyond me, I was 
+hoping to get away from this type of problem by going to codeberg, but 
+apparently it's a universal issue. My guess is that for the Zen+ only series, > 
+1 die, the core numbers were per die, not per physical CPU as with all other 
+AMDs and Intels. Just a guess though, not going to act on it because fix is very 
+hard if that's the case, and I won't work on it without the real data.
+
+5. RAM: udevadm data: 
+
+* For some reason, voltages are reported as 1, for all types, or not at all. 
+This is almost certainly a bug with udevadm or the way it collects data, so inxi 
+shows note: check when they are all equal to 1.
+
+* Unfortunately the udevadm authors neglected to provide RAM array and matching 
+device handles so we can easily match array to device, and they also totally 
+neglected reporting on actual arrays found, for systems with > 1 array, they 
+list only the specs for the one array. inxi has to do the work to actually try 
+to generate the array capacities etc. This relies on a weak hack, assume that 
+Node [x] refers to the array, which so far has been the case, but very weak, and 
+very poor execution by udevadm ram feature authors, sad to say.
+
+* As far as we can tell, udevadm does not support:
+udevadm info -p /devices/virtual/dmi/id
+option until somewhere between v245 (no support) and v249 (supported). This 
+means that some distros that ship a pre 249 version will not get user RAM data. 
+Known is Slackware 15.0 (but is in Current), TinyCore 14, and probably other 
+tiny distros. Many LTS type frozen pool distros will probably not support it.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. SYSTEM: kernel gcc version: see FIXES 4a. While this is not a bug per se, 
+since who can predict when a distro will change format to /proc/version, users
+might see it as one. This impacted various distros.
+
+2. INFO: init detection for busybox /sbin/init hung forever on slitaz, now 
+works, and adds the busybox version as well. This was exposed by slitaz. Also 
+was showing sysvinit for TinyCore, the slitaz fix also fixed the failure to ID
+BusyBox init on TC.
+
+3. CORE: see Fix 7b, inxi used wrong path for its .d config locations, never 
+spotted it since I never use those, showed up in codeberg issue #295 when that 
+did not work.
+
+4. GRAPHICS: EGL: see Fix 6b. Was missing one error message type, leading to 
+undefined value print error.
+
+5. CPU: vascom in issue #297 reported an unset value error in disabled smt 
+cpu speeds, see CODE 8. This required a CPU debugger data upgrade to handle 
+more cleanly. It appears that a Perl behavior has changed, it was returning '' 
+for undefined read, now seems to be returning the correct undefined. Or could 
+be kernel that changed that, can't say, but creates buggy looking output with 
+Perl errors. No actual data bugs though.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. DOWNLOADER: Small error in assignment could lead to onscreen error output. 
+Not worth a new release fix. Added to inxi master as 3.3.31-2.
+
+2. SENSORS: corner case with undefined value where it's almost always defined 
+for load_sys_data(). Shows undefined on screen output. Never seen this until 
+today, but that's how it goes. Also added to inxi master as 3.3.31-2.
+
+3a. PARTITIONS: added possible filter path: /dev/(block/)?loop[0-9]+, saw that
+on Android.
+
+3b. PARTITIONS: added vboxsf, not a typo, that's a client mounted host fs for
+vbox, works like nfs/smb re filters etc. Never seen that one before, probably 
+because I almost never use the host > guest shared folder feature of vbox.
+
+4a. SYSTEM: CompilerData: kernel gcc version: found _more_ syntaxes for the gcc 
+string in /proc/version. The randomness of this string generation forced a redo 
+of the regex, which should now catch almost any gcc/clang version number no 
+matter how weird the syntax is. The new regex is much looser and handles all 
+known variants.
+
+4b. SYSTEM: DesktopData: 
+
+* Fixed broken fvwm-crystal ID, that one is tricky, and it got broken by 
+accident a while back.
+
+* Fixed broken echinus hackedbox mvwm detections, had neglected to add those in 
+PsData::set_gui() for some weird reason. Also had forgotten to add some of those 
+to ProgramData::set_values(). Also note that TinyCore ships with hacked box, but 
+their -version is broken, shows v: 2001 because they forgot to add in the actual 
+version in the string. Forgetting to update all the locations of those string 
+lists was a big reason that the ps handler was fully refactored, and all uses of
+its data, too hard to maintain when having to update in multiple locations the 
+same value.
+
+* Fixed broken KDE 4 version, qt data. That has been broken for a while.
+
+* Fixed corner case where wm is detected, and is the same as de/wm parent, and 
+is rejected, but then since wm is not populated, it runs wmctrl anyway, which 
+can result in wrong results, like showing wm: wlroots wm [a generic term] for 
+Hyprland wayland wm.
+
+* Fixed broken Muffin (Cinnamon wm) detection.
+
+* Added tk: GTK for Budgie, Pantheon. Added tk: Qt for lxqt variants. These 
+often worked before, but now are more robust.
+
+* Fixed bad JWM wm version, was using --version, -v is right.
+
+* Fixed xfwm, was not showing xfwm4 etc, just xfwm.
+
+* Fixed spectrwm version detection, the old verbose string was simplified to:
+spectrwm x.y.z Build: a.b.c. Used filter method to dump the old verbose part.
+
+5. RECOMMENDS: wrong package name for pacman eglinfo, glxinfo.
+
+6a. GRAPHICS: gl_data(): 
+
+* fixed use of undefined $platform, missed some, those can and did spew out 
+errors in some cases due to trying to use undefined hash key name.
+
+* fixed case where EGL version was not fully numeric: 1.4 (DRI2)
+
+6b. GRAPHICS: API data: see Bug 4. Was missing one api data error message type.
+This led to output of undefined value print errors. The real cause however was 
+inconsistent naming of the gfx api message types, which is the main fix, along 
+with adding the missing one. Now they all match and are easy to scan. Making 
+things consistent internally has been a main goal of the 3.3.32 release.
+
+7a. CORE: See CODE 7b, fixed corner cases ps failures for older or more stripped 
+down busybox ps. Now should handle all cases automatically.
+
+7b. CORE: Configs::set() had the wrong paths for all the .d directories, making 
+those fail. Was missing the .conf part of the path, just showed inxi.d/. Oops.
+
+7c. CORE: main::set_basics(): found case where $ENV{'HOME'} undefined, which 
+trips undefined concat errors. Attempt to set it manually with whoami and paths.
+
+8. PROCESSES: Long standing error, probably imported from original bash inxi, 
+with -tm showed broken throttled message even though no throttling occured. This 
+only happened with -tm, not -tc or -tcm. 
+
+9. INFO: GCC versions: switched to ProgramData::full(). Fixed regex to allow the 
+primary version number (12.2,9,4.8, etc)) for alt, we don't care about sub-sub 
+versions there, but we do care about sub versions. Sort numeric for results, 
+which corrects the odd order created by alpha sorts before. Fixed broken filter 
+to exclude default gcc version from alt list.
+
+This fix also exposed alt gcc version detection failure on FreeBSD, different 
+path, and different executable name syntax (/usr/bin/gcc-9 vs 
+/usr/local/bin/gcc9 as well as an odd legacy numbering format for 4.8, 4.9 
+(gcc48,gcc49).
+
+10. MACHINE: Fixed some BSD sysctl machine field name assignments that may have 
+resulted in those fields never showing in output. Added some conditional tests
+as well. Also fixed and normalized some dmidecode mobo/chassis field names.
+
+11a. RAM: In some cases, module locator is only DIMM 1, without the channel. If 
+Channel [A-Z]] is found in branch locator, prepend that to DIMM X to make actual 
+location more obvious.
+
+11b. RAM: In cases of > 1 RAM array, failed to reset the slots active counter 
+in each array. This led to silly looking active slots totals for the arrays.
+
+12. REPOS/INFO: PackageData for cases where distro uses a package manager non
+natively, like AltLinux with apt-get, but no dpkg, so can't get package counts.
+Now detects pm and uses right command to get package list and show tools.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1a. SYSTEM: DistroData: 
+
+* Adding initial support for Ubuntu internal spins, like Kubuntu, Lubuntu, 
+Xubuntu. Shows project name for distro, and adds base: Ubuntu for -Sx.
+
+* Forcing os-release use for Fedora, that captures spins like Onyx 
+automatically. Was using redhat-release, which had the Fedora version string, 
+but best to use os-release explicitly. Too bad we can't default everything to 
+use os-release, but that's not reality.
+
+* Added in Fedora system base for variety of Fedora based distros. This corrects 
+many from IDing as RHEL 39 etc, now shows Fedora. As with all derived distros, 
+these ids are not all tested, but often work. Confirmed: Nobara, risiOS, 
+Ultramarine. Not all are identifiable. 
+
+* Added Devuan system base distros: crowz, dowse, etertics, exe, fluxuan, 
+gnuinos gobmis, heads, miyo, refracta, star, virage. This should in many cases 
+automatically cover the specific derived distro ID as well since those usually 
+are in the 'PRETTY_NAME' field of /etc/os-release. Not exe, not star, I believe.
+
+* Added in Debian/Devuan system base support for Peppermint, that requires 
+custom rule since the base can be either. Selection based on presence/absence of 
+/etc/devuan_version.
+
+* Added special distro id where distro id is from distro-version file, but ID is 
+only numeric. Slitaz does this for example. Takes file, slices off 
+{-version,release}, then concatenates the distro name and number. This is 
+uncommon, but should anyone else do it that way, easy to add now.
+
+1b. SYSTEM: DesktopData: 
+
+* Added screensaver/locker (tools:) to -Sxxx/-Sa. -Sxxx shows running tools, and 
+-Sa adds avail: for any installed, but not running. That's because many of these 
+tools are not daemons, but are triggered by a daemon.
+
+* Added wm dawn, dusk. Those are dwm forks so assuming -v works the same for 
+version (to stderr). Added wms w9wm, x9wm - assuming -version info same as for 
+9wm, which is what they were forked from I believe.
+
+* Added CDE and dtwm, because, well, why not? No version for either. And NsCDE,
+which uses FVWM2 for wm.
+
+* Added Draco (a Lumina spin) support.
+
+* For -a and KDE, added advanced data info: frameworks v: x.y.z. Other desktops 
+with comparable and detectable advanced data will be added as we find them. Note 
+that this repurposed the previous use of the info: field name, which is now 
+with:.
+
+* For qtile, spectrwm, and maybe others, they give wmctrl a false wm id, for 
+some reason, now inxi gets rid of that since it's a fictional result, done 
+deliberately, but is not the wm.
+
+* Item: info: added more bars, panels, menus, launchers.
+
+* Added --dbg 63 user debugger so we can track down how de/wm/tk detections 
+happen, their data sources, etc. See CODE 4c. Much easier to say add --dbg 63
+than to say all the stuff to echo etc. antiX testers showed how useful this 
+could be right away, as did dev vm testing for de/wm.
+
+* Added ELF toolkit data (Enlightenment, Moksha). The elf-version tool is not
+always there, but if it is, tk is easy to get.
+
+1c. SYSTEM/GRAPHICS: Added bismuth, maynard, orbment, polonium, swayfs 
+compositors.
+
+1d. SYSTEM: DmData: 
+
+* Added lm: (login mamager) type fallback, if no dm detected. Added seatd, 
+elogind, greetd to the fallback lm. Some of those were in the main dm block 
+before, but now they are detected as login managers in case where no dm was 
+detected. This handles de, wm, wayland compositors using seatd, elogind, etc.
+
+* Added lemurs display manager. Not verified, don't know if --version info.
+
+2a. GRAPHICS: tentatively trying for Android Surfaceflinger, and other display 
+data. 
+
+2b. GRAPHICS: a long standing weakness, fuzzy mapping of X.org port IDs to 
+DRM port IDs may be finally resulved, assuming xrandr --prop and drm device in 
+/sys. Now matching connector_id to CONNECTOR_ID, which is an absolute match 
+using an integer value ID. This now precedes all other mapping tests in the 
+port ID mapper.
+
+2c. GRAPHICS: added support for all known tiny X display servers: 
+
+Xchips Xfbdev Xi810 Xigs Xipaq Xmach64 Xmga Xmodesetting Xneomagic Xsavage 
+Xsis530 Xtrident Xtrio Xts300 Xvesa
+
+I had no idea anything other than Xvesa existed, but apparently there's a bunch! 
+Found this when testing TinyCore Pure64, which uses Xfbdev. I did not know that 
+Xvesa only supports 32 bit either. This was exposed when testing on TinyCore 
+Pure64.
+
+Also changed to dynamic detection using ps data, which then allows for sometimes 
+getting the screen resolution as well from ps for TinyX servers. Also avoids 
+cases where > 1 were installed but only 1 is running, of course.
+
+2d. GRAPHICS: Xfbdev may expose the virtual_size of screen assuming 
+/sys/devices/platform/*/graphics/*/virtual_size exists.
+In test system, that's:
+/sys/devices/platform/vesa-framebuffer.0/graphics/fb0/virtual_size
+
+This allows showing resolution for at least Xfbdev TinyX systems, like TinyCore 
+Pure64. No idea if this is a general thing or I just happened to find a case 
+where it works.
+
+This goes along with adding the resolution from ps start string if present.
+
+2e. GRAPHICS: gfx vendor ID updates: AMD, Intel, Nvidia. This finally saw more  
+IDs generated for their latest generation gpus, which had been sparse before.
+
+3a. INFO/REPOS: PackageData: added pm tools: 
+
+* pacman: added baph, pacseek.
+
+* deb/apt: added muon.
+
+3b. INFO/REPOS: PackageData/RepoItem: added tazpkg (slitaz pm).
+
+3a. INFO: Power: added to wakeups, and created Power: type that turns on with 
+-Ixxx:
+* uptime
+* states - suspend/hibernate types supported 
+* suspend: active type
+  * other available types [-Ia]
+  * wakeups 
+* hibernate: active type 
+  * other available types [-Ia]
+  * hibernate image size [-Ia]
+  
+-Ia: Adds Power daemons running.
+  
+This closes issue #292 for adding power state report.
+
+3b. INFO: Compiler: added tentative support for zigcc. Also extended to support 
+clang alt versions, along with BSD alt paths for clang, gcc alt locations. This 
+adds support also for BSD type /usr/local/bin alt gcc/clang paths, so that data 
+will suddenly appear for the inxi BSD users out there.
+
+4. VERSION: Along with deprecating -V, added --vf (--version shortcut), which 
+goes along with --vs / --version-short to maybe easier to remember?
+
+5. WEATHER: Added --wu as short-cut for --weather-unit, no idea why that wasn't
+done already.
+
+6. REPOS: Added tazpkg (slitaz).
+
+7. CORE: Added /usr/etc, /usr/etc/inxi.conf.d, /usr/local/etc, 
+/usr/local/etc/inxi.conf.d as possible default paths for inxi.conf files. 
+Apparently IBM-Redhat is pushing for that change, which will ship first in 
+Fedora. Also, the /usr/local/etc paths would let BSDs, that use /usr/local for 
+non core, to put the inxi config in there instead, if they wanted. Though as far 
+as I know, none of the BSDs is actively packaging inxi.
+
+8a. MACHINE: For -Mxx, show board part number (part-nu) if available. This 
+usually comes from /sys product_sku or SKU Number in dmidecode, but can be 
+sourced on other systems from different data sources.
+
+8b. MACHINE: Add (if detectable, bad data sources) device type for Elbrus.
+
+8c. MACHINE: Show board UUID with -Mxxx, if available. Filtered with --zu.
+
+9a. RAM: Added udevadm as possible non root RAM array/module data source.
+
+9b. RAM: Added for case of > 1 RAM system board array a Report: line for totals
+of arrays, capacity, used capacity, slots, used slots, eec, module type.
+
+10. CPU: more CPU microarch CPUID product IDs, for some future cpus as well.
+
+11. RECOMMENDS: Added wayland-info to display recommends now that it finally hit 
+the repos.
+
+12. DRIVES: More disk vendors, new ID matches! Yes, it never ends, like the Way,
+like a river flowing from the mountains, like the sun and the moon...
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. DOCS: data/audio: renamed and removed some stray gz files.
+
+2a. INFO: split into up to 3 separate primary lines, Memory, Power/Process/Init,
+Packages, depending on verbosity levels. This really cleans up something that
+has gotten increasingly messy and random over the years as features were added.
+
+2b. INFO: -Ixx triggers wakeups, instead of -Ixxx. Also, -Ixx triggers the 
+parent Power: item that contains uptime:, wakeups:, and all the other power 
+items from -Ixx and higher verbosity levels.
+
+2c. INFO: Compilers: changed order of detected compilers to be alphabetic 
+(clang, gcc, zigcc), now that zigcc added might as well make it not gcc-centric 
+as in past. 
+
+3a. OPTIONS: -W/--weather-location are removed, and location is merged into -w 
+[location], thus freeing up a redundant use of a primary single letter for a 
+feature. Also, upper case letters were supposed to be used mainly for core, 
+unique, features, not just a secondary feature of a secondary feature. Lower 
+case only is what should have been used, like with -s. I am guessing that in 
+inxi bash/gawk, I could not handle optional args, and thus had to use 
+lower/upper, one for no arg, one for arg.
+
+3b. OPTIONS: -V is deprecated, and will show message. --vf/--version will 
+activate full version info, along with --vs/--version-short for the 1 liner 
+special short version. 
+
+Also done to reclaim an upper case primary letter. If nobody complains, will 
+remove -V next release, if someone complains, will keep -V / --version and 
+remove deprecation message.
+
+-V is removed from help/man however so new users won't guess to use it, meaning
+eventually we can get rid of that -V and free it for better use.
+
+3c. OPTIONS: --gpu, --nvidia, --nv are removed. Those were replaced by -Ga a 
+while ago. They were only temporary options used when the feature was first 
+created, when it was not sure to remain.
+
+4a. SYSTEM: Display Manager (dm:) now is dynamically assigned, in cases where no 
+dm but a login/seat manager like seatd, elogind running, which is more common 
+with Wayland starts, now shows lm: (login manager) instead if one was found. 
+Goes with CODE 3c refactor.
+
+4b. SYSTEM: changed Desktop info: to with: (for bars, docks, menu, panels, 
+trays), which is more accurate, and switched info: to advanced de data, like KDE 
+frameworks.
+
+4c. SYSTEM: changed output order, put wm: after de tk: info: and before with:.  
+This turns it into a sentence: DE: + tk: + info: + wm: + with: + tools: + dm/lm:
+
+5. CORE: Configs::set() had wrong paths testing for config files, missing the 
+.conf in inxi.conf.d. The old version was an accident. Just on off chance anyone 
+actually used the wrong path, leaving those in the config path tests, but 
+removed from man/options etc.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. DOCS: docs/inxi-graphics.txt: added ANDROID DATA, following some new 
+information and research re Android display/compositors. Also refactored the doc 
+file, and added more and better navigation and organization, particularly for
+DISPLAY SERVER DATA and MONITOR DATA. Moved COMPOSiTOR DATA to 
+inxi-desktop-wms.txt.
+
+1b. DOCS: docs/inxi-distros.txt: updated for more distros and system base info.
+
+1c. DOCS: docs/inxi-power.txt: power state, screensaver/locker data.
+
+1d. DOCS: docs/inxi-tools-mapping.txt: added POWER section for screensaver/
+lockers.
+
+1e. DOCS: docs/inxi-values.txt: reorganized, improved navigation and 
+organization. Ongoing updates to values for new features and debuggers.
+
+1f. DOCS: docs/inxi-init.txt: added BusyBox init, updated Upstart with warnings 
+about pre-tests required.
+
+1g. DOCS: docs/inxi-desktop-wm.txt: These upgrades were done in conjunction with
+the related refactors, particularly of PsData and ProgramData.
+
+*added DISPLAY/LOGIN MANAGERS section, and documented all the dm/lm used. This 
+goes with refactor into DmData of CODE 3c. 
+
+* Added COMPOSITOR DATA (moved from inxi-graphics.txt) to make easier to match 
+up wm/compositor data. 
+
+* Added DESKTOP/WM INFO TOOLS itemized bars, docks, launchers, panels, menus, 
+trays.
+
+2. DATA: data/audio: added huge collection of audio datasets from mrmazda. 
+Thanks!
+
+3a. MAN/OPTIONS: Updates for power data for -Sxxx/-Sa, -Ixx/-Ixxx/-Ia. 
+
+3b. MAN/OPTIONS: Removed references to -V, -W options, merged -W with -w.
+
+3c. MAN/OPTIONS:  Edits, fixes, proofreading corrections of issues that have 
+crept in over time.
+
+3d. MAN/OPTIONS: Removed --gpu, --nvidia, --nv, which were merged into -Ga a 
+while ago.
+
+3e. MAN/OPTIONS: Changed gcc specific compiler to compiler generics, since now 
+the old gcc\-centric compiler data supports clang alt versions, and zigcc.
+
+3f. MAN/OPTIONS: Updated -m for new udevadm DMI RAM data source.
+
+4. OPTIONS: Fixed some indentation errors.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. Fixes 1, 2 were both due to some undefined values being improperly handled. 2 
+was odd because it's literally never shown up before (using regex on undefined 
+hash key), but it was a mistake in 3.3.31, just a Perl language thing that 
+didn't do what I thought it would do..
+
+2a. GRAPHICS: xrandr_data(): switched to direct qx() for xrandr data, this 
+allows checking for error return, which allows using --prop, which was not 
+supported until xrandr 1.2 (~2009). Debian Etch had 1.1, for example. Also 
+switched to array data since it's local to function. This is to get 
+connector-id.
+
+2b. GRAPHICS: map_monitor_ids() now first tries to map via connector ID, and 
+only falls back to the less reliable mapper tests if a match failed.
+
+2c. GRAPHICS: abstracted away from Xvesa only tests to TinyX X server tests. 
+Note that so far only Xvesa appears to have an API via -list command.
+
+2d. GRAPHICS: failed to set empty array ref to $x_drivers when --force wayland 
+is used, which made the @$x_drivers tests fail. Only devs would ever see this.
+
+3a. SYSTEM: DistroData: made debian_id() also support devuan ID via switch. 
+Added redundancy testers for os_release codename append as well, using same 
+logic. This refactor also removed some tests that would never have been true.
+
+3b. SYSTEM: main::get_display_manager(), had a silly error with creating 
+globbing pattern that could have made it fail in the case, > 1 directories used 
+to glob; refactored get_display_manager into DmData, which now also handles 
+Display Managers and Login Managers, like greetd, seatd, elogind.
+
+3c. SYSTEM: DesktopData:
+* Changed DesktopEnvironment to DesktopData, to be more consistent.
+
+* Reordered, renamed subs, organized entire package to be more maintainable and 
+consistent with newer inxi style.
+
+* DesktopData::wm_ps_xprop_data(). Reversed order, first now does ps tests, then 
+xprop, was getting false detections for blackbox.
+
+* DesktopData::de_wm_debugger(). See 4c.
+
+* DesktopData: improved methods for getting gtk/qt desktop data, using new 
+ProgramData::full version data return coupled with item_from_version(), avoids 
+extra subshells to get the same data we already collected, but threw away.
+
+* DesktoppData::item_from_version(). Works with new ProgramData::full() option to get
+full version data ref returned, this avoids making multiple subshell calls to 
+get two bits of data from same thing. Used for GTK and Qt data currently.
+
+* DesktoppData::set_xprop(): Fully refactored all xprop data to be more 
+maintainable and clean.
+
+3d. SYSTEM: changed CompilerVersion which is for kernel compiler to the more 
+obvious KernelCompiler, then moved it with the other kernel data tools. 
+
+4a. DEBUGGING: SystemDebugger:
+
+* display_data(): added in xrandr --prop/--verbose to match upgraded xrandr data 
+parsing.
+
+* system_data(): added fruid_print, udevadm commands.
+
+* system_files(): added/proc/bootdata.
+
+4b. DEBUGGING: added @dbg switches:
+
+* --dbg 58: $power data.
+
+* --dbg 59: $desktop data array (long overdue, no idea why that was left off).
+
+* --dbg 60: display_mamager $found].
+
+* --dbg 61: PsData::set_cmd(), print out @ps_cmd result working ps data.
+
+* --dbg 62: $compilers main::get_compiler_data().
+
+* --dbg 63: DesktopData::de_wm_debugger() for ps wm/comp/de output, and for 
+DesktopData step by step results, so we know what detected what and how.
+
+* --dbg 64: ProgramData::version() print out full version data block.
+
+* --dbg 65: PackageData: print out raw %pms hash.
+
+5. ERROR HANDLER: Added option-deprecated, option-removed items, for -V, -W, 
+--gpu/--nvidia/--nv type change/remove scenario.
+
+6a. CORE: fixed two stray redeclares of $start in OpticalItem::get() and 
+RepoItem::get() which Perl 5.008.0 correctly notes is redeclaring it, but for 
+some reason all newer Perl's accept. Funny things that show up testing on 
+ancient systems, in this case, I'd say the original Perl was right and the new
+one is allowing something to happen it should not. Also changed $start in 
+PartitionItem::set_filters to $begin to avoid that pussible clash.
+
+6b. CORE: Added filter type to main::filter, that way it can be used for other 
+filters, like filter-uuid for non partitions.
+
+6c. CORE: Full ps logic refactor: PsData package created, merged in old 
+set_ps_aux, set_ps_de_wm and changed them to methods set_cmd and set_de_wm. 
+Refactored set_cmd to be much more robust and handle busybox automatically. 
+
+* Changed global $load{'ps-aux'} to $load{'ps-cmd'} which makes more sense since 
+that is what it was loading.
+
+* Old busybox failed if you supplied it with standard ps args, but new busybox 
+accepts and ignores them. Now inxi checks if busybox ps, then dumps the args, 
+and sets a busybox switch to allow for more ps data for busybox ps, which will 
+be used to detect TinyX screen dimensions.
+
+* Got rid of global $b_busybox_ps and test for that, it is not used anymore. 
+Added switch for busybox to use more columns of ps to try to trap -screen 
+resolution for TinyX servers. Only some show that in ps.
+
+* Optimized subsequent uses of @ps_cmd by dumping stuff inxi will never need,
+like browsers, various servers, etc. Also run uniq() on result since we only 
+nned one instance of each command for subsequent tests.
+
+* Switched to using full %ps_data, including for header position counts, which 
+helps make much more robust odd ps types that might have CPU or RSS or MEM 
+but not in the expected order, or incomplete. Before relied on hoping it would 
+work and be consistent, which is not the case for BusyBox ps. Now all the hard 
+coded indexes are dynamically set, using the header positions grabbed in 
+PsData::set_cmd(). Specific detections added: info-active, tools-active, 
+tools-test to avoid duplicating test arrays globally.
+
+* Got rid of @ps_gui global, replaced fully with granular de/wm/comp $ps_data 
+hash arrays, which are then assembled as needed in each section, desktop and 
+compositor, that might use them. This allowed, finally, for getting rid of all 
+those redundant wm/comp items, now the wm/comp/de ids are set in only one place, 
+PsData::set_gui(). This had been a long standing problem because I would forget 
+to update one set of wm/comp, and had to do loops over and over when all that is 
+required now is the initial searches through @ps_cmd, which is also much 
+shorter, containing only the stuff inxi will need to check.
+
+Now to add a detection, wm, comp, tool, info, dm item, just need to add it in 
+one place, ps_de_wm, and there are also no repetitions in there, which there 
+were before. I expect this will make it much easier and less error prone to add 
+new items to the various lists.
+
+* Added PsData::set_dm() to handle fallback dm detection, when none found in
+/run type directories. Only fires when nothing else found.
+
+* Added PsData::set_power() to handle power daemon detections.
+
+* Added --dbg 61 to print out @ps_cmd in output section, where it's also logged.
+Leaving it out was an oversight.
+
+6d. CORE: Program data refactor into package: ProgramData
+
+* Converted program_{data,values,version} and related subs into package 
+ProgramData with public methods full(), values(), version(). 
+
+* Moved the entire package code block into the Items Data generator section.
+
+* Moved more program version that used hardcoded values in the caller to use 
+full() and set_values() data instead, wherever practical.
+
+* Made version() use array refs from start to finish, and dumped the old method 
+of using open on the text block from file or program version command result. Not 
+clear why I ever did it that way, probably I did not understand refs when that 
+was originally translated.
+
+* Added version data array ref return option, useful to avoid having to make 
+double calls when getting stuff like toolkit version. Used for example in 
+DesktopData::item_from_version().
+
+6e. CORE: Corrected paths for development fake data files, I'd forgotten to use 
+$fake_data_dir global in many places, now all fake data paths use that single 
+source, which can be changed using config or --fake-data-dir option.
+
+6f. CORE: main::grabber(): made sure all commands for this include the proper
+redirect, usually 2>/dev/null, several were missing that, which could in theory
+have led to visible error output on the screen.
+
+7a. INFO: InitData: got rid of redundant readlink /sbin/init, that's now read 
+at first to $link, which is then what is tested in all following tests.
+
+7b. INFO: Refactored get_gcc_data() into get_compiler_data, which now supports 
+gcc and clang to do FIX 9. Cleaned up, switched to ProgramData::full(), fixed 
+weak globbing pattern, fixed broken compiler alt version exclude default 
+installed compiler version.
+
+8a. CPU: Refactored, now all cpu fake data files are set in 
+CpuItem::set_fake_data(), makes it easier to manage.
+
+8b. CPU: a change in either kernel /sys or Perl made Perl return udefined value 
+where before it returned '' in cpuinfo data() (now cpuinfo_speed_sys()) speeds.
+
+8c. CPU: split out cpuinfo_speed_sys() from cpuinfo_data().
+
+9a. RAM: refactored dmidecode_data module data into separate functions so they 
+can be used by udevadm_data_process as well. Made process_locator, 
+process_manufacturer.
+
+9b. RAM: refactored the speed logic, now uses raw numeric plus units, so they 
+can be worked with then reassembled more readily.
+
+9c. RAM: refactored speed_mapper, BSD matching table, to avoid loading entire 
+mapping table each time. Brings logic closer to Linux logic.
+
+9d. RAM: refactored ram_output, split out arrays_output, which now handles 
+--memory-short/--ms, and case of > 1 array detected, same format for both.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Tue, 30 Jan 2024 18:47:20 -0700
+
+================================================================================
 Version: 3.3.31
 Patch: 00
 Date: 2023-10-31
