@@ -55,11 +55,6 @@ StartQPKG()
 		echo -e "This QPKG is disabled. Please enable it first with:\n\tqpkg_service enable $QPKG_NAME"
 		return 1
 	else
-        if ! (command -v perl >/dev/null); then
-            LogWrite 'unable to start: a Perl interpreter was not found' 2
-            return 1
-        fi
-
         if [[ ! -L $USERLINK_PATHFILE && -e $LAUNCHER_PATHFILE ]]; then
             ln -s "$LAUNCHER_PATHFILE" "$USERLINK_PATHFILE"
 
