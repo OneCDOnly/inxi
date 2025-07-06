@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>org.smxi.inxi</id>
+  
+  <name>inxi</name>
+  <summary>Command line system information tool</summary>
+  
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <!--<developer id="org.codeberg.inxi">Harald Hope</developer>-->
+
+ <content_rating type="oars-1.0" />  
+
+  <description>
+    <p>
+      inxi is a full featured command line system information tool that lets you really dig into the guts of your hardware and software stacks.
+    </p>
+  </description>
+  
+  <icon type="stock">utilities-terminal</icon>
+  
+  <categories>
+    <category>System</category>
+    <category>Monitor</category>
+  </categories>
+  
+  <provides>
+    <binary>inxi</binary>
+  </provides>
+  
+  <url type="homepage">https://codeberg.org/smxi/inxi</url>
+  <url type="bugtracker">https://codeberg.org/smxi/inxi/issues</url>
+  <url type="faq">https://smxi.org/docs/inxi-faqs.htm</url>
+  <url type="help">https://smxi.org/docs/inxi.htm</url>
+  <url type="donation">https://smxi.org/site/donations.htm</url>
+</component>

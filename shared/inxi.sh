@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 ####################################################################################
 # inxi.sh
-# 	copyright 2020-2024 OneCD
+#   Copyright 2020-2025 OneCD
 #
 # Contact:
 #	one.cd.only@gmail.com
 #
-# This script is part of the 'inxi' package
+# Description:
+#   This script is part of the 'inxi' package
+#
+# Application source:
+#   https://codeberg.org/smxi/inxi
+#
+# QPKG source:
+#   https://github.com/OneCDOnly/inxi
+#
+# Available via the sherpa package manager:
+#	https://git.io/sherpa
 #
 # This program is free software: you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -24,27 +34,28 @@
 
 set -o nounset -o pipefail
 shopt -s extglob
-ln -fns /proc/self/fd /dev/fd		# KLUDGE: `/dev/fd` isn't always created by QTS.
-
-readonly USER_ARGS_RAW=$*
+[[ -L /dev/fd ]] || ln -fns /proc/self/fd /dev/fd		# KLUDGE: `/dev/fd` isn't always created by QTS.
+readonly r_user_args_raw=$*
 
 Init()
     {
 
-    readonly QPKG_NAME=inxi
+    readonly r_qpkg_name=inxi
 
-    readonly NAS_FIRMWARE=$(/sbin/getcfg System Version -f /etc/config/uLinux.conf)
-    readonly QPKG_PATH=$(/sbin/getcfg $QPKG_NAME Install_Path -f /etc/config/qpkg.conf)
-        readonly LAUNCHER_PATHFILE=$QPKG_PATH/inxi.pl
-    readonly QPKG_VERSION=$(/sbin/getcfg $QPKG_NAME Version -f /etc/config/qpkg.conf)
-    readonly SERVICE_ACTION_PATHFILE=/var/log/$QPKG_NAME.action
-	readonly SERVICE_RESULT_PATHFILE=/var/log/$QPKG_NAME.result
-    readonly USERLINK_PATHFILE=/usr/bin/inxi
+    # KLUDGE: mark QPKG installation as complete.
 
-    /sbin/setcfg "$QPKG_NAME" Status complete -f /etc/config/qpkg.conf
+    /sbin/setcfg $r_qpkg_name Status complete -f /etc/config/qpkg.conf
 
-    # KLUDGE: 'clean' the QTS 4.5.1 App Center notifier status.
-    [[ -e /sbin/qpkg_cli ]] && /sbin/qpkg_cli --clean "$QPKG_NAME" > /dev/null 2>&1
+    # KLUDGE: 'clean' the QTS 4.5.1+ App Center notifier status.
+
+    [[ -e /sbin/qpkg_cli ]] && /sbin/qpkg_cli --clean $r_qpkg_name &> /dev/null
+
+    local -r r_qpkg_path=$(/sbin/getcfg $r_qpkg_name Install_Path -f /etc/config/qpkg.conf)
+        readonly r_launcher_pathfile=$r_qpkg_path/inxi.pl
+    readonly r_qpkg_version=$(/sbin/getcfg $r_qpkg_name Version -f /etc/config/qpkg.conf)
+    readonly r_service_action_pathfile=/var/log/$r_qpkg_name.action
+	readonly r_service_result_pathfile=/var/log/$r_qpkg_name.result
+    readonly r_userlink_pathfile=/usr/bin/inxi
 
     }
 
@@ -52,21 +63,21 @@ StartQPKG()
     {
 
 	if IsNotQPKGEnabled; then
-		echo -e "This QPKG is disabled. Please enable it first with:\n\tqpkg_service enable $QPKG_NAME"
+		echo -e "This QPKG is disabled. Please enable it first with:\n\tqpkg_service enable $r_qpkg_name"
 		return 1
 	else
-        if [[ ! -L $USERLINK_PATHFILE && -e $LAUNCHER_PATHFILE ]]; then
-            ln -s "$LAUNCHER_PATHFILE" "$USERLINK_PATHFILE"
+        if [[ ! -L $r_userlink_pathfile && -e $r_launcher_pathfile ]]; then
+            ln -s "$r_launcher_pathfile" "$r_userlink_pathfile"
 
-            if [[ -L $USERLINK_PATHFILE ]]; then
-                echo "symlink created: $USERLINK_PATHFILE"
+            if [[ -L $r_userlink_pathfile ]]; then
+                echo "symlink created: $r_userlink_pathfile"
             else
                 LogWrite 'error: unable to create symlink to the launcher' 2
                 echo "error: unable to create symlink to 'inxi' launcher!"
                 return 1
             fi
         else
-            echo "symlink exists: $USERLINK_PATHFILE"
+            echo "symlink exists: $r_userlink_pathfile"
         fi
 	fi
 
@@ -77,11 +88,11 @@ StartQPKG()
 StopQPKG()
     {
 
-    if [[ -L $USERLINK_PATHFILE ]]; then
-        rm -f "$USERLINK_PATHFILE"
-        echo "symlink removed: $USERLINK_PATHFILE"
+    if [[ -L $r_userlink_pathfile ]]; then
+        rm -f "$r_userlink_pathfile"
+        echo "symlink removed: $r_userlink_pathfile"
 
-        if [[ -L $USERLINK_PATHFILE ]]; then
+        if [[ -L $r_userlink_pathfile ]]; then
             LogWrite 'error: unable to remove symlink to the launcher' 2
             echo "error: unable to remove symlink to 'inxi' launcher!"
             return 1
@@ -95,7 +106,7 @@ StopQPKG()
 StatusQPKG()
     {
 
-    if [[ -L $USERLINK_PATHFILE ]]; then
+    if [[ -L $r_userlink_pathfile ]]; then
         echo active
         exit 0
     else
@@ -115,14 +126,14 @@ ShowTitle()
 ShowAsTitleName()
 	{
 
-	TextBrightWhite $QPKG_NAME
+	TextBrightWhite $r_qpkg_name
 
 	}
 
 ShowAsVersion()
 	{
 
-	printf '%s' "v$QPKG_VERSION"
+	printf '%s' "v$r_qpkg_version"
 
 	}
 
@@ -139,26 +150,16 @@ ShowAsUsage()
 LogWrite()
     {
 
-    # $1 = message to write into NAS system log
-    # $2 = event type:
-    #   0 = Information
-    #   1 = Warning
-    #   2 = Error
+	# Inputs: (local)
+    #   $1 = message to write into NAS system log
+    #   $2 = event type:
+    #       0 = Information
+    #       1 = Warning
+    #       2 = Error
 
-    /sbin/log_tool --append "[$QPKG_NAME] $1" --type "$2"
+    /sbin/log_tool --append "[$r_qpkg_name] ${1:-}" --type "${2:-}"
 
     }
-
-GetQnapOS()
-	{
-
-	if /bin/grep -q zfs /proc/filesystems; then
-		printf 'QuTS hero'
-	else
-		printf QTS
-	fi
-
-	}
 
 SetServiceAction()
 	{
@@ -198,14 +199,14 @@ SetServiceResultAsInProgress()
 CommitServiceAction()
 	{
 
-    echo "$service_action" > "$SERVICE_ACTION_PATHFILE"
+    echo "$service_action" > "$r_service_action_pathfile"
 
 	}
 
 CommitServiceResult()
 	{
 
-    echo "$service_result" > "$SERVICE_RESULT_PATHFILE"
+    echo "$service_result" > "$r_service_result_pathfile"
 
 	}
 
@@ -214,48 +215,48 @@ TextBrightWhite()
 
 	[[ -n ${1:-} ]] || return
 
-    printf '\033[1;97m%s\033[0m' "$1"
+    printf '\033[1;97m%s\033[0m' "${1:-}"
 
 	}
 
 IsQPKGEnabled()
 	{
 
-	# input:
-	#   $1 = (optional) package name to check. If unspecified, default is $QPKG_NAME
+	# Inputs: (local)
+	#   $1 = (optional) package name to check. If unspecified, default is $r_qpkg_name
 
-	# output:
+	# Outputs: (local)
 	#   $? = 0 : true
 	#   $? = 1 : false
 
-	[[ $(Lowercase "$(/sbin/getcfg "${1:-$QPKG_NAME}" Enable -d false -f /etc/config/qpkg.conf)") = true ]]
+	[[ $(Lowercase "$(/sbin/getcfg ${1:-$r_qpkg_name} Enable -d false -f /etc/config/qpkg.conf)") = true ]]
 
 	}
 
 IsNotQPKGEnabled()
 	{
 
-	# input:
-	#   $1 = (optional) package name to check. If unspecified, default is $QPKG_NAME
+	# Inputs: (local)
+	#   $1 = (optional) package name to check. If unspecified, default is $r_qpkg_name
 
-	# output:
+	# Outputs: (local)
 	#   $? = 0 : true
 	#   $? = 1 : false
 
-	! IsQPKGEnabled "${1:-$QPKG_NAME}"
+	! IsQPKGEnabled "${1:-$r_qpkg_name}"
 
 	}
 
 Lowercase()
 	{
 
-	/bin/tr 'A-Z' 'a-z' <<< "$1"
+	/bin/tr 'A-Z' 'a-z' <<< "${1:-}"
 
 	}
 
 Init
 
-user_arg=${USER_ARGS_RAW%% *}		# Only process first argument.
+user_arg=${r_user_args_raw%% *}		# Only process first argument.
 
 case $user_arg in
     ?(--)restart)

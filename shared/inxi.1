@@ -1,5 +1,5 @@
 .\"  inxi.1 - manpage for inxi system information tool
-.\"  Copyright (C) 2024 Harald Hope
+.\"  Copyright (C) 2025 Harald Hope
 .\"
 .\"  This program is free software; you can redistribute it and/or modify
 .\"  it under the terms of the GNU General Public License as published by
@@ -15,15 +15,15 @@
 .\"  with this program; if not, write to the Free Software Foundation, Inc.,
 .\"  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 .\"  
-.TH INXI 1 "2024\-04-13"inxi" "inxi manual"
+.TH INXI 1 "2025\-04\-06" "inxi 3.3.38" "inxi manual"
 
 .SH NAME
-inxi \- Command line system information script for console and IRC
+inxi \- Command line system information tool for console and IRC
 
 .SH SYNOPSIS
 \fBinxi\fR
 
-\fBinxi\fR [\fB\-AbBCdDEfFGhiIjJlLmMnNopPrRsSuUwyYzZ\fR]
+\fBinxi\fR [\fB\-AbBCdDeEfGhiIjJlLmMnNopPrRsSuUwyYzZ\fR]
 
 \fBinxi\fR [\fB\-c -NUMBER\fR]
 [\fB\-\-sensors\-exclude SENSORS\fR] [\fB\-\-sensors\-use SENSORS\fR] 
@@ -41,16 +41,16 @@ All short form options have long form variants \- see below for these and more
 advanced options.
 
 .SH DESCRIPTION
-\fBinxi\fR is a command line system information script built for console and 
-IRC. It is also used a debugging tool for forum technical support to quickly 
+\fBinxi\fR is a command line system information tool built for console and 
+IRC. It is also used as a debugging tool for forum technical support to quickly 
 ascertain users' system configurations and hardware. inxi shows system hardware, 
 CPU, drivers, Xorg, Desktop, Kernel, compiler version(s), Processes, RAM usage, 
 and a wide variety of other useful information.
 
-\fBinxi\fR output varies depending on whether it is being used on CLI or IRC,
-with some default filters and color options applied only for IRC use.
-Script colors can be turned off if desired with \fB\-c 0\fR, or changed 
-using the \fB\-c\fR color options listed in the STANDARD OPTIONS section below.
+\fBinxi\fR output varies depending on whether it is being used on CLI or IRC, 
+with some default filters and color options applied only for IRC use. Colors can 
+be turned off if desired with \fB\-c 0\fR, or changed using the \fB\-c\fR color 
+options listed in the STANDARD OPTIONS section below.
 
 .SH PRIVACY AND SECURITY
 In order to maintain basic privacy and security, inxi used on IRC automatically
@@ -58,9 +58,12 @@ filters out your network device MAC address, WAN and LAN IP, your \fB/home\fR
 username directory in partitions, and a few other items.
 
 Because inxi is often used on forums for support, you can also trigger this
-filtering with the \fB\-z\fR option (\fB\-Fz\fR, for example). To override
+filtering with the \fB\-z\fR option (\fB\-ez\fR, for example). To override
 the IRC filter, you can use the \fB\-Z\fR option. This can be useful in 
 debugging network connection issues online in a private chat, for example.
+
+See \fBFILTER OPTIONS\fR for all filters. If you want to filter everything, use
+\fB\-\-za\fR though that's usually overkill.
 
 .SH TABLE OF CONTENTS
 This man page is pretty long and information packed. It is divided into the 
@@ -76,9 +79,9 @@ following sections:
 types, etc.
 
 * \fBEXTRA DATA OPTIONS\fR What \fB\-x\fR, \fB\-xx\fR, and \fB\-xxx\fR add to 
-the output per primary data type. 
+the report per primary data type. 
 
-* \fBADMIN EXTRA DATA OPTIONS\fR What \fB\-a\fR adds to the output per primary
+* \fBADMIN EXTRA DATA OPTIONS\fR What \fB\-a\fR adds to the report per primary
 data type. These have a lot of information because this is advanced admin data,
 which are not always intuitive or easy to understand.
 
@@ -118,7 +121,7 @@ you can use those separately as well.
 
 For example:
 \fBinxi \-AG\fR | \fBinxi \-A \-G\fR | \fBinxi \-b\fR | \fBinxi \-c10\fR 
-| \fBinxi \-FxxzJy90\fR | \fBinxi \-bay\fR
+| \fBinxi \-exxzJy90\fR | \fBinxi \-bay\fR
 
 Note that all the short form options have long form equivalents, which are
 listed below. However, usually the short form is used in examples in order to
@@ -151,7 +154,17 @@ see API/sound server tools.
 
 .TP
 .B \-b \fR, \fB\-\-basic\fR
-Show basic output, short form. Same as: \fBinxi \-v 2\fR
+Show basic report with the following items: System (\fB\-S\fR); Machine 
+(\fB\-M\fR); Battery (\fB\-B\fR) (if available); basic CPU (cores, type, average 
+clock speed, and min/max speeds, if available); Graphics (\fB\-G\fR); Networking 
+devices (\fB\-N\fR); basic Disk; Info (\fB\-I\fR). 
+
+The CPU and Disk short forms are special, and are only used in \fB\-b\fR. To see 
+their full forms, add \fB\-C\fR or \fB\-D\fR.
+
+Same as: \fBinxi \-v 2\fR
+
+For expanded \fB\-b\fR report, see \fB\-e\fR/\fB\-\-expanded\fR.
 
 .TP
 .B \-B \fR, \fB\-\-battery\fR
@@ -162,7 +175,7 @@ not have very much information, and none about current battery
 state/charge/voltage. Supports multiple batteries when using \fB/sys\fR or 
 \fBsysctl\fR data.
 
-Note that for \fBcharge:\fR, the output shows the current charge, as well as 
+Note that for \fBcharge:\fR, the report shows the current charge, as well as 
 its value as a percentage of the available capacity, which can be less than 
 the original design capacity. In the following example, the actual current 
 available capacity of the battery is \fB22.2 Wh\fR.
@@ -201,7 +214,7 @@ Show active configuration values, by file, and exit.
 
 .TP
 .B \-C \fR, \fB\-\-cpu\fR
-Show full CPU output (if each item available): basic CPU topology, model, type, 
+Show full CPU report (if each item available): basic CPU topology, model, type, 
 L2 cache, average speed of all cores (if > 1 core, otherwise speed of the core), 
 min/max speeds for CPU, and per CPU clock speed. More data available with 
 \fB\-x\fR, \fB\-xxx\fR, and \fB\-a\fR options. 
@@ -244,7 +257,7 @@ Sample:
 .TP
 .B \-d \fR, \fB\-\-disk\-full\fR,\fB\-\-optical\fR
 Show optical drive data as well as \fB\-D\fR HDD/SSD drive data. With \fB\-x\fR, 
-adds a feature line to the output. Also shows floppy disks if present. Note 
+adds a feature line to the report. Also shows floppy disks if present. Note 
 that there is no current way to get any information about the floppy device 
 that we are aware of, so it will simply show the floppy ID without any extra 
 data. \fB\-xx\fR adds a few more features.
@@ -274,6 +287,27 @@ Also shows per drive information: Disk ID, type (FireWire, Removable, USB if
 present), vendor (if detected), model, and size. See \fBExtra Data Options\fR 
 (\fB\-x\fR options) and \fBAdmin Extra Data Options\fR (\fB\-\-admin\fR options) 
 for many more features.
+
+.TP
+.B \-e \fR, \fB\-\-expanded\fR
+Show expanded \fB\-b\fR report. Includes all Upper Case options (except 
+\fB\-J\fR), plus \fB\-\-swap\fR, \fB\-s\fR and \fB\-n\fR. Does not show extra 
+verbose options such as \fB\-d \-f \-i -J \-l \-m \-o \-p \-r \-t \-u \-x\fR 
+unless you use those arguments in the command, e.g.: \fBinxi \-ermxx\fR
+
+The basic CPU line is expanded to full CPU data (\fB\-C\fR); the basic disk 
+information line is expanded to full drive information (\fB\-D\fR) plus primary 
+system partion data (\fB\-P\fR), along with adding, if found, RAID (\fB\-R\fR) 
+and Logical (\fB\-L\fR) items; the Network line (\fB\-N\fR) is expanded to 
+advanced network (\fB\-n\fR). 
+
+Note that with \fB\-e\fR, to avoid clutter, \fB\-B\fR, \fB\-E\fR, \fB\-L\fR, and 
+\fB\-R\fR only show if results are found since those are often not relevant.
+
+For basic report, see \fB\-b\fR/\fB\-\-basic\fR.
+
+The previous \fB\-F\fR/\fB\-\-full\fR are deprecated because the expanded report 
+has not been full for a long time.
 
 .TP
 .B \-E\fR, \fB\-\-bluetooth\fR
@@ -321,15 +355,13 @@ See \fBFILTER OPTIONS\fR.
 
 .TP
 .B \-f \fR, \fB\-\-flags\fR
-Show all CPU flags used, not just the short list. Not shown with \fB\-F\fR 
+Show all CPU flags used, not just the short list. Not shown with \fB\-e\fR 
 in order to avoid spamming. ARM CPUs: show \fBfeatures\fR items.
 
 .TP
 .B \-F \fR, \fB\-\-full\fR
-Show Full output for inxi. Includes all Upper Case line letters (except 
-\fB\-J\fR, plus \fB\-\-swap\fR, \fB\-s\fR and \fB\-n\fR. Does not show extra 
-verbose options such as \fB\-d \-f \-i -J \-l \-m \-o \-p \-r \-t \-u \-x\fR 
-unless you use those arguments in the command, e.g.: \fBinxi \-Frmxx\fR
+.br
+Deprecated. See \fB\-e\fR/\fB\-\-expanded\fR\fR.
 
 .TP
 .B \-G \fR, \fB\-\-graphics\fR
@@ -366,20 +398,20 @@ advanced monitor data (full modes, chroma, etc.).
 
 .TP
 .B \-h \fR, \fB\-\-help\fR
-The help menu. Features dynamic sizing to fit into terminal window. Set script 
-global \fBCOLS_MAX_CONSOLE\fR if you want a different default value, or use 
-\fB\-y [width]\fR to temporarily override the defaults or actual window width.
+The help menu. Features dynamic sizing to fit into terminal window. Set global 
+\fBCOLS_MAX_CONSOLE\fR if you want a different default value, or use \fB\-y 
+[width]\fR to temporarily override the defaults or actual window width.
 
 .TP
 .B \-i \fR, \fB\-\-ip\fR
 Show WAN IP address and local interfaces (latter requires \fBifconfig\fR or 
-\fBip\fR network tool), as well as network output from \fB\-n\fR. Not shown with 
-\fB\-F\fR for user security reasons. You shouldn't paste your local/WAN IP. 
+\fBip\fR network tool), as well as network report from \fB\-n\fR. Not shown with 
+\fB\-e\fR for user security reasons. You shouldn't paste your local/WAN IP. 
 Shows both IPv4 and IPv6 link IP addresses.
 
 .TP
 .B \-\-ip\-limit\fR, \fB\-\-limit [\-1 \- x]\fR
-Raise or lower max output limit of IP addresses for \fB\-i\fR. \fB\-1\fR 
+Raise or lower max report limit of IP addresses for \fB\-i\fR. \fB\-1\fR 
 removes limit.
 
 .TP
@@ -504,7 +536,7 @@ Other types of logical block handling like LUKS, bcache show as:
 
 .TP
 .B \-m \fR, \fB\-\-memory\fR
-Memory (RAM) data. Does not display with \fB\-b\fR or \fB\-F\fR unless you use 
+Memory (RAM) data. Does not display with \fB\-b\fR or \fB\-e\fR unless you use 
 \fB\-m\fR explicitly. Ordered by system board physical system memory array(s) 
 (\fBArray\-[number]\fR), and individual memory devices (\fBDevice\-[number]\fR). 
 Physical memory array data shows array capacity, number of devices supported, 
@@ -520,9 +552,9 @@ unless you figure out how to set up doas/sudo to permit dmidecode to read
 \fB/dev/mem\fR as user. 
 
 \fBudevadm\fR can be run by non\-superuser, or if dmidecode is not installed 
-(Linux only). It has a slightly less reliable dmi table outut, and does not seem 
-to support more than 1 board memory array, but is pretty good. Voltages may be 
-wrong however.
+(Linux only). It has a slightly less reliable dmi table report, and does not 
+seem to support more than 1 board memory array, but is pretty good. Voltages may 
+be wrong however.
 
 Both \fBdmidecode\fR and \fBudevadm\fR need a DMI table with RAM data to create 
 the report. Most SBC/SOC boards don't have dmi based RAM data. But most other 
@@ -643,7 +675,7 @@ Device information requires either \fB/sys\fR or \fBdmidecode\fR. Note that
 detect which type, or positively confirm which VM it is. Primary VM 
 identification is via systemd\-detect\-virt but fallback tests that should also 
 support some BSDs are used. Less commonly used or harder to detect VMs may not 
-be correctly detected. If you get an incorrect output, post an issue and we'll 
+be correctly detected. If you get an incorrect report, post an issue and we'll 
 get it fixed if possible.
 
 Due to unreliable vendor data, device type will show: desktop, laptop, 
@@ -688,7 +720,7 @@ To show partition labels or UUIDs (when available and relevant), use with
 .TP
 .B \-\-partitions\-sort\fR, \fB\-\-ps\fR \
 [dev\-base|fs|id|label|percent\-used|size|uuid|used]\fR
-Change default sort order of partition output. Corresponds to 
+Change default sort order of partition report. Corresponds to 
 \fBPARTITION_SORT\fR configuration item. These are the available sort options:
 
 \fBdev\-base\fR - \fB/dev\fR partition identifier, like \fB/dev/sda1\fR. 
@@ -737,6 +769,8 @@ apt distros like PCLinuxOS or Alt\-Linux)
 
 \fBCARDS\fR (NuTyX + derived versions)
 
+\fBEMERGE\fR (T2 SDE, svn target URL)
+
 \fBEOPKG\fR (Solus)
 
 \fBNETPKG\fR (Zenwalk/Slackware)
@@ -771,7 +805,7 @@ apt distros like PCLinuxOS or Alt\-Linux)
 
 \fBTAZPKG\fR (Slitaz)
 
-\fBURPMI\fR (Mandriva, Mageia + derived versions)
+\fBURPM\fR (Mandriva, Mageia + derived versions)
 
 \fBXBPS\fR (Void)
 
@@ -809,7 +843,7 @@ then shows what package(s) you need to install to add support for each feature.
 
 .TP
 .B \-s \fR, \fB\-\-sensors\fR
-Show output from sensors if sensors installed/configured: Motherboard/CPU/GPU 
+Show report from sensors if sensors installed/configured: Motherboard/CPU/GPU 
 temperatures; detected fan speeds. GPU temperature when available. Nvidia shows 
 screen number for multiple screens. IPMI sensors are also used (root required) 
 if present. 
@@ -914,60 +948,66 @@ See \fB\-J\fR.
 
 .TP
 .B \-v \fR, \fB\-\-verbosity\fR
-Script verbosity levels. If no verbosity level number is given, 0 is assumed.
-Should not be used with \fB\-b\fR or \fB\-F\fR.
+Report verbosity levels. If no verbosity level number is given, 0 is assumed. 
+Should not be used with \fB\-b\fR or \fB\-e\fR since the option that triggers 
+the most features will override the one with fewer. 
 
-Supported levels: \fB0\-8\fR Examples :\fB inxi \-v 4 \fR or \fB inxi \-v4\fR
+Supported levels: \fB0\-8\fR 
+
+Can be used together with other options.
+
+Examples: \fBinxi \-v 4 \fR or \fBinxi \-v4\fR or \fBinxi \-\-verbosity 4\fR or 
+\fBinxi \-zv8\fR
 
 .TP
 .B \-v 0
-\- Short output, same as: \fBinxi\fR
+\- Simple report. Same as: \fBinxi\fR (with no options).
 
 .TP
 .B \-v 1
-\- Basic verbose, \fB\-S\fR + basic CPU (cores, type, average clock speed, and 
-min/max speeds, if available) + \fB\-G\fR + basic Disk + \fB\-I\fR.
+\- Basic report: System (\fB\-S\fR); basic CPU (cores, type, average clock speed, and 
+min/max speeds, if available); Graphics (\fB\-G\fR); basic Disk; Info 
+(\fB\-I\fR).
 
 .TP
 .B \-v 2
-\- Adds networking device (\fB\-N\fR), Machine (\fB\-M\fR) data, Battery 
-(\fB\-B\fR) (if available). Same as: \fBinxi \-b\fR
+\- Adds: Machine (\fB\-M\fR); Battery (\fB\-B\fR) (if available); Networking 
+devices (\fB\-N\fR). Same as \fBinxi \-b\fR.
 
 .TP
 .B \-v 3
-\- Adds advanced CPU (\fB\-C\fR) and network (\fB\-n\fR) data; triggers 
-\fB\-x\fR advanced data option.
+\- Adds: full CPU (\fB\-C\fR); advanced network (\fB\-n\fR); triggers \fB\-x\fR 
+extra data option.
 
 .TP
 .B \-v 4
-\- Adds partition size/used data (\fB\-P\fR) for (if present): \fB/ /home /var/ 
-/boot\fR. Shows full drive data (\fB\-D\fR)
+\- Adds: full Drive (\fB\-D\fR); system Partitions (\fB\-P\fR) (if present): 
+\fB/ /home /var/ /boot\fR.
 
 .TP
 .B \-v 5
-\- Adds audio device (\fB\-A\fR), memory/RAM (\fB\-m\fR), bluetooth data 
-(\fB\-E\fR) (if present), sensors (\fB\-s\fR), RAID data (if present), partition 
-label (\fB\-l\fR), UUID (\fB\-u\fR), full swap data (\fB\-j\fR), and short form 
-of optical drives.
+\- Adds: memory/RAM (\fB\-m\fR); audio device (\fB\-A\fR); bluetooth (\fB\-E\fR) 
+(if present); RAID data (\fB\-R\fR) (if present); partition label (\fB\-l\fR) 
+and UUID (\fB\-u\fR); swap (\fB\-j\fR); sensors (\fB\-s\fR),
 
 .TP
 .B \-v 6
-\- Adds full mounted partition data (\fB\-p\fR), unmounted partition data 
-(\fB\-o\fR), optical drive data (\fB\-d\fR), USB (\fB\-J\fR); triggers 
-\fB\-xx\fR extra data option.
+\- Adds: full mounted partitions (\fB\-p\fR); unmounted partitions (\fB\-o\fR); 
+optical drives (\fB\-d\fR); USB (\fB\-J\fR); triggers \fB\-xx\fR extra data 
+option.
 
 .TP
 .B \-v 7
-\- Adds network IP data (\fB\-i\fR), forced bluetooth (\fB\-E\fR), Logical 
-(\fB\-L\fR), RAID (\fB\-R\fR), full CPU flags/features (\fB\-f\fR),  triggers 
-\fB\-xxx\fR
+\- Adds: full CPU flags/features (\fB\-f\fR); advanced network IP (\fB\-i\fR); 
+triggers \fB\-xxx\fR; forces battery (\fB\-B\fR), bluetooth (\fB\-E\fR), Logical 
+devices (\fB\-L\fR) and RAID (\fB\-R\fR) regardless whether data was found for 
+them or not.
 
 .TP
 .B \-v 8
-\- All system data available. Adds advanced EDID data (\fB\-\-edid\fR), Repos 
-(\fB\-r\fR), PCI slots (\fB\-\-slots\fR), processes (\fB\-tcm\fR), admin 
-(\fB\-\-admin\fR). Useful for testing output and to see what data you can get 
-from your system.
+\- Adds: PCI slots (\fB\-\-slots\fR); GPU advanced EDID data (\fB\-\-edid\fR); 
+Repos (\fB\-r\fR); Processes (\fB\-tcm\fR); triggers \fB\-a\fR admin data 
+option. This is all the available system data.
 
 .TP
 .B \-\-version\fR, \fB\-\-vf\fR
@@ -1056,7 +1096,7 @@ other switches you use.
 .TP
 .B \-\-no\-host\fR
 Turns off hostname in System line. This is default when using \fB\-z\fR,
-for anonymizing inxi output for posting on forums or IRC. Overrides
+for anonymizing inxi report for posting on forums or IRC. Overrides
 configuration value (if set):
 
 \fBSHOW_HOST='true'\fR \- Same as: \fBSHOW_HOST='false'\fR
@@ -1191,7 +1231,7 @@ Required for non\-screen \fB\-\-output\fR formats (json|xml).
 
 .TP
 .B \-\-separator\fR, \fB\-\-sep [character(s)]\fR
-Change the default output key: value separator \fB:\fR to something else. Make
+Change the default report key: value separator \fB:\fR to something else. Make
 permanent with configuration item \fBSEP2_CONSOLE\fR.
 
 .TP
@@ -1217,9 +1257,9 @@ recommended for use with \fB\-Y\fR;
 
 Examples:
 .br
-\fBinxi \-Fxx \-y 130\fR
+\fBinxi \-exx \-y 130\fR
 .br
-\fBinxi \-Fxxy\fR
+\fBinxi \-exxy\fR
 .br
 \fBinxi \-bay1\fR
 
@@ -1233,7 +1273,7 @@ Breaks output flow based on values provided.
 * \fB\-Y [1\-xxx]\fR \- set max output block height height in lines.
 .br
 * \fB\-Y \-1\fR \- Print out one primary data item block (like \fBCPU:\fR, 
-\fBSystem:\fR) at a time. Useful for very long outputs like \fB\-Fa\fR, 
+\fBSystem:\fR) at a time. Useful for very long outputs like \fB\-ea\fR, 
 \fB\-v8\fR, etc. Not available for \fB\-h\fR.
 .br
 * \fB\-Y \-2\fR \- Do not disable output colors when redirected or piped to 
@@ -1443,7 +1483,7 @@ compiler versions.
 \- Adds current runlevel/target (not available with all init systems).
 
 \- Adds total packages discovered in system. See \fB\-xx\fR and \fB\-a\fR
-for per package manager types output. Moves to \fBRepos\fR if \fB\-rx\fR.
+for per package manager type reports. Moves to \fBRepos\fR if \fB\-rx\fR.
 
 If your package manager is not supported, please file an issue and we'll add it. 
 That requires the full output of the query or method to discover all installed 
@@ -1529,7 +1569,7 @@ found for each distribution system base detection.
 
 .TP
 .B \-x \-t\fR (\fB\-\-processes\fR)
-\- Adds memory use output to CPU (\fB\-xt c\fR), and CPU use to memory
+\- Adds memory use report to CPU (\fB\-xt c\fR), and CPU use to memory
 (\fB\-xt m\fR).
 
 .TP
@@ -1594,7 +1634,7 @@ applicable) for each device.
 
 .TP
 .B \-xx \-G\fR
-Triggers much more complete Screen/Monitor output. 
+Triggers much more complete Screen/Monitor report. 
 
 \fBX.org:\fR requires \fBxdpyinfo\fR or \fBxrandr\fR, and the advanced per 
 monitor feature requires \fBxrandr\fR. 
@@ -1662,6 +1702,8 @@ not necessarily the same thing, and can vary widely.
 \fBDisplay\fR (Wayland), each of which can have one or more monitors. Normally a 
 dual monitor setup is 2 monitors run by one Xorg Screen/Wayland Display. 
 
+\- \fBres:\fR is the current monitor mode, along with the frequency \fBhz:\fR.
+
 \- \fBpos: [primary,]{position string|row\-col}\fR (X.org: requires 
 \fBxrandr\fR; Wayland: requires \fBswaymsg\fR [sway], \fBwlr\-randr\fR [wlroots 
 based compositors], \fBweston\-info\fR / \fBwayland\-info\fR [all]). Uses either 
@@ -1710,7 +1752,7 @@ present).
 \- Shows \fBPackages:\fR counts by discovered package manager types (\fBpm:\fR). 
 In cases where only 1 pm had results, does not show total after \fBPackages:\fR. 
 Does not show installed package managers with 0 packages. See \fB\-a\fR for full 
-output. Moves to \fBRepos\fR if \fB\-rxx\fR.
+report. Moves to \fBRepos\fR if \fB\-rxx\fR.
 
 \- Adds parent program (or pty/tty) that started shell, if not IRC client.
 
@@ -1725,7 +1767,7 @@ swap types (for \fB\-j\fR).
 
 \- Adds USB lanes. Uses tx (transmit) lane count for total unless rx and tx 
 counts are different (eg: \fBlanes: rx: 2 tx: 4\fR). Linux only.
-See \fB\-Ja\fR for sample output.
+See \fB\-Ja\fR for sample report.
 
 .TP
 .B \-xx \-L\fR (\fB\-\-logical\fR)
@@ -1876,7 +1918,8 @@ are spinning, no rpm data will show.
 size data requires \fBxdpyinfo\fR). This is the X.org Screen dimensions, NOT the 
 Monitor size!
 
-\- Adds to Monitors (if detected) frequency (\fBhz:\fR).
+\- Expands monitor \fBres:\fR to current \fBmode:\fR, \fBhz:\fR, \fBscale:\fR, 
+and if scale != 1, scaled \fBto:\fR resolution.
 
 \- Adds to Monitors (if detected) size (\fBsize: 277x156mm (10.9x6.1")\fR). Note 
 that this is the real physical monitor size, not the Xorg Screen/Wayland Display 
@@ -1888,8 +1931,6 @@ and largest monitor modes found, using an inexact method, so might not always be
 right.
 
 \- Adds to Monitors \fBserial:\fR number (if detected).
-
-\- \fBWayland:\fR Adds to Monitors \fBscale:\fR (if detected).
 
 \- For EGL, shows hardware based driver(s) (\fBhw:\fR), with the related 
 hardware, like AMD or Intel. 
@@ -1992,7 +2033,7 @@ weather observation time (if available), sunset/sunrise (if available).
 
 .SH ADMIN EXTRA DATA OPTIONS
 These options are triggered with \fB\-\-admin\fR or \fB\-a\fR. Admin options 
-are advanced output options, and are more technical, and mostly of interest to 
+are advanced report options, and are more technical, and mostly of interest to 
 system administrators or other machine admins. 
 
 The \fB\-\-admin\fR option sets \fB\-xxx\fR, and only has to be used once.
@@ -2103,17 +2144,25 @@ common).
 to this line from \fBInfo:\fR line. 
 
 Topology line contains, if available and/or relevant: physical CPU count 
-(\fBcpus:\fR); per physical cpu core count (cores:\fR); threads per core, if > 1 
-(\fBtpc:\fR); how many \fBthreads:\fR (if more threads than cores); \fBdies:\fR 
-(rarely detected, but if so, if > 1); smt status (if no smt status found, shows 
-\fBN/A\fR). 
+(\fBcpus:\fR); per physical CPU \fBdies:\fR, \fBclusters:\fR, \fBcores:\fR; 
+threads per core, if > 1 (\fBtpc:\fR); how many \fBthreads:\fR (if more threads 
+than cores); smt status (if no smt status found, shows \fBN/A\fR). 
 
-If complex CPU type, like Alder lake, cores; will have a more granular breakdown 
-of how many mt (multi\-threaded) and how many st (single\-threaded) cores there 
-in the physical cpu ( \fBmt\-cores:\fR, \fBst\-cores:\fR);  For complex CPU 
-types like ARM SoC devices with 2 CPU types, with different core counts and/or 
-\fBmin/max:\fR) frequencies, \fBvariant:\fR per type found, with relevant 
-differences shown, like \fBcores:\fR, \fBmin/max:\fR, etc. 
+Not all CPUs have or report dies or clusters. Some may have dies but no 
+clusters, some clusters but no dies, some dies and clusters, and some neither 
+dies nor clusters. This is a function of how the CPU topology reports itself to 
+the kernel. Note that core counts are per physical CPU, not per die or cluster. 
+Clusters are per die, and in cases of > 1 dies, will show as: \fBclusters: 
+2x4\fR.
+
+If complex CPU type, like Alder lake, \fBcores:\fR will have a more granular 
+breakdown of how many mt (multi\-threaded) and how many st (single\-threaded) 
+cores there are in the physical cpu (\fBmt\-cores:\fR, \fBst\-cores:\fR);  For 
+complex CPU types like ARM SoC devices with 2 CPU types, with different core 
+counts and/or \fBmin/max:\fR) frequencies, \fBvariant:\fR per type found, with 
+relevant differences shown, like \fBcores:\fR, \fBmin/max:\fR, etc. 
+
+
 
 .nf
 \fBCPU:
@@ -2133,10 +2182,10 @@ differences shown, like \fBcores:\fR, \fBmin/max:\fR, etc.
     microcode: 0x8001250
   Topology:
     cpus: 2
-      cores: 16
-        tpc: 2
-      threads: 32
       dies: 4
+      cores: 16
+      threads: 32
+        tpc: 2
    cache:
      L1: 2x 1.5 MiB (3 MiB)
        desc: d\-16x32 KiB; i\-16x64 KiB
@@ -2157,6 +2206,64 @@ differences shown, like \fBcores:\fR, \fBmin/max:\fR, etc.
       2: 1196
       ....
     bogomips: 267823\fR
+.fi
+
+Or this Raptor Lake with 1 die, 4 clusters, and efficiency and perforance cores:
+
+.nf
+\fBCPU:
+  Info:
+    model: 13th Gen Intel Core i5-1345U
+    bits: 64
+    type: MST AMCP
+    arch: Raptor Lake
+    level: v3
+      note: check
+    built: 2022+
+    process: Intel 7 (10nm)
+    family: 6
+    model-id: 0xBA (186)
+    stepping: 3
+    microcode: 0x411C
+  Topology:
+    cpus: 1
+      dies: 1
+      clusters: 4
+      cores: 10
+      threads: 12
+        mt: 2
+          tpc: 2
+        st: 8
+    smt: enabled
+    cache:
+      L1: 928 KiB
+        desc: d-8x32 KiB, 2x48 KiB; i-2x32 KiB, 8x64 KiB
+      L2: 6.5 MiB
+        desc: 2x1.2 MiB, 2x2 MiB
+      L3: 12 MiB
+        desc: 1x12 MiB
+  Speed (MHz):
+    avg: 1535
+    high: 2820
+    min/max: 400/4700:3500
+    scaling:
+      driver: intel_pstate
+      governor: powersave
+    cores:
+      1: 0
+      2: 400
+      3: 429
+      4: 926
+      5: 1244
+      6: 1139
+      7: 2680
+      8: 1021
+      9: 2582
+      10: 2744
+      11: 2820
+      12: 2445
+    bogomips: 59904
+  Flags: avx avx2 ht lm nx pae sse sse2 sse3 sse4_1 sse4_2 ssse3 vmx\fR
 .fi
 
 \- Adds CPU Vulnerabilities (bugs) as known by your current kernel. Lists by 
@@ -2283,67 +2390,83 @@ shown).
 \- Adds to Vulkan full device report, with full device names, ids, drivers, 
 driver versions, surfaces.
 
-X.org sample (with both \fBxdpyinfo\fR and \fBxrandr\fR data available):
+\- Adds \fBInfo: Tools:\fR item. Tools are arranged into the following 
+categories: \fBapi:\fR (for EGL, OpenGL, Vulkan etc.), \fBde:\fR (specific to a 
+desktop environment), \fBgpu\fR (GPU monitoring and tweaking), \fBwl:\fR 
+(Wayland specific), \fBx11\fR (x11 specific).
+
+X.org sample (with both \fBxdpyinfo\fR and \fBxrandr\fR data available), one 
+scaled monitor:
 .nf
 \fBinxi \-aGz
 Graphics:
-  Device\-1: AMD Cedar [Radeon HD 5000/6000/7350/8350 Series]
-    vendor: XFX Pine driver: radeon v: kernel alternate: amdgpu
-    arch: TeraScale\-2 code: Evergreen process: TSMC 32\-40nm
-    built: 2009\-15 pcie: gen: 1 speed: 2.5 GT/s lanes: 16 link\-max:
-    gen: 2 speed: 5 GT/s ports: active: DVI\-I\-1,VGA\-1 empty: HDMI\-A\-1
-    bus\-ID: 0a:00.0 chip\-ID: 1002:68f9 class\-ID: 0300 temp: 58.0 C
-  Display: x11 server: X.Org v: 1.21.1.7 with: Xwayland v: 22.1.9
-    compositor: xfwm v: 4.18.0 driver: X: loaded: modesetting dri: r600
-    gpu: radeon display\-ID: :0.0 screens: 1
-  Screen\-1: 0 s\-res: 2560x1024 s\-dpi: 96
-    s\-size: 677x270mm (26.65x10.63") s\-diag: 729mm (28.7")
+  Device\-1: Advanced Micro Devices [AMD/ATI] Cedar [Radeon HD
+    5000/6000/7350/8350 Series] vendor: XFX Pine driver: radeon
+    v: kernel alternate: amdgpu arch: TeraScale\-2 code: Evergreen
+    process: TSMC 32\-40nm built: 2009\-15 pcie: gen: 1 speed: 2.5 GT/s
+    lanes: 16 link\-max: gen: 2 speed: 5 GT/s ports:
+    active: DVI\-I\-1,VGA\-1 empty: HDMI\-A\-1 bus\-ID: 0b:00.0
+    chip\-ID: 1002:68f9 class\-ID: 0300 temp: 52.0 C
+  Display: x11 server: X.Org v: 21.1.14 with: Xwayland v: 24.1.3
+    compositor: xfwm4 v: 4.18.0 driver: X: loaded: modesetting
+    dri: r600 gpu: radeon display\-ID: :0.0 screens: 1
+  Screen\-1: 0 s\-res: 2432x1024 s\-dpi: 96
+    s\-size: 641x270mm (25.24x10.63") s\-diag: 696mm (27.38")
   Monitor\-1: DVI\-I\-1 pos: primary,left model: Samsung SyncMaster
-    serial: H9NX842662 built: 2004 res: 1280x1024 hz: 60 dpi: 96
-    gamma: 1.2 size: 338x270mm (13.31x10.63") diag: 433mm (17")
-    ratio: 5:4 modes: max: 1280x1024 min: 720x400
-  Monitor\-2: VGA\-1 pos: right model: Dell 1908FP
-    serial: G434H87HRA2D built: 2008 res: 1280x1024 hz: 60 dpi: 86
-    gamma: 1.4 size: 376x301mm (14.8x11.85") diag: 482mm (19")
-    ratio: 5:4 modes: max: 1280x1024 min: 720x400
+    serial: <filter> built: 2004 res: mode: 1280x1024 hz: 60
+    scale: 100% (1) gamma: 1.2 size: 338x270mm (13.31x10.63")
+    diag: 433mm (17") ratio: 5:4 modes: max: 1280x1024 min: 720x400
+  Monitor\-2: VGA\-1 pos: right model: Dell 1908FP serial: <filter>
+    built: 2008 res: mode: 1280x1024 hz: 60 scale: 111% (0.9)
+    to: 1152x922 dpi: 86 gamma: 1.4 size: 376x301mm (14.8x11.85")
+    diag: 482mm (19") ratio: 5:4 modes: max: 1280x1024 min: 720x400
   API: EGL v: 1.5 hw: drv: amd r600 platforms: device: 0 drv: r600
-    device: 1 drv: swrast gbm: egl: 1.4 drv: kms_swrast surfaceless:
-    drv: r600 x11: drv: r600 inactive: wayland
-  API: OpenGL v: 4.5 vendor: x.org mesa v: 22.3.6 glx\-v: 1.4
-    es\-v: 3.1 direct\-render: yes renderer: AMD CEDAR (DRM 2.50.0 /
-    6.4.3\-1\-liquorix\-amd64 LLVM 15.0.6) device\-ID: 1002:68f9
+    device: 1 drv: swrast gbm: drv: kms_swrast surfaceless: drv: r600
+    x11: drv: r600 inactive: wayland
+  API: OpenGL v: 4.5 vendor: mesa v: 24.2.4\-1 glx\-v: 1.4
+    direct\-render: yes renderer: AMD CEDAR (DRM 2.50.0 /
+    6.11.5\-1\-liquorix\-amd64 LLVM 19.1.1) device\-ID: 1002:68f9
     memory: 1000 MiB unified: no
-  API: Vulkan v: 1.3.250 layers: 3 device: 0 type: cpu
-    name: llvmpipe (LLVM 15.0.6 256 bits) driver: mesa llvmpipe
-    v: 22.3.6 (LLVM 15.0.6) device\-ID: 10005:0000 surfaces: xcb,xlib\fR
+  API: Vulkan v: 1.3.296 layers: 3 device: 0 type: cpu
+    name: llvmpipe (LLVM 19.1.1 256 bits) driver: N/A
+    device\-ID: 10005:0000 surfaces: xcb,xlib
+  Info: Tools: api: clinfo, eglinfo, glxinfo, vulkaninfo
+    de: xfce4\-display\-settings gpu: radeontop x11: xdriinfo, xdpyinfo,
+    xprop, xrandr\fR
 .fi
 
-Wayland sample, with Sway/swaymsg:
+Wayland sample, with Sway/swaymsg, scaled monitor:
 .nf
 \fB
 inxi \-aGz
-Graphics:  
-  Device\-1: AMD Cedar [Radeon HD 5000/6000/7350/8350 Series] vendor: XFX Pine
-    driver: radeon v: kernel alternate: amdgpu arch: TeraScale 2
-    process: TSMC 32\-40nm pcie: gen: 1 speed: 2.5 GT/s lanes: 16 link\-max:
-    gen: 2 speed: 5 GT/s ports: active: DVI\-I\-1,VGA\-1 empty: HDMI\-A\-1
-    bus\-ID: 0a:00.0 chip\-ID: 1002:68f9 class\-ID: 0300
-  Display: wayland server: Xwayland v: 21.1.4 compositor: sway v: 1.6.1 
-    driver: dri: r600 gpu: radeon d\-rect: 2560x1024
-  Monitor-1: DVI\-I\-1 pos: right model: SyncMaster serial: <filter> 
-    built: 2004 res: 1280x1024 hz: 60 dpi: 96 gamma: 1.2 
-    size: 340x270mm (13.4x10.6") diag: 434mm (17.1") ratio: 5:4 modes: 
-    max: 1280x1024 min: 720x400
-  Monitor\-2: VGA-1 pos: primary,left model: DELL 1908FP serial: <filter> 
-    res: 1280x1024 hz: 60 gamma: 1.4 dpi: 86 gamma: 1.4 
-    size: 380x300mm (15.0x11.8") diag: 484mm (19.1") ratio: 5:4 modes: 
-    max: 1280x1024 min: 720x400
-  API: OpenGL v: 4.6 compat\-v: 4.5 vendor: x.org mesa v: 22.3.6
-    glx\-v: 1.4 direct\-render: yes renderer: AMD CEDAR (DRM 2.50.0 /
-    6.4.3\-1\-liquorix\-amd64 LLVM 15.0.6) device\-ID: 1002:68f9
-  API: EGL v: 1.5 hw: drv: amd r600 platforms: device: 0
-    drv: r600 device: 1 drv: swrast surfaceless: drv: r600 wayland:
-    drv: r600 inactive: gbm,x11
+Graphics:
+  Device\-1: Intel 2nd Generation Core Processor Family Integrated
+    Graphics vendor: Lenovo driver: i915 v: kernel arch: Gen\-6
+    code: Sandybridge process: Intel 32nm built: 2011 ports:
+    active: LVDS\-1 empty: DP\-1, DP\-2, DP\-3, HDMI\-A\-1, HDMI\-A\-2,
+    HDMI\-A\-3, VGA\-1 bus\-ID: 00:02.0 chip\-ID: 8086:0116 class\-ID: 0300
+  Device\-2: Chicony integrated camera driver: uvcvideo type: USB
+    rev: 2.0 speed: 480 Mb/s lanes: 1 mode: 2.0 bus\-ID: 1\-1.6:4
+    chip\-ID: 04f2:b221 class\-ID: 0e02
+  Display: wayland server: X.org v: 1.21.1.13 compositor: Sway
+    v: 1.9 driver: X: loaded: modesetting unloaded: fbdev,vesa
+    dri: crocus gpu: i915 display\-ID: 1
+  Monitor\-1: LVDS\-1 model: AU Optronics 0x313c built: 2010 res:
+    mode: 1366x768 hz: 60 scale: 110% (1.1) to: 1241x698 dpi: 112
+    gamma: 1.2 size: 309x173mm (12.17x6.81") diag: 354mm (13.9") 
+    ratio: 16:9 modes: 1366x768
+  API: EGL v: 1.5 hw: drv: intel crocus platforms: device: 0
+    drv: crocus device: 1 drv: swrast gbm: drv: crocus surfaceless:
+    drv: crocus wayland: drv: crocus inactive: x11
+  API: OpenGL v: 4.5 compat\-v: 3.3 vendor: mesa v: 24.2.4\-1
+    note: incomplete (EGL sourced) renderer: Mesa Intel HD Graphics
+    3000 (SNB GT2), llvmpipe (LLVM 19.1.1 256 bits)
+  API: Vulkan v: 1.3.290 layers: 3 device: 0 type: cpu
+    name: llvmpipe (LLVM 19.1.1 256 bits) driver: N/A
+    device\-ID: 10005:0000 surfaces: wayland
+  Info: Tools: api: eglinfo, glxinfo, vulkaninfo
+    de: xfce4\-display\-settings wl: swaymsg, wayland\-info, wlr\-randr
+    x11: xdriinfo, xdpyinfo, xprop, xrandr\fR
 .fi
 
 .TP
@@ -2387,11 +2510,11 @@ For \fB\-P\fR per swap physical partition:
 
 \fBswappiness: 60 (default) cache\-pressure: 90 (default 100)\fR
 
-For \fB\-j\fR row 1 output:
+For \fB\-j\fR row 1 report:
 
 \fBKernel: swappiness: 60 (default) cache\-pressure: 90 (default 100)\fR
 
-\- Adds zswap data for row 1 output:
+\- Adds zswap data for row 1 report:
 
 \fBzswap: [yes/no] compressor: [type] max-pool: xx%\fR
 
@@ -2560,13 +2683,12 @@ basically forces the downloader selection to use \fBPerl 5.x\fR
 may help bypass issues with downloading.
 
 .TP
-.B \-\-bt\-tool [bt\-adapter|btmgmt|hciconfig|rfkill]\fR
+.B \-\-bt\-tool [bluetoothctl|bt\-adapter|btmgmt|hciconfig|rfkill]\fR
 See \fB\-\-force [tool name]\fR. Used to set \fB\-E\fR report tool.
 
 .TP
 .B \-\-dig\fR
-Temporary override of \fBNO_DIG\fR configuration item. Only use to test w/wo 
-dig. Restores default behavior for WAN IP, which is use dig if present.
+Shortcut. See \fB\-\-force dig\fR.
 
 .TP
 .B \-\-display [:<integer>]\fR
@@ -2594,37 +2716,114 @@ Shortcut. See \fB\-\-force dmidecode\fR.
 Force inxi to use Curl, Fetch, Perl, or Wget for downloads.
 
 .TP
+.B \-\-egl\fR
+Shortcut. See \fB\-\-force egl\fR.
+
+.TP
 .B \-\-force [option(s)]\fR 
 Various force options to allow users to override defaults. Values can be given 
 as a comma separated list:
 
-\fBinxi \-MJ --force dmidecode,lsusb\fR 
+\fBinxi \-MJ \-\-force dmidecode,lsusb\fR 
 
-\- \fBbt\-adapter\fR \- Force use of bt\-adapter tool in \fB\-E\fR.
+\- \fBbluetoothctl\fR \- Force use of bluetoothctl\fR in \fB\-E\fR.
 
-\- \fBbtmgmt\fR \- Force use of btmgmt tool in \fB\-E\fR.
+\- \fBbt\-adapter\fR \- Force use of \fBbt\-adapter\fR tool in \fB\-E\fR.
 
-\- \fBcolors\fR \- Same as \fB\-Y \-2\fR . Do not remove colors from piped or 
-redirected output.
+\- \fBbtmgmt\fR \- Force use of \fBbtmgmt\fR tool in \fB\-E\fR.
+
+\- \fBcolors\fR \- Do not remove colors from piped or redirected output. Same as 
+\fB\-Y \-2\fR. 
+
+\- \fBcpuinfo\fR \- Force use of \fBcpuinfo\fR over sys for cpu data in 
+\fB\-C\fR.
+
+\- \fBdig\fR \- Temporary override of \fBNO_DIG\fR configuration item. Only use 
+to test w/wo dig. Restores default behavior for WAN IP, which is use dig if 
+present.
 
 \- \fBdmidecode\fR \- Force use of \fBdmidecode\fR. This will override 
 \fB/sys\fR data in some lines, e.g. \fB\-M\fR or \fB\-B\fR.
 
+\- \fBegl\fR \- Force use of \fBEGL\fR graphics API even if internal rules 
+block it from running due to possible hanging. This is the case sometimes with 
+Intel 32 bit Pentium 4 era Gen2 and older GPUs, but it's not consistent.
+
+\- \fBhciconfig\fR \- Force use of \fBhciconfig\fR tool in \fB\-E\fR.
+
 \- \fBhddtemp\fR \- Force use of hddtemp instead of /sys temp data for disks.
+
+\- \fBhtml\-wan\fR \- Temporary override of \fBNO_HTML_WAN\fR configuration 
+item. Only use to test w/wo HTML downloaders for WAN IP. Restores default 
+behavior for WAN IP, which is use HTML downloader if present and if dig failed.
 
 \- \fBifconfig\fR \- Force use of IF tool ifconfig for \fB\-i\fR.
 
 \- \fBip\fR \- Force use of IF ip tool for \fB\-i\fR (default).
 
+\- \fBkscreen\fR \- Wayland: Force \fB\-G\fR monitor data source 
+\fBkscreen-console\fR.
+
 \- \fBlsusb\fR \- Forces the USB data generator to use \fBlsusb\fR as data 
 source (default). Overrides \fBUSB_SYS\fR in user configuration file(s).
+
+\- \fBman\fR \- Force update / install of man page with \fB\-U\fR if \fBpinxi\fR 
+or using \fB\-U 3\fR dev branch. (Only active if \fB\-U\fR is is not disabled by 
+maintainers). Default is to install always for \fBinxi\fR, and not for 
+\fBpinxi\fR.
+
+\- \fBno\-dig\fR \- Overrides default use of \fBdig\fR to get WAN IP address. 
+Allows use of normal downloader tool to get IP addresses. Only use if dig is 
+failing, since dig is much faster and more reliable in general than other 
+methods.
+
+\- \fBno\-doas\fR \- Skips the use of doas to run certain internal features 
+(like \fBhddtemp\fR, \fBfile\fR) with doas. Not related to running inxi itself 
+with doas/sudo or super user. Some systems will register errors which will then 
+trigger admin emails in such cases, so if you want to disable regular user use 
+of doas (which requires configuration to setup anyway for these options) just 
+use this option, or \fBNO_DOAS\fR configuration item. See \fB\-\-no\-sudo\fR if 
+you need to disable both types.
+
+\- \fBno\-egl\fR \- Skip eglinfo sourced EGL graphics API in \fB\-G\fR. Use if 
+Graphics hangs or running a debugger data set which hangs due to eglinfo bug (
+only found on ancient Pentium 4 w/ Gen 2 GPUs).
+
+\- \fBno\-graphics\-api\fR \-  Skip graphics API in \fB\-G\fR.
+
+\- \fBno\-html\-wan\fR \- Overrides use of HTML downloaders to get WAN IP 
+address. Use either only dig, or do not get wan IP. Only use if dig is failing, 
+and the HTML downloaders are taking too long, or are hanging or failing. 
+
+Make permanent with \fBNO_HTML_WAN='true'\fR
+
+\- \fBno\-man\fR \- Disables man page install with \fB\-U\fR for master and 
+active development branches. (Only active if \fB\-U\fR is is not disabled by 
+maintainers). No man install is default for \fBpinxi\fR. Man install is default 
+for \fBinxi\fR.
+
+\- \fBno\-opengl\fR \- Skip glxinfo sourced OpenGL graphics API in \fB\-G\fR.
+
+\- \fBno\-ssl\fR \- Skip SSL certificate checks for all downloader actions 
+(\fB\-U\fR, \fB\-w\fR, \fB\-i\fR). Use if your system does not have current SSL 
+certificate lists, or if you have problems making a connection for any reason. 
+Works with \fBWget\fR, \fBCurl\fR, \fBPerl HTTP::Tiny\fR and \fBFetch\fR.
+
+\- \fBno\-sudo \fR \- Skips the use of sudo to run certain internal features 
+(like \fBhddtemp\fR, \fBfile\fR) with sudo. Not related to running inxi itself 
+with sudo or superuser. Some systems will register errors which will then 
+trigger admin emails in such cases, so if you want to disable regular user use 
+of sudo (which requires configuration to setup anyway for these options) just 
+use this option, or \fBNO_SUDO\fR configuration item.
+
+\- \fBno\-vulkan\fR \- Skip vulkaninfo sourced Vulkan graphics API in \fB\-G\fR.
 
 \- \fBrfkill\fR \- Force use of rfkill tool in \fB\-E\fR. \fBrfkill\fR does not 
 support mac address data.
 
-\- \fBrpm\fR, \fBpkg\fR \- Force override of disabled rpm package counts on 
-primarily rpm run systems due to unacceptably slow execution times for this 
-command:
+\- \fBrpm\fR, \fBpkg\fR \- Override disabled rpm package counts on primarily rpm 
+run systems due to unacceptably slow execution times for this command on some 
+systems:
 
 .nf
 \fBrpm \-qa \-\-nodigest \-\-nosignature\fR
@@ -2648,6 +2847,8 @@ lm\-sensors data was found anyway, but if \fBlm\-sensors\fR was installed, and
 returned no data, it's most likely if not nearly certain that \fB/sys\fR will 
 also not return data.
 
+\- \fBswaymsg\fR \-  Wayland: Force \fB\-G\fR monitor data source \fBswaymsg\fR.
+
 \- \fBudevadm\fR \- Forces use of udevadm as data source (currently \fB\-m\fR 
 RAM data). 
 
@@ -2656,8 +2857,14 @@ source instead of \fBlsusb\fR (Linux only).
 
 \- \fBvmstat\fR \- Forces use of vmstat for memory data.
 
-\- \fBwayland\fR \- Forces use of Wayland, disables x tools glxinfo, xrandr, 
-xdpyinfo.
+\- \fBwayland\fR \- Wayland: Force use of Wayland data sources, disables x tools 
+glxinfo, xrandr, xdpyinfo.
+
+\- \fBwl\-info\fR \- Wayland: Force \fB\-G\fR monitor data source 
+\fBwayland\-info\fR or \fBweston\-info\fR.
+
+\- \fBwlr\-randr\fR \- Wayland: Force \fB\-G\fR monitor data source 
+\fBwlr\-randr\fR.
 
 \- \fBwmctrl\fR \- Force \fBSystem\fR item \fBwm\fR to use \fBwmctrl\fR as data 
 source, override default \fBps\fR source.
@@ -2668,9 +2875,7 @@ Shortcut. See \fB\-\-force hddtemp\fR.
 
 .TP
 .B \-\-html\-wan\fR
-Temporary override of \fBNO_HTML_WAN\fR configuration item. Only use to test 
-w/wo HTML downloaders for WAN IP. Restores default behavior for WAN IP, which is 
-use HTML downloader if present and if dig failed.
+Shortcut. See \fB\-\-force \-\-html\-wan\fR.
 
 .TP
 .B \-\-ifconfig\fR
@@ -2678,37 +2883,31 @@ Shortcut. See \fB\-\-force ifconfig\fR.
 
 .TP
 .B \-\-man\fR
-Updates / installs man page with \fB\-U\fR if \fBpinxi\fR or using \fB\-U 3\fR 
-dev branch. (Only active if \fB\-U\fR is is not disabled by maintainers).
+Shortcut. See \fB\-\-force man\fR.
 
 .TP
 .B \-\-no\-dig\fR
-Overrides default use of \fBdig\fR to get WAN IP address. Allows use of normal 
-downloader tool to get IP addresses. Only use if dig is failing, since dig is 
-much faster and more reliable in general than other methods.
+Shortcut. See \fB\-\-force no\-dig\fR.
 
 .TP
 .B \-\-no\-doas\fR
-Skips the use of doas to run certain internal features (like \fBhddtemp\fR, 
-\fBfile\fR) with doas. Not related to running inxi itself with doas/sudo or 
-super user. Some systems will register errors which will then trigger admin 
-emails in such cases, so if you want to disable regular user use of doas 
-(which requires configuration to setup anyway for these options) just use 
-this option, or \fBNO_DOAS\fR configuration item. See \fB\-\-no\-sudo\fR if 
-you need to disable both types.
+Shortcut. See \fB\-\-force no\-doas\fR.
+
+.TP
+.B \-\-no\-egl\fR
+Shortcut. See \fB\-\-force no\-egl\fR.
 
 .TP
 .B \-\-no\-html-wan\fR
-Overrides use of HTML downloaders to get WAN IP address. Use either only dig, 
-or do not get wan IP. Only use if dig is failing, and the HTML downloaders are 
-taking too long, or are hanging or failing. 
-
-Make permanent with \fBNO_HTML_WAN='true'\fR
+Shortcut. See \fB\-\-force no\-html-wan\fR.
 
 .TP
 .B \-\-no\-man\fR
-Disables man page install with \fB\-U\fR for master and active development 
-branches. (Only active if \fB\-U\fR is is not disabled by maintainers).
+Shortcut. See \fB\-\-force no\-man\fR.
+
+.TP
+.B \-\-no\-opengl\fR
+Shortcut. See \fB\-\-force no\-opengl\fR.
 
 .TP
 .B \-\-no\-sensor\-force\fR
@@ -2717,19 +2916,11 @@ behavior.
 
 .TP
 .B \-\-no\-ssl\fR
-Skip SSL certificate checks for all downloader actions (\fB\-U\fR, \fB\-w\fR, 
-\fB\-i\fR). Use if your system does not have current SSL certificate lists, or 
-if you have problems making a connection for any reason. Works with \fBWget\fR, 
-\fBCurl\fR, \fBPerl HTTP::Tiny\fR and \fBFetch\fR.
+Shortcut. See \fB\-\-force no\-ssl\fR.
 
 .TP
 .B \-\-no\-sudo\fR
-Skips the use of sudo to run certain internal features (like \fBhddtemp\fR, 
-\fBfile\fR) with sudo. Not related to running inxi itself with sudo or 
-superuser. Some systems will register errors which will then trigger admin 
-emails in such cases, so if you want to disable regular user use of sudo (which 
-requires configuration to setup anyway for these options) just use this option, 
-or \fBNO_SUDO\fR configuration item.
+Shortcut. See \fB\-\-force no\-sudo\fR.
 
 .TP
 .B \-\-pm\-type [package manager name]\fR
@@ -2761,11 +2952,11 @@ Shortcut. See \fB\-\-force sensors\-sys\fR
 
 .TP
 .B \-\-sensors\-use\fR
-Linux only. Use only the (comma separated) sensor arrays for \fB\-s\fR output. 
+Linux only. Use only the (comma separated) sensor arrays for \fB\-s\fR report. 
 Make permanent with \fBSENSORS_USE\fR configuration item. Sensor array ID value 
 must be the exact value shown in lm\-sensors sensors output (lm-sensors only) or 
 use \fB\-s \-\-dbg 18\fR ('main' =>.. section) to see the sensor ID strings used 
-internally. If you only want to exclude one (or more) sensors from the output, 
+internally. If you only want to exclude one (or more) sensors from the report, 
 use \fB\-\-sensors\-exclude\fR.
 
 Can be useful if the default sensor data used by inxi is not from the right 
@@ -2875,7 +3066,7 @@ specific specialized debugging options. There are a lot.
 
 .TP
 .B \-\-debug 20\fR
-Creates a tar.gz file of system data and collects the inxi output
+Creates a tar.gz file of system data and collects the inxi report
 in a file.
 
 * tree traversal data file(s) read from \fB/proc\fR and \fB/sys\fR, and 
@@ -2951,7 +3142,7 @@ Use this to locate file that /sys debugger hangs on.
 .SH SUPPORTED IRC CLIENTS
 BitchX, Gaim/Pidgin, ircII, Irssi, Konversation, Kopete, KSirc, KVIrc, 
 Weechat, and Xchat. Plus any others that are capable of displaying either 
-built\-in or external script output.
+built\-in or external program output.
 
 .SH RUNNING IN IRC CLIENT
 To trigger inxi output in your IRC client, pick the appropriate method from the
@@ -2967,7 +3158,7 @@ IRC client.
 .B /cmd inxi
 \fR[\fBoptions\fR]
 
-To run inxi in Konversation as a native script if your distribution or inxi 
+To run inxi in Konversation as a native program if your distribution or inxi 
 package hasn't already done this for you, create this symbolic link:
 
 KDE 4:
@@ -3101,7 +3292,7 @@ HTML downloaders are hanging.
 \fBNO_SUDO\fR Set to \fB1\fR or \fBtrue\fR to disable internal use of 
 \fBsudo\fR.
 
-\fBPARTITION_SORT\fR Overrides default partition output sort. See 
+\fBPARTITION_SORT\fR Overrides default partition report sort. See 
 \fB\-\-partition\-sort\fR for options.
 
 \fBPS_COUNT\fR The default number of items showing per \fB\-t\fR type, \fBm\fR 
@@ -3111,7 +3302,7 @@ or \fBc\fR. Default is 5.
 which is the CPU), forces sensors to use either value 1 or 2 as CPU 
 temperature. See the above configuration page on smxi.org for full info.
 
-\fBSENSORS_EXCLUDE\fR Exclude supplied sensor array[s] from sensor output. 
+\fBSENSORS_EXCLUDE\fR Exclude supplied sensor array[s] from sensor report. 
 Override with \fB\-\-sensors\-default\fR. See \fB\-\-sensors\-exclude\fR.
 
 \fBSENSORS_USE\fR Use only supplied sensor array[s]. Override with 
@@ -3213,7 +3404,7 @@ is a fork of \fBlocsmif\fR's very clever \fBinfobash\fR script.
 Original infobash author and copyright holder:
 Copyright (C) 2005\-2007 Michiel de Boer aka locsmif
 
-inxi version: Copyright (C) 2008\-2023 Harald Hope
+inxi version: Copyright (C) 2008\-2025 Harald Hope
 
 This man page was originally created by Gordon Spencer (aka aus9) and is
 maintained by Harald Hope (aka h2 or TechAdmin).
@@ -3254,7 +3445,7 @@ ArcherSeven (Max), Brett Bohnenkamper (aka KittyKatt), and Iotaka, who always
 manage to find the weirdest or most extreme hardware and setups that help make 
 inxi much more robust.
 
-For the vastly underrated skill of output error/glitch catching, Pete Haddow. 
+For the vastly underrated skill of report error/glitch catching, Pete Haddow. 
 His patience and focus in going through inxi repeatedly to find errors and 
 inconsistencies is much appreciated.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 ## infobash: Copyright (C) 2005-2007  Michiel de Boer aka locsmif
-## inxi: Copyright (C) 2008-2024 Harald Hope
+## inxi: Copyright (C) 2008-2025 Harald Hope
 ## Additional features (C) Scott Rogers - kde, cpu info
 ## Parse::EDID (C):  2005-2010 by Mandriva SA, Pascal Rigaux, Anssi Hannula
 ## Further fixes (listed as known): Horst Tritremmel <hjt at sidux.com>
@@ -49,8 +49,8 @@ use POSIX qw(ceil uname strftime ttyname);
 
 ## INXI INFO ##
 my $self_name='inxi';
-my $self_version='3.3.34';
-my $self_date='2024-04-13';
+my $self_version='3.3.38';
+my $self_date='2025-04-06';
 my $self_patch='00';
 ## END INXI INFO ##
 
@@ -208,7 +208,7 @@ sub initialize {
 	set_display_size();
 }
 
-## CheckTools
+## CheckTools ##
 {
 package CheckTools;
 my (%commands);
@@ -467,17 +467,20 @@ sub set_display_size {
 	if (!$b_irc){
 		if (my $program = check_program('tput')){
 			# Arch urxvt: 'tput: unknown terminal "rxvt-unicode-256color"'
+			# OpenBSD error unknwn terminal xterm-qhostty
 			# trips error if use qx(); in FreeBSD, if you use 2>/dev/null 
-			# it makes default value 80x24, who knows why?
-			chomp($size{'term-cols'} = qx{$program cols});
-			chomp($size{'term-lines'} = qx{$program lines});
+			# it makes default value 80x24, who knows why? That's a FreeBSD issue, not
+			# inxi, so suppressing errors.
+			chomp($size{'term-cols'} = qx{$program cols 2>/dev/null});
+			chomp($size{'term-lines'} = qx{$program lines 2>/dev/null});
 		}
 		# print "tc: $size{'term-cols'} cmc: $size{'console'}\n";
 		# double check, just in case it's missing functionality or whatever
-		if (!is_int($size{'term-cols'} || $size{'term-cols'} == 0)){ 
+		# handle '' or 0, we don't care.
+		if (!$size{'term-cols'} || !is_int($size{'term-cols'})){ 
 			$size{'term-cols'} = 80;
 		}
-		if (!is_int($size{'term-lines'} || $size{'term-lines'} == 0)){ 
+		if (!$size{'term-lines'} || !is_int($size{'term-lines'})){ 
 			$size{'term-lines'} = 24;
 		}
 	}
@@ -566,9 +569,9 @@ sub set_path {
 	# Extra path variable to make execute failures less likely, merged below
 	my (@path);
 	# NOTE: recent Xorg's show error if you try /usr/bin/Xorg -version but work 
-	# if you use the /usr/lib/xorg-server/Xorg path.
+	# if you use the /usr/lib/xorg-server/Xorg path. Some distros fail to add TDE
 	my @test = qw(/sbin /bin /usr/sbin /usr/bin /usr/local/sbin /usr/local/bin 
-	/usr/X11R6/bin);
+	/usr/X11R6/bin /opt/trinity/bin);
 	foreach (@test){
 		push(@paths,$_) if -d $_;
 	}
@@ -674,7 +677,7 @@ sub set_user_paths {
 		$user_data_dir="$ENV{'HOME'}/.$self_name";
 	}
 	# note, this used to be created/checked in specific instance, but we'll just 
-	# do it universally so it's done at script start.
+	# do it universally so it's done at start.
 	if (! -d $user_data_dir){
 		mkdir $user_data_dir;
 		# system "echo", "Made: $user_data_dir";
@@ -901,7 +904,7 @@ sub set_colors {
 	eval $end if $b_log;
 }
 
-## SelectColors
+## SelectColors ##
 {
 package SelectColors;
 my (@data,%configs,%status);
@@ -1546,7 +1549,7 @@ sub set_debugger {
 	}
 }
 
-## SystemDebugger
+## SystemDebugger ##
 {
 package SystemDebugger;
 my $option = 'main';
@@ -1982,11 +1985,14 @@ sub display_data {
 	['clinfo',''],
 	['clinfo','--list'],
 	['clinfo','--raw'], # machine friendly
-	['eglinfo',''],
-	['eglinfo','-B'],
+	# ['eglinfo',''], # egl is set below to allow --no-egl flag use for old Intel
+	# ['eglinfo','-B'],
 	['es2_info',''],
+	['gnome-randr',''],
 	['glxinfo',''],
 	['glxinfo','-B'],
+	['kscreen-console','outputs'], # this may create a screen type session
+	['kscreen-doctor','--outputs'],
 	['kded','--version'],
 	['kded1','--version'],
 	['kded2','--version'],
@@ -1995,11 +2001,13 @@ sub display_data {
 	['kded5','--version'],
 	['kded6','--version'],
 	['kded7','--version'],
+	['kdesktop','--version'],# TDE
 	['kf-config','--version'],
 	['kf4-config','--version'],
 	['kf5-config','--version'],
 	['kf6-config','--version'],
 	['kf7-config','--version'],
+	['kwin_wayland','--version'],
 	['kwin_x11','--version'],
 	# ['locate','/Xorg'], # for Xorg.wrap problem
 	['loginctl','--no-pager list-sessions'],
@@ -2016,6 +2024,9 @@ sub display_data {
 	['swaymsg','-t get_tree'],
 	['swaymsg','-t get_workspaces -p'],
 	['swaymsg','-t get_workspaces -r'],
+	['swaymsg','--version'],
+	['switcherooctl','list'],
+	['twin','--version'], # TDE
 	['vainfo',''],
 	['vdpauinfo',''],
 	['vulkaninfo',''],
@@ -2025,7 +2036,7 @@ sub display_data {
 	['weston-info',''], 
 	['wmctrl','-m'],
 	['weston','--version'],
-	['wlr-randr',''],
+	['wlr-randr',''], # no --version
 	['xdpyinfo',''],
 	['xdriinfo',''],
 	['Xfbdev','-version'],
@@ -2038,6 +2049,9 @@ sub display_data {
 	['Xvesa','-listmodes'],
 	['Xwayland','-version'],
 	);
+	if (!$force{'no-egl'}){
+		push(@cmds,['eglinfo',''],['eglinfo','-B']);
+	}
 	run_commands(\@cmds,'display');
 }
 
@@ -2776,7 +2790,7 @@ sub get_file_http_tiny {
 	my %headers = ($ua) ? ('agent' => $ua) : ();
 	my $tiny = HTTP::Tiny->new(%headers);
 	# note: default is no verify, so default here actually is to verify unless overridden
-	$tiny->verify_SSL => 1 if !$use{'no-ssl'};
+	$tiny->verify_SSL => 1 if !$force{'no-ssl'};
 	my $response = $tiny->get($url);
 	my $return = 1;
 	my $debug = 0;
@@ -2891,7 +2905,7 @@ sub set_downloader {
 		$dl{'dl'} = '';
 	}
 	# $use{'no-ssl' is set to 1 with --no-ssl, when false, unset to ''
-	$dl{'no-ssl'} = '' if !$use{'no-ssl'};
+	$dl{'no-ssl'} = '' if !$force{'no-ssl'};
 	eval $end if $b_log;
 }
 
@@ -2932,7 +2946,7 @@ sub error_handler {
 			$errno=23; $b_exit=0; 
 			"The option: $one has been deprecated. Please use $two instead." }
 		elsif ($err eq 'option-removed'){ 
-			$errno=24; $b_help=1; "The option: $one has been remnoved. Please use $two instead." }
+			$errno=24; $b_help=1; "The option: $one has been removed. Please use $two instead." }
 		## Data
 		elsif ($err eq 'open-data'){ 
 			$errno=32; "Error opening data for reading: $one \nError: $two" }
@@ -2972,6 +2986,8 @@ sub error_handler {
 			$errno=60; "Downloader program $two could not be located on your system." }
 		elsif ($err eq 'missing-perl-downloader'){ 
 			$errno=61; $b_recommends=1; "Perl downloader missing required module." }
+		elsif ($err eq 'no-downloader'){ 
+			$errno=62; $b_recommends=1; "No downloader program located on your system." }
 		## FTP
 		elsif ($err eq 'ftp-bad-path'){ 
 			$errno=70; "Unable to locate for FTP upload file:\n$one" }
@@ -2993,7 +3009,7 @@ sub error_handler {
 	};
 	print_line("Error $errno: $message\n");
 	if ($b_help){
-		print_line("Check -h for correct useage.\n");
+		print_line("Check -h for correct usage.\n");
 	}
 	if ($b_recommends){
 		print_line("See --recommends for more information.\n");
@@ -3015,7 +3031,7 @@ sub error_defaults {
 #### RECOMMENDS
 #### -------------------------------------------------------------------
 
-## CheckRecommends
+## CheckRecommends ##
 {
 package CheckRecommends;
 my ($item_data,@modules,@pms);
@@ -3105,15 +3121,15 @@ sub check_items {
 	elsif ($type eq 'recommended system programs'){
 		if ($bsd_type){
 			@data = qw(camcontrol dig disklabel dmidecode doas fdisk file glabel gpart 
-			ifconfig ipmi-sensors ipmitool pciconfig pcidump pcictl smartctl sudo 
+			ifconfig ipmi-sensors ipmitool pciconfig pcidump pcictl ps smartctl sudo 
 			sysctl tree upower uptime usbconfig usbdevs);
 			$info_os = 'info-bsd';
 		}
 		else {
 			@data = qw(blockdev bt-adapter btmgmt dig dmidecode doas fdisk file 
 			fruid_print hciconfig hddtemp ifconfig ip ipmitool ipmi-sensors lsblk 
-			lsusb lvs mdadm modinfo runlevel sensors smartctl strings sudo tree 
-			udevadm upower uptime);
+			lspci lsusb lvs mdadm modinfo ps runlevel sensors smartctl strings sudo 
+			tree udevadm upower uptime);
 		}
 		$b_program = 1;
 		$item = 'Program';
@@ -3122,13 +3138,13 @@ sub check_items {
 	}
 	elsif ($type eq 'recommended display information programs'){
 		if ($bsd_type){
-			@data = qw(eglinfo glxinfo vulkaninfo wayland-info wmctrl xdpyinfo xprop 
-			xdriinfo xrandr);
+			@data = qw(eglinfo glxinfo vulkaninfo wayland-info wlr-randr wmctrl
+			xdpyinfo xprop xdriinfo xrandr);
 			$info_os = 'info-bsd';
 		}
 		else {
-			@data = qw(eglinfo glxinfo vulkaninfo wayland-info wmctrl xdpyinfo xprop 
-			xdriinfo xrandr);
+			@data = qw(eglinfo glxinfo vulkaninfo wayland-info wlr-randr wmctrl 
+			xdpyinfo xprop xdriinfo xrandr);
 		}
 		$b_program = 1;
 		$item = 'Program';
@@ -3477,7 +3493,7 @@ sub set_item_data {
 	'rpm' => 'hddtemp',
 	},
 	'ifconfig' => {
-	'info' => '-i ip LAN (deprecated)',
+	'info' => '-i ip LAN (deprecated, ip preferred)',
 	'info-bsd' => '-i ip LAN',
 	'apt' => 'net-tools',
 	'pacman' => 'net-tools',
@@ -3516,6 +3532,22 @@ sub set_item_data {
 	'pkgtool' => 'util-linux',
 	'rpm' => 'util-linux-ng',
 	},
+	'lspci' => {
+	'info' => '-A,-E,-G,-N,-R PCI Device data (/sys supplies much)',
+	'info-bsd' => '',
+	'apt' => 'pciutils',
+	'pacman' => 'pciutils',
+	'pkgtool' => 'pciutils',
+	'rpm' => 'pciutils',
+	},
+	'lsusb' => {
+	'info' => '-A,-E,-G,-J,-N USB Device data (/sys supplies much)',
+	'info-bsd' => '',
+	'apt' => 'usbutils',
+	'pacman' => 'usbutils',
+	'pkgtool' => 'usbutils',
+	'rpm' => 'usbutils',
+	},
 	'lvs' => {
 	'info' => '-L LVM data',
 	'info-bsd' => '',
@@ -3523,14 +3555,6 @@ sub set_item_data {
 	'pacman' => 'lvm2',
 	'pkgtool' => 'lvm2',
 	'rpm' => 'lvm2',
-	},
-	'lsusb' => {
-	'info' => '-A usb audio; -J (optional); -N usb networking',
-	'info-bsd' => '',
-	'apt' => 'usbutils',
-	'pacman' => 'usbutils',
-	'pkgtool' => 'usbutils',
-	'rpm' => 'usbutils',
 	},
 	'mdadm' => {
 	'info' => '-Ra advanced mdraid data',
@@ -3559,6 +3583,14 @@ sub set_item_data {
 	'pcidump' => {
 	'info' => '',
 	'info-bsd' => '-A,-E,-G,-N pci devices (OpenBSD+derived, doas/su)',
+	},
+	'ps' => {
+	'info' => '-G,-I,-n,-S,-t process/programs',
+	'info-bsd' => '-G,-I,-n,-S,-t process/programs',
+	'apt' => 'procps',
+	'pacman' => 'procps',
+	'pkgtool' => 'procps',
+	'rpm' => 'procps',
 	},
 	'runlevel' => {
 	'info' => '-I fallback to Perl',
@@ -3683,6 +3715,14 @@ sub set_item_data {
 	'pacman' => 'wayland-utils',
 	'pkgtool' => 'wayland-utils',
 	'rpm' => 'wayland-utils',
+	},
+	'wlr-randr' => {
+	'info' => '-G (Wayland, wlroots based) monitors(s) data',
+	'info-bsd' => '-G (Wayland, wlroots based) monitors(s) data',
+	'apt' => 'wlr-randr',
+	'pacman' => 'wlr-randr',
+	'pkgtool' => 'wlr-randr (?)',
+	'rpm' => 'wlr-randr',
 	},
 	'wmctrl' => {
 	'info' => '-S active window manager (fallback)',
@@ -4007,14 +4047,18 @@ sub is_hex {
 ## NOTE: for perl pre 5.012 length(undef) returns warning
 # receives string, returns boolean 1 if integer
 sub is_int {
-	return 1 if (defined $_[0] && length($_[0]) && 
-	 length($_[0]) == ($_[0] =~ tr/0123456789//));
+	if (defined $_[0] && length($_[0]) && 
+	length($_[0]) == ($_[0] =~ tr/0123456789//)){
+		return 1;
+	}
 }
 
 # receives string, returns true/1 if >= 0 numeric. tr/// 4x faster than regex
 sub is_numeric {
-	return 1 if (defined $_[0] && ($_[0] =~ tr/0123456789//) >= 1 && 
-	 length($_[0]) == ($_[0] =~ tr/0123456789.//) && ($_[0] =~ tr/.//) <= 1);
+	if (defined $_[0] && ($_[0] =~ tr/0123456789//) >= 1 && 
+	length($_[0]) == ($_[0] =~ tr/0123456789.//) && ($_[0] =~ tr/.//) <= 1){
+		return 1;
+	}
 }
 
 # gets array ref, which may be undefined, plus join string
@@ -4198,6 +4242,10 @@ sub update_me {
 		error_handler('not-writable', "$self_name", '');
 	}
 	$output .= "Starting $self_name self updater.\n";
+	if (!$dl{'dl'}){
+		print $output;
+		main::error_handler('no-downloader');
+	}
 	$output .= "Using $dl{'dl'} as downloader.\n";
 	$output .= "Currently running $self_name version number: $self_version\n";
 	$output .= "Current version patch number: $self_patch\n";
@@ -4228,7 +4276,7 @@ sub update_me {
 				update_man($self_download,$download_id);
 			}
 			else {
-				print "Skipping man download because branch version is being used.\n";
+				print "Skipping man download.\n";
 			}
 			exit 0;
 		}
@@ -4367,7 +4415,7 @@ sub set_version_data {
 #### OPTIONS HANDLER / VERSION
 ########################################################################
 
-## OptionsHandler
+## OptionsHandler ##
 {
 package OptionsHandler;
 # Note: used %trigger here, but perl 5.008 had issues, so mmoved to global. 
@@ -4422,21 +4470,8 @@ sub get {
 	'D|disk' => sub {
 		$show{'short'} = 0;
 		$show{'disk'} = 1;},
-	'E|bluetooth' => sub {
-		$show{'short'} = 0;
-		$show{'bluetooth'} = 1; 
-		$show{'bluetooth-forced'} = 1;},
-	'edid' => sub {
-		$b_admin = 1;
-		$show{'short'} = 0;
-		$show{'edid'} = 1;
-		$show{'graphic'} = 1;
-		$show{'graphic-full'} = 1;},
-	'f|flags|flag' => sub {
-		$show{'short'} = 0;
-		$show{'cpu'} = 1;
-		$show{'cpu-flag'} = 1;},
-	'F|full' => sub {
+	# Note: to show deprecation warnings will need to create separate F|full item.
+	'e|F|expanded|full' => sub {
 		$show{'short'} = 0;
 		$show{'audio'} = 1;
 		$show{'battery'} = 1;
@@ -4455,6 +4490,20 @@ sub get {
 		$show{'sensor'} = 1;
 		$show{'swap'} = 1;
 		$show{'system'} = 1;},
+	'E|bluetooth' => sub {
+		$show{'short'} = 0;
+		$show{'bluetooth'} = 1; 
+		$show{'bluetooth-forced'} = 1;},
+	'edid' => sub {
+		$b_admin = 1;
+		$show{'short'} = 0;
+		$show{'edid'} = 1;
+		$show{'graphic'} = 1;
+		$show{'graphic-full'} = 1;},
+	'f|flags|flag' => sub {
+		$show{'short'} = 0;
+		$show{'cpu'} = 1;
+		$show{'cpu-flag'} = 1;},
 	'gpu|nvidia|nv' => sub {
 		main::error_handler('option-removed', '--gpu/--nvidia/--nv','-Ga');},
 	'G|graphics|graphic' => sub {
@@ -4914,7 +4963,7 @@ sub get {
 	'debug-width|debug-y:i' => sub { 
 		my ($opt,$arg) = @_;
 		$arg ||= 80;
-		if ($arg =~ /^\d+$/ && ($arg == 1 || $arg >= 80)){
+		if ($arg =~ /^\d+$/ && ($arg == 1 || $arg >= 50)){
 			$debugger{'width'} = $arg;
 		}
 		else {
@@ -4923,7 +4972,7 @@ sub get {
 	'debug-zy|debug-yz:i' => sub { 
 		my ($opt,$arg) = @_;
 		$arg ||= 80;
-		if ($arg =~ /^\d+$/ && ($arg == 1 || $arg >= 80)){
+		if ($arg =~ /^\d+$/ && ($arg == 1 || $arg >= 50)){
 			$debugger{'width'} = $arg;
 			$debugger{'filter'} = 1;
 		}
@@ -4931,7 +4980,7 @@ sub get {
 			main::error_handler('bad-arg', $opt, $arg);
 		}},
 	'dig' => sub {
-		$force{'no-dig'} = 0;},
+		$force{'dig'} = 0;},
 	'display:s' => sub { 
 		my ($opt,$arg) = @_;
 		if ($arg =~ /^:?([0-9\.]+)?$/){
@@ -4969,11 +5018,14 @@ sub get {
 		else {
 			main::error_handler('bad-arg', $opt, $arg);
 		}},
+	'egl' => sub {
+		$force{'egl'} = 1;},
 	'fake:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg){
 			my $wl = 'bluetooth|compiler|cpu|dboot|dmidecode|egl|elbrus|glx|';
-			$wl .= 'iomem|ip-if|ipmi|logical|lspci|partitions|pciconf|pcictl|pcidump|';
+			$wl .= 'iomem|ip-if|ipmi|kscreen|logical|lspci|';
+			$wl .= 'partitions|pciconf|pcictl|pcidump|';
 			$wl .= 'raid-btrfs|raid-hw|raid-lvm|raid-md|raid-soft|raid-zfs|';
 			$wl .= 'sensors|sensors-sys|swaymsg|sys-mem|sysctl|';
 			$wl .= 'udevadm|uptime|usbconfig|usbdevs|vmstat|vulkan|wl-info|wlr-randr|';
@@ -5001,10 +5053,11 @@ sub get {
 	'force:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg){
-			my $wl = 'bluetoothctl|bt-adapter|btmgmt|colors|cpuinfo|display|dmidecode|';
-			$wl .= 'hciconfig|hddtemp|ip|ifconfig|lsusb|man|meminfo|';
-			$wl .= 'no-dig|no-doas|no-html-wan|no-sudo|pkg|rfkill|rpm|sensors-sys|';
-			$wl .= 'udevadm|usb-sys|vmstat|wayland|wmctrl';
+			my $wl = 'bluetoothctl|bt-adapter|btmgmt|colors|cpuinfo|dig|display|dmidecode|';
+			$wl .= 'egl|hciconfig|hddtemp|html-wan|ip|ifconfig|kscreen|lsusb|man|meminfo|';
+			$wl .= 'no-dig|no-doas|no-egl|no-graphics-api|no-html-wan|no-man|no-opengl|';
+			$wl .= 'no-ssl|no-sudo|no-vulkan|pkg|rfkill|rpm|sensors-sys|swaymsg|udevadm|';
+			$wl .= 'usb-sys|vmstat|wayland|wl-info|wlr-randr|wmctrl';
 			for (split(',',$arg)){
 				if ($_ =~ /\b($wl)\b/){
 					$force{lc($1)} = 1;
@@ -5032,7 +5085,7 @@ sub get {
 		$show{'host'} = 1;
 		$show{'no-host'} = 0;},
 	'html-wan' => sub {
-		$force{'no-html-wan'} = 0;},
+		$force{'html-wan'} = 1;},
 	'ifconfig' => sub {
 		$force{'ifconfig'} = 1;},
 	'indent:i' => sub {
@@ -5054,7 +5107,7 @@ sub get {
 	'irc' => sub {
 		$b_irc = 1;},
 	'man' => sub {
-		$use{'yes-man'} = 1;},
+		$force{'man'} = 1;},
 	'max-wrap|wrap-max|indent-min:i' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg >= 0){
@@ -5069,19 +5122,27 @@ sub get {
 		$risc{'mips'} = 1;},
 	'no-dig' => sub {
 		$force{'no-dig'} = 1;},
+	'no-egl' => sub {
+		$force{'no-egl'} = 1;},
 	'no-doas' => sub {
 		$force{'no-doas'} = 1;},
+	'no-graphics-api' => sub {
+		$force{'no-graphics-api'} = 1;},
 	'no-host|no-hostname' => sub {
 		$show{'host'} = 0;
 		$show{'no-host'} = 1;},
 	'no-html-wan' => sub {
 		$force{'no-html-wan'}= 1;},
 	'no-man' => sub {
-		$use{'no-man'} = 0;},
+		$force{'no-man'} = 1;},
+	'no-opengl' => sub {
+		$force{'no-opengl'} = 1;},
 	'no-ssl' => sub {
-		$use{'no-ssl'} = 1;},
+		$force{'no-ssl'} = 1;},
 	'no-sudo' => sub {
 		$force{'no-sudo'} = 1;},
+	'no-vulkan' => sub {
+		$force{'no-vulkan'} = 1;},
 	'output|export:s' => sub {
 		my ($opt,$arg) = @_;
 		if ($arg =~ /^(json|screen|xml)$/){
@@ -5206,7 +5267,10 @@ sub post_process {
 	if ($use{'downloader'} || $wan_url || ($force{'no-dig'} && $show{'ip'})){
 		main::set_downloader();
 	}
-	$use{'man'} = 0 if (!$use{'yes-man'} || $use{'no-man'});
+	# setting some where internal switches test opposite value only
+	$use{'man'} = 0 if (!$force{'man'} || $force{'no-man'});
+	$force{'no-html-wan'} = 0 if $force{'html-man'};
+	$force{'no-dig'} = 0 if $force{'dig'};
 	main::update_me($self_download,$download_id) if $use{'update-trigger'};
 	main::set_xorg_log() if $show{'graphic'};
 	set_pledge() if $b_pledge;
@@ -5345,9 +5409,9 @@ sub process_updater {
 			$download_id = 'alt server';
 			$self_download = $arg;
 		}
-		if ($self_download && $self_name eq 'inxi'){
+		if ($self_download && $self_name eq 'inxi' && !$force{'no-man'}){
 			$use{'man'} = 1;
-			$use{'yes-man'} = 1;
+			$force{'man'} = 1;
 		}
 		if (!$self_download){
 			main::error_handler('bad-arg', $opt, $arg);
@@ -5398,25 +5462,27 @@ sub show_options {
 	it will display a short system summary."],
 	['0', '', '', ''],
 	['0', '', '', "You can use these options alone or together, 
-	to show or add the item(s) you want to see: A, B, C, d, D, E, f, G, i, I, j, 
+# 	to show or add the item(s) you want to see: A, B, C, d, D, E, f, G, i, I, j, 
 	J, l, L, m, M, n, N, o, p, P, r, R, s, S, t, u, w, --edid, --mm, --ms, 
-	--slots. If you use them with -v [level], -b or -F, $self_name will add the
-	requested lines to the output."],
+	--slots. If you use them with  -b, -e, or -v [level], $self_name will add the
+	requested lines to the report."],
 	['0', '', '', '' ],
 	['0', '', '', "Examples:^$self_name^-v4^-c6 OR $self_name^-bDc^6 OR
-	$self_name^-FzjJxy^80"],
+	$self_name^-ezjJxy^85"],
 	['0', '', '', $line ],
 	['0', '', '', "See Filter Options for output filtering, Output Control Options
-	for colors, sizing, output changes, Extra Data Options to extend Main output,
+	for colors, sizing, output changes, Extra Data Options to extend Main report,
 	Additional Options and Advanced Options for less common situations."],
 	['0', '', '', $line ],
 	['0', '', '', "Main Feature Options:"],
 	['1', '-A', '--audio', "Audio/sound devices(s), driver; active sound APIs and 
 	servers."],
-	['1', '-b', '--basic', "Basic output, short form. Same as $self_name^-v^2."],
+	['1', '-b', '--basic', "Basic report: System (-S); basic CPU; Machine (-M); 
+	Battery (-B) (if found); Graphics (-G); Network devices (-N); basic Disk; 
+	Info (-I). Same as $self_name^-v2. See -e for expanded report."],
 	['1', '-B', '--battery', "System battery info, including charge, condition
 	voltage (if critical), plus extra info (if battery present/detected)."],
-	['1', '-C', '--cpu', "CPU output (if each item available): basic topology,
+	['1', '-C', '--cpu', "CPU report (if each item available): basic topology,
 	model, type (see man for types), cache, average CPU speed, min/max speeds, 
 	per core clock speeds."],
 	['1', '-d', '--disk-full, --optical', "Optical drive data (and floppy disks, 
@@ -5424,22 +5490,24 @@ sub show_options {
 	['1', '-D', '--disk', "Hard Disk info, including total storage and details 
 	for each disk. Disk total used percentage includes swap ${partition_string}
 	size(s)."],
+	['1', '-e', '--expanded', "(formerly -F/--full) Expands -b basic report. 
+	Includes all Upper Case options (except -J) plus --swap, -s and -n. Does not 
+	show extra verbose options such as -d -f -i -J -l -m -o -p -r -t -u -x, unless 
+	specified."],
 	['1', '-E', '--bluetooth', "Show bluetooth device data and report, if 
 	available. Shows state, address, IDs, version info."],
 	['1', '', '--edid', "Full graphics data, triggers -a, -G. Add monitor chroma,
 	full modelines (if > 2), EDID errors and warnings, if present."],
 	['1', '-f', '--flags', "All CPU $flags. Triggers -C. Not shown with -F to 
 	avoid spamming."],
-	['1', '-F', '--full', "Full output. Includes all Upper Case line letters 
-	(except -J, -W) plus --swap, -s and -n. Does not show extra verbose options 
-	such as -d -f -i -J -l -m -o -p -r -t -u -x, unless specified."],
+	['1', '-F', '--full', "Deprecated. See -e/--expanded."],
 	['1', '-G', '--graphics', "Graphics info (devices(s), drivers, display 
 	protocol (if available), display server/Wayland compositor, resolution, X.org: 
 	renderer, basic EGL, OpenGL, Vulkan API data; Xvesa API: VBE info."],
 	['1', '-i', '--ip', "WAN IP address and local interfaces (requires ifconfig 
 	or ip network tool). Triggers -n. Not shown with -F for user security reasons. 
 	You shouldn't paste your local/WAN IP."],
-	['1', '', '--ip-limit, --limit', "[-1; 1-x] Set max output limit of IP 
+	['1', '', '--ip-limit, --limit', "[-1; 1-x] Set max report limit of IP 
 	addresses for -i (default 10; -1 removes limit)."],
 	['1', '-I', '--info', "General info, including processes, uptime, memory (if 
 	-m/-tm not used), IRC client or shell type, $self_name version."],
@@ -5473,19 +5541,19 @@ sub show_options {
 	all other detected ${partition_string}s)."],
 	['1', '', '--partitions-sort, --ps', "
 	[dev-base|fs|id|label|percent-used|size|uuid|used] Change sort order of 
-	${partition_string} output. See man page for specifics."],
+	${partition_string} report. See man page for specifics."],
 	['1', '-P', '--partitions', "Basic $partition_string info. Shows, if detected: 
 	/ /boot /home /opt /tmp /usr /usr/home /var /var/log /var/tmp. Swap 
 	${partition_string}s show if --swap is not used. Use -p to see all 
 	mounted ${partition_string}s."],
 	['1', '-r', '--repos', "Distro repository data. Supported repo types: APK, 
 	APT, CARDS, EOPKG, NETPKG, NIX, PACMAN, PACMAN-G2, PISI, PKG (BSDs), PORTAGE, 
-	PORTS (BSDs), SBOPKG, SBOUI, SCRATCHPKG, SLACKPKG, SLAPT_GET, SLPKG, TCE, 
-	TAZPKG, URPMQ, XBPS, YUM/ZYPP."],
+	PORTS (BSDs), SBOPKG, SBOUI, SCRATCHPKG, SLACKPKG, SLAPT_GET, SLPKG, 
+	T2-EMERGE, TCE, TAZPKG, URPM, XBPS, YUM/ZYPP."],
 	['1', '-R', '--raid', "RAID data. Shows RAID devices, states, levels, array 
 	sizes, and components. md-raid: If device is resyncing, also shows resync
 	progress line."],
-	['1', '-s', '--sensors', "Sensors output (if sensors installed/configured): 
+	['1', '-s', '--sensors', "Sensors report (if sensors installed/configured): 
 	mobo/CPU/GPU temp; detected fan speeds. Nvidia shows screen number for > 1 
 	screen. IPMI sensors if present."],
 	['1', '', '--slots', "PCI slots: type, speed, status. Requires root."],
@@ -5498,28 +5566,25 @@ sub show_options {
 	numbers (e.g.^-t^cm10)."],
 	['1', '-u', '--uuid', "$partition_string_u, system board UUIDs. Use with -j, 
 	-M, -o, -p, -P."],
-	['1', '-v', '--verbosity', "Set $self_name verbosity level (0-8). 
-	Should not be used with -b or -F. Example: $self_name^-v^4"],
-	['2', '0', '', "Same as: $self_name"],
-	['2', '1', '', "Basic verbose, -S + basic CPU + -G + basic Disk + -I."],
-	['2', '2', '', "Networking device (-N), Machine (-M), Battery (-B; if 
-	present), and, if present, basic RAID (devices only; notes if inactive). Same 
-	as $self_name^-b"],
-	['2', '3', '', "Advanced CPU (-C), battery (-B), network (-n); 
-	triggers -x. "],
-	['2', '4', '', "$partition_string_u size/used data (-P) for 
-	(if present) /, /home, /var/, /boot. Shows full disk data (-D). "],
-	['2', '5', '', "Audio device (-A), sensors (-s), memory/RAM (-m), 
-	bluetooth (if present), $partition_string label^(-l), full swap (-j), 
-	UUID^(-u), short form of optical drives, RAID data (if present)."],
-	['2', '6', '', "Full $partition_string (-p), 
-	unmounted $partition_string (-o), optical drive (-d), USB (-J),
-	full RAID; triggers -xx."], 
-	['2', '7', '', "Network IP data (-i), bluetooth, logical (-L), 
-	RAID forced, full CPU $flags; triggers -xxx."],
-	['2', '8', '', "Everything available, including	advanced gpu EDID (--edid)
-	data, repos (-r), processes (-tcm), PCI slots (--slots); triggers 
-	admin (-a)."],
+	['1', '-v', '--verbosity', "Set $self_name report verbosity level (0-8). 
+	Should not be used with -b or -e. Example: $self_name^-v^4"],
+	['2', '0', '', "Simple report. Same as: $self_name"],
+	['2', '1', '', "Basic report: System (-S); basic CPU; Graphics (-G); basic 
+	Disk; Info (-I)."],
+	['2', '2', '', "Adds: Machine (-M); Battery (-B) (if present); Networking 
+	devices (-N). Same as $self_name^-b."],
+	['2', '3', '', "Adds: Full CPU (-C); advanced network (-n); triggers -x."],
+	['2', '4', '', "Adds: full disk data (-D); $partition_string_u size/used data 
+	(-P) for (if present) /, /home, /var/, /boot."],
+	['2', '5', '', "Adds: memory/RAM (-m); Audio (-A); bluetooth (-E) (if present); 
+	RAID (-R) (if present); $partition_string label^(-l) and UUID^(-u); full swap 
+	(-j); sensors (-s)."],
+	['2', '6', '', "Adds: optical drives (-d); full $partition_string (-p); 
+	unmounted $partition_string (-o); USB (-J); triggers -xx."], 
+	['2', '7', '', "Adds: full CPU $flags (-f); logical devices (-L); Network IP 
+	(-i); forces Battery (-B), Bluetooth (-E), RAID (-R); triggers -xxx."],
+	['2', '8', '', "Adds: PCI slots (--slots); GPU EDID (--edid); Repos (-r); 
+	Processes (-tcm); triggers -a. -v8 is all the system info available."],
 	);
 	# if distro maintainers don't want the weather feature disable it
 	if ($use{'weather'}){
@@ -5543,7 +5608,7 @@ sub show_options {
 	[0, '', '', "$line"],
 	['0', '', '', "Filter Options:"],
 	['1', '', '--host', "Turn on hostname for -S. Overrides -z."],
-	['1', '', '--no-host', "Turn off hostname for -S. Useful if showing output 
+	['1', '', '--no-host', "Turn off hostname for -S. Useful if showing report 
 	from servers etc. Activated by -z as well."],
 	['1', '-z', '--filter', "Adds security filters for IP/MAC addresses, serial 
 	numbers, location (-w), user home directory name, host name. Default on for 
@@ -5650,10 +5715,10 @@ sub show_options {
 		['2', '-w', '', "Wind speed and direction, humidity, pressure, and time
 		zone, if available."]);
 	}
-	push(@$rows, 
+	push(@$rows,
 	['0', '', '', ''],
 	['1', '-xx', '--extra 2', "Show extra, extra data (only works with verbose 
-	or line output, not short form):"],
+	or line item reports, not short form):"],
 	['2', '-A', '', "Chip vendor:product ID for each audio device; PCIe speed,
 	lanes (if found); USB rev, speed, lanes (if found); sound server/api helper 
 	daemons/plugins."],
@@ -5668,7 +5733,7 @@ sub show_options {
 	found); Xorg: Xorg compositor; alternate Xorg drivers (if available. Alternate 
 	means driver is on automatic driver check list of Xorg for the device vendor, 
 	but is not installed on system); Xorg Screen data: ID, s-res, dpi;  Monitors: 
-	ID, position (if > 1), resolution, dpi, model, diagonal; APIs: EGL: per 
+	ID, position (if > 1), resolution, hz, dpi, model, diagonal; APIs: EGL: per 
 	platform report; OpenGL: ES version, device-ID, display-ID (if not found in 
 	Display line); Vulkan: per device report."], 
 	['2', '-I', '', "Adds Power: with children uptime, wakeups (from suspend); 
@@ -5703,10 +5768,10 @@ sub show_options {
 		cover, wind chill, dew point, heat index, if available."]
 		);
 	}
-	push(@$rows, 
+	push(@$rows,
 	['0', '', '', ''],
 	['1', '-xxx', '--extra 3', "Show extra, extra, extra data (only works 
-	with verbose or line output, not short form):"],
+	with verbose or line reports, not short form):"],
 	['2', '-A', '', "Serial number, class ID."],
 	['2', '-B', '', "Chemistry, cycles, location (if available)."],
 	['2', '-C', '', "CPU voltage, external clock speed (if root and dmidecode
@@ -5716,7 +5781,8 @@ sub show_options {
 	['2', '-E', '', "Serial number, class ID, bluetooth device class ID, HCI 
 	version and revision."],
 	['2', '-G', '', "Device serial number, class ID; Xorg Screen size, diag; 
-	Monitors: hz, size, modes, serial, scale, modes (max/min); APIs: EGL: hardware 
+	Monitors: resolution details (mode, hz, scale, scaled to if scale != 1), 
+	size, modes, serial, scale, modes (max/min); APIs: EGL: hardware 
 	driver info; Vulkan: layer count, device hardware vendor."],
 	['2', '-I', '', "For Power:, adds states, suspend/hibernate active type; 
 	For 'Shell:' adds ([doas|su|sudo|login]) to shell name if present; adds 
@@ -5743,19 +5809,19 @@ sub show_options {
 		altitude, sunrise/sunset, if available."] 
 		);
 	}
-	push(@$rows, 
+	push(@$rows,
 	['0', '', '', ''],
 	['1', '-a', '--admin', "Adds advanced sys admin data (only works with 
-	verbose or line output, not short form); check man page for explanations!; 
+	verbose or line reports, not short form); check man page for explanations!; 
 	also sets --extra=3:"],
 	['2', '-A', '', "If available: list of alternate kernel modules/drivers 
 	for device(s); PCIe lanes-max: gen, speed, lanes (if relevant); USB mode (if 
 	found); list of installed tools for servers."],
 	['2', '-C', '', "If available:  microarchitecture level (64 bit AMD/Intel 
 	only).CPU generation, process node, built years; CPU socket type, base/boost 
-	speeds (dmidecode+root/sudo/doas required); Full topology line, with cores, 
-	threads, threads per core, granular cache data, smt status; CPU 
-	vulnerabilities (bugs); family, model-id, stepping - format: hex (decimal) 
+	speeds (dmidecode+root/sudo/doas required); Full topology line, with dies, 
+	clusters, cores, threads, threads per core, granular cache data, smt status; 
+	CPU vulnerabilities (bugs); family, model-id, stepping - format: hex (decimal) 
 	if greater than 9; microcode format: hex."],
 	['2', '-d,-D', '', "If available: logical and physical block sizes; drive 
 	family; maj:min; USB mode (if found); USB drive specifics; SMART report."],
@@ -5767,7 +5833,8 @@ sub show_options {
 	relevant); USB mode (if found); list of alternate kernel modules/drivers for 
 	device(s) (if available); Monitor built year, gamma, screen ratio (if 
 	available); APIs: OpenGL: device memory, unified memory status; Vulkan: adds 
-	full device report, device name, driver version, surfaces."],
+	full device report, device name, driver version, surfaces; Info: Tools: added,
+	shows installed tools from types: api, de, gpu, wl, x11."],
 	['2', '-I', '', "Adds to Power suspend/hibernate available non active states, 
 	hibernate image size, suspend failed totals (if not 0), active power services; 
 	Packages total number of lib files found for each package manager and pm tools 
@@ -5820,7 +5887,7 @@ sub show_options {
 		^$self_name^-U^https://myserver.com/inxi"],
 		);
 	}
-	push(@$rows, 
+	push(@$rows,
 	['1', '', '--version, --vf', "Prints full $self_name version info then exits."],
 	['1', '', '--version-short,--vs', "Prints 1 line $self_name version info. Can 
 	be used with other line options."],
@@ -5834,19 +5901,24 @@ sub show_options {
 	['2', '44', '', "Bypass Curl, Fetch, and Wget as downloader options. Forces 
 	Perl if HTTP::Tiny present."],
 	['1', '', '--bt-tool', "[bt-adapter btmgmt hciconfig rfkill] Force use of 
-	given tool forbluetooth report. Or use --force [tool]."],
+	given tool for bluetooth report. Or use --force [tool]."],
 	['1', '', '--dig', "Overrides configuration item NO_DIG (resets to default)."],
 	['1', '', '--display', "[:[0-9]] Try to get display data out of X (default: 
 	display 0)."],
 	['1', '', '--dmidecode', "Force use of dmidecode data instead of /sys where 
-	relevant 
-	(e.g. -M, -B)."],
+	relevant (e.g. -M, -B)."],
 	['1', '', '--downloader', "Force $self_name to use [curl fetch perl wget] for 
 	downloads."],
-	['1', '', '--force', "[bt-adapter btmgmt dmidecode hciconfig hddtemp ip 
-	ifconfig lsusb meminfo rfkill usb-sys vmstat wmctrl].
+	['1', '', '--egl', "Force use of EGL graphics API even if blocked internally."],
+	['1', '', '--force', "[bluetoothctl bt-adapter btmgmt colors cpuinfo display 
+	dmidecode hciconfig hddtemp html-wan ifconfig ip kscreen lsusb man meminfo 
+	no-dig no-doas no-egl no-graphics-api no-html-wan no-man no-opengl no-ssl 
+	no-sudo no-vulkan pkg rfkill rpm sensors-sys swaymsg udevadm usb-sys vmstat 
+	wayland wl-info wlr-randr wmctrl].
 	1 or more in comma separated list. Force use of item(s). 
-	See --hddtemp, --dmidecode, --wm, --usb-tool, --usb-sys."],
+	See --bt-tool, --hddtemp,--html-wan, --dmidecode, --no-dig, --no-doas, 
+	--no-egl, --no-graphics-api, --no-html-wan, --no-man, --no-opengl, --no-ssl, 
+	--no-sudo, --no-vulkan, --wm, --usb-tool, --usb-sys."],
 	['1', '', '--hddtemp', "Force use of hddtemp for disk temps."],
 	['1', '', '--html-wan', "Overrides configuration item NO_HTML_WAN (resets to 
 	default)."],
@@ -5858,10 +5930,12 @@ sub show_options {
 		pinxi using -U."],
 		);
 	}
-	push(@$rows, 
+	push(@$rows,
 	['1', '', '--no-dig', "Skip dig for WAN IP checks, use downloader program."],
 	['1', '', '--no-doas', "Skip internal program use of doas features (not 
 	related to starting $self_name with doas)."],
+	['1', '', '--no-egl', "Skip EGL API data for graphics."],
+	['1', '', '--no-graphics-api', "Skip all API data for graphics."],
 	['1', '', '--no-html-wan', "Skip HTML IP sources for WAN IP checks, use dig 
 	only, or nothing if --no-dig."],
 	);
@@ -5870,20 +5944,22 @@ sub show_options {
 		['1', '', '--no-man', "Disable man install for all -U update actions."],
 		);
 	}
-	push(@$rows, 
+	push(@$rows,
+	['1', '', '--no-opengl', "Skip OpenGL API data for graphics."],
 	['1', '', '--no-ssl', "Skip SSL certificate checks for all downloader actions 
 	(Wget/Fetch/Curl/Perl-HTTP::Tiny)."],
 	['1', '', '--no-sudo', "Skip internal program use of sudo features (not 
 	related to starting $self_name with sudo)."],
+	['1', '', '--no-vulkan', "Skip Vulkan API data for graphics."],
 	['1', '', '--rpm', "Force use of disabled package manager counts for packages 
-	feature with -rx/-Ix. RPM disabled by default due to slow to massive rpm 
-	package query times."],
+	feature with -rx/-Ix. RPM disabled by default due to unacceptably slow rpm 
+	package count query times."],
 	['1', '', '--sensors-default', "Removes configuration item SENSORS_USE and 
 	SENSORS_EXCLUDE. Same as default behavior."],
 	['1', '', '--sensors-exclude', "[sensor[s] name, comma separated] Exclude 
-	supplied sensor array[s] for -s output (lm-sensors, /sys. Linux only)."],
+	supplied sensor array[s] for -s report (lm-sensors, /sys. Linux only)."],
 	['1', '', '--sensors-use', "[sensor[s] name, comma separated] Use only 
-	supplied sensor array[s] for -s output (lm-sensors, /sys. Linux only)."],
+	supplied sensor array[s] for -s report (lm-sensors, /sys. Linux only)."],
 	['1', '', '--sleep', "[0-x.x] Change CPU sleep time, in seconds, for -C 
 	(default:^$cpu_sleep). Allows system to catch up and show a more accurate CPU 
 	use. Example:^$self_name^-Cxxx^--sleep^0.15"],
@@ -5898,7 +5974,7 @@ sub show_options {
 	['1', '', '--usb-tool', "Force USB data to use lsusb as data source [default]
 	(Linux only)."],
 	['1', '', '--wan-ip-url', "[URL] Skips dig, uses supplied URL for WAN IP (-i). 
-	URL output must end in the IP address. See man. 
+	URL HTML must end in the IP address. See man. 
 	Example:^$self_name^-i^--wan-ip-url^https://yoursite.com/remote-ip"],
 	['1', '', '--wm', "Force wm: to use wmctrl as data source. Default uses ps."],
 	['0', '', '', $line ],
@@ -5911,10 +5987,10 @@ sub show_options {
 	['2', '10', '', "Basic logging."],
 	['2', '11', '', "Full file/system info logging."],
 	['1', '', ,'', "The following create a tar.gz file of system data, plus 
-	$self_name output. To automatically upload debugger data tar.gz file to 
+	$self_name report. To automatically upload debugger data tar.gz file to 
 	ftp.smxi.org: $self_name^--debug^21"],
 	['2', '20', '', "Full system data collection: /sys; xorg conf and log data, 
-	xrandr, xprop, xdpyinfo, glxinfo etc.; data from dev, disks,  
+	display tool data, etc.; data from dev, disks,  
 	${partition_string}s, etc."],
 	['2', '21', '', "Upload debugger dataset to $self_name debugger server 
 	automatically, removes debugger data directory, leaves tar.gz debugger file."],
@@ -5996,7 +6072,7 @@ sub show_version {
 #### STARTUP DATA
 ########################################################################
 
-## StartClient
+## StartClient ##
 {
 package StartClient;
 # use warnings;
@@ -6174,11 +6250,13 @@ sub get_client_version {
 	}
 	# NOTE: these must be empirically determined, not all events that 
 	# show no tty are actually IRC. tmux is not a vt, but runs inside one
+	# kate/dolphin etc have embedded terminals
 	if (!$client{'name-print'}){
-		my $wl_terms = 'alacritty|altyo|\bate\b|black-screen|conhost|doas|evilvte|';
-		$wl_terms .= 'foot|germinal|guake|havoc|hyper|kate|kitty|kmscon|konsole|';
-		$wl_terms .= 'login|macwise|minicom|putty|rxvt|sakura|securecrt|';
-		$wl_terms .= 'shellinabox|^st$|sudo|term|tilda|tilix|tmux|tym|wayst|xiki|';
+		my $wl_terms = '(alacri|ghos|ki|min|pu)tty|altyo|\bate\b|black-screen|';
+		$wl_terms .= 'conemu|conhost|contour|doas|dolphin|evilvte|foot|';
+		$wl_terms .= 'germinal|guake|havoc|hyper|kate|kgx|kmscon|konsole|';
+		$wl_terms .= 'login|macwise|minicom|phyxis|\brio\b|rxvt|sakura|securecrt|';
+		$wl_terms .= 'shellinabox|^st$|sudo|term|tilda|tilix|tmux|tym|warp|wayst|xiki|';
 		$wl_terms .= 'yaft|yakuake|\bzoc\b';
 		my $wl_clients = 'ansible|chef|run-parts|slurm|sshd';
 		my $whitelist = "$wl_terms|$wl_clients";
@@ -6381,16 +6459,17 @@ sub clean_arm {
 	return $item;
 }
 
+# This is used only in distro name strings.
+# arg: 0: name string to clean by reference
 sub clean_characters {
-	my ($data) = @_;
 	# newline, pipe, brackets, + sign, with space, then clear doubled
 	# spaces and then strip out trailing/leading spaces.
-	# etc/issue often has junk stuff like (\l)  \n \l
-	return if !$data;
-	$data =~ s/[:\47]|\\[a-z]|\n|,|\"|\*|\||\+|\[\s\]|n\/a|\s\s+/ /g; 
-	$data =~ s/\(\s*\)//;
-	$data =~ s/^\s+|\s+$//g;
-	return $data;
+	# etc/issue often has junk stuff like (\l)  \n \l. Removed + because can be 
+	# part of distro name, like Slackware 15.0+
+	return if !${$_[0]}; # should not be needed since tests for not empty on use
+	${$_[0]} =~ s/[:\47]|\\[a-z]|\n|,|\"|\*|\||\[\s\]|n\/a|\s\s+/ /g; 
+	${$_[0]} =~ s/\(\s*\)//;
+	${$_[0]} =~ s/^\s+|\s+$//g;
 }
 
 sub clean_disk {
@@ -6460,7 +6539,8 @@ sub clean_regex {
 sub clean_unset {
 	my ($string,$extra) = @_;
 	my $cleaner = '^(\.)+$|Bad Index|default string|\[?empty\]?|\bnone\b|N\/A|^not |';
-	$cleaner .= 'not set|OUT OF SPEC|To be filled|O\.?E\.?M|undefine|unknow|unspecif';
+	$cleaner .= 'not set|\bnull\b|OUT OF SPEC|To be filled|O\.?E\.?M|';
+	$cleaner .= 'undefine|unknow|unspecif';
 	$cleaner .= '|' . $extra if $extra;
 	$string =~ s/.*($cleaner).*//i;
 	return $string;
@@ -6481,25 +6561,23 @@ sub filter {
 }
 
 # Note, let the print logic handle N/A cases
+# args: 0: type; 1: string, by reference; 2: test value for system
 sub filter_partition {
-	my ($source,$string,$type) = @_;
-	return $string if !$string || $string eq 'N/A';
-	if ($source eq 'system'){
-		my $test = ($type eq 'label') ? '=LABEL=': '=UUID=';
-		$string =~ s/$test[^\s]+/$test$filter_string/g;
+	return if !$_[1] || !${$_[1]} || ${$_[1]} eq 'N/A';
+	if ($_[0]eq 'system'){
+		${$_[1]} =~ s/${_[2]}[^\s]+/${_[2]}$filter_string/g;
 	}
 	else {
-		$string = $filter_string;
+		${$_[1]} = $filter_string;
 	}
-	return $string;
 }
 
+# note these are tested before being sent so no need to test for null
+# args: 0: string to filter. by reference
 sub filter_pci_long {
-	my ($string) = @_;
-	if ($string =~ /\[AMD(\/ATI)?\]/){
-		$string =~ s/Advanced\sMicro\sDevices\s\[AMD(\/ATI)?\]/AMD/;
+	if ($_[0] =~ /\[AMD(\/ATI)?\]/){
+		${$_[0]} =~ s/Advanced\sMicro\sDevices\s\[AMD(\/ATI)?\]/AMD/;
 	}
-	return $string;
 }
 
 # args: 0: list of values. Return the first one that is defined.
@@ -6656,6 +6734,8 @@ sub message {
 	'file-unreadable' => 'File not readable (permissions?)',
 	'gfx-api' => 'No display API data available.',
 	'gfx-api-console' => 'No API data available in console. Headless machine?',
+	'gfx-api-unsafe' => "Unreliable API tool+hardware. Override with --$id.",
+	'gfx-tools' => 'No graphics tools found.',
 	'glx-console-root' => 'GL data unavailable in console for root.',
 	'glx-console-try' => 'GL data unavailable in console. Try -G --display',
 	'glx-display-root' => 'GL data unavailable for root.',
@@ -6701,6 +6781,7 @@ sub message {
 	'pci-card-data-root' => 'PCI device data requires root.',
 	'pci-slot-data' => 'No PCI Slot data found.',
 	'pm-disabled' => "see --$id",
+	'pm-no-repos' => "[$id list repo query]",
 	'ps-data-null' => 'No process data available.',
 	'raid-data' => 'No RAID data found.',
 	'ram-data' => "No RAM data found using $id.",
@@ -7322,7 +7403,7 @@ sub print_line {
 #### ITEM GENERATORS
 #### -------------------------------------------------------------------
 
-## AudioItem 
+## AudioItem ##
 {
 package AudioItem;
 
@@ -7372,7 +7453,7 @@ sub device_output {
 		$device = ($device) ? main::clean_pci($device,'output') : 'N/A';
 		# have seen absurdly verbose card descriptions, with non related data etc
 		if (length($device) > 85 || $size{'max-cols'} < 110){
-			$device = main::filter_pci_long($device);
+			main::filter_pci_long(\$device);
 		}
 		push(@$rows, {
 		main::key($num++,1,1,'Device') => $device,
@@ -7901,7 +7982,7 @@ sub sound_tools {
 }
 }
 
-## BatteryItem
+## BatteryItem ##
 {
 package BatteryItem;
 my (@upower_items,$b_upower,$upower);
@@ -8448,7 +8529,7 @@ sub upower_data {
 }
 }
 
-## BluetoothItem 
+## BluetoothItem ## 
 {
 package BluetoothItem;
 my ($b_bluetooth,$b_hci_error,$b_hci,$b_rfk,$b_service);
@@ -8504,7 +8585,7 @@ sub device_output {
 		$device = ($device) ? main::clean_pci($device,'output') : 'N/A';
 		# have seen absurdly verbose card descriptions, with non related data etc
 		if (length($device) > 85 || $size{'max-cols'} < 110){
-			$device = main::filter_pci_long($device);
+			main::filter_pci_long(\$device);
 		}
 		push(@$rows, {
 		main::key($num++,1,1,'Device') => $device,
@@ -9017,7 +9098,7 @@ sub bluetooth_version {
 }
 }
 
-## CpuItem
+## CpuItem ##
 {
 package CpuItem;
 my (%fake_data,$type);
@@ -9057,9 +9138,9 @@ sub full_output {
 		my ($key1,$val1) = ('','');
 		if ($alerts{'sysctl'}){
 			if ($alerts{'sysctl'}->{'action'} eq 'use'){
-# 				$key1 = 'Status';
-# 				$val1 = main::message('dev');
-				$cpu = sysctl_data();
+				#	$key1 = 'Status';
+				#	$val1 = main::message('dev');
+				$cpu = cpu_sysctl_data();
 			}
 			else {
 				$key1 = ucfirst($alerts{'sysctl'}->{'action'});
@@ -9083,7 +9164,7 @@ sub full_output {
 		my $counter = (%system_cpus && scalar keys %system_cpus > 1) ? '-' : '';
 		foreach my $key (keys %system_cpus){
 			$counter = '-' . $i++ if $counter;
-			$rows->[$j]{main::key($num++,0,2,'variant'.$counter)} = $key;
+			$rows->[$j]{main::key($num++,0,2,'variant' . $counter)} = $key;
 		}
 	}
 	if ($b_admin && $properties->{'socket'}){
@@ -9170,7 +9251,16 @@ sub full_output {
 			}
 			my $x = ($size{'max-cols'} == 1 || $output_type ne 'screen') ? '' : 'x';
 			$rows->[$j]{main::key($num++,0,$id,'cpus')} = $topo->{'cpus'} . $x;
+			if ($topo->{'dies-count'}){
+				$rows->[$j]{main::key($num++,0,$id+1,'dies')} = $topo->{'dies-count'};
+			}
+			if ($topo->{'clusters'}){
+				$rows->[$j]{main::key($num++,0,$id+1,'clusters')} = $topo->{'clusters'};
+			}
 			$rows->[$j]{main::key($num++,1,$id+1,'cores')} = $topo->{'cores'};
+			if ($topo->{'threads'}){
+				$rows->[$j]{main::key($num++,0,$id+1,'threads')} = $topo->{'threads'};
+			}
 			if ($topo->{'cores-mt'} && $topo->{'cores-st'}){
 				$rows->[$j]{main::key($num++,1,$id+2,'mt')} = $topo->{'cores-mt'};
 				$rows->[$j]{main::key($num++,0,$id+3,'tpc')} = $topo->{'tpc'};
@@ -9195,12 +9285,7 @@ sub full_output {
 				}
 				$rows->[$j]{main::key($num++,0,$id+1,$key)} = $freq;
 			}
-			if ($topo->{'threads'}){
-				$rows->[$j]{main::key($num++,0,$id+1,'threads')} = $topo->{'threads'};
-			}
-			if ($topo->{'dies'}){
-				$rows->[$j]{main::key($num++,0,$id+1,'dies')} = $topo->{'dies'};
-			}
+			
 		}
 		$cpu->{'smt'} ||= 'N/A';
 		$rows->[$j]{main::key($num++,0,2,'smt')} = $cpu->{'smt'};
@@ -9421,9 +9506,9 @@ sub short_data {
 		my ($key1,$val1) = ('','');
 		if ($alerts{'sysctl'}){
 			if ($alerts{'sysctl'}->{'action'} eq 'use'){
-# 				$key1 = 'Status';
-# 				$val1 = main::message('dev');
-				$cpu = sysctl_data($type);
+				#	$key1 = 'Status';
+				#	$val1 = main::message('dev');
+				$cpu = cpu_sysctl_data($type);
 			}
 			else {
 				$key1 = ucfirst($alerts{'sysctl'}->{'action'});
@@ -9467,15 +9552,155 @@ sub prep_short_data {
 	return $result;
 }
 
-## PRIMARY DATA GENERATORS ##
+## CPUINFO/SYS DATA GENERATORS ##
+
+## DEBUGGER DATA
+# Set in one place to make sure we get them all consistent
+sub set_fake_cpu_data {
+	$loaded{'cpu-fake-data'} = 1;
+	my ($ci,$sys);
+	## CPUINFO DATA FILES ##
+	## ARM/MIPS
+	# $ci = "$fake_data_dir/cpu/arm/arm-4-core-pinebook-1.txt";
+	# $ci = "$fake_data_dir/cpu/arm/armv6-single-core-1.txt";
+	# $ci = "$fake_data_dir/cpu/arm/armv7-dual-core-1.txt";
+	# $ci = "$fake_data_dir/cpu/arm/armv7-new-format-model-name-single-core.txt";
+	# $ci = "$fake_data_dir/cpu/arm/arm-2-die-96-core-rk01.txt";
+	# $ci = "$fake_data_dir/cpu/arm/arm-shevaplug-1.2ghz.txt";
+	# $ci = "$fake_data_dir/cpu/mips/mips-mainusg-cpuinfo.txt";
+	# $ci = "$fake_data_dir/cpu/ppc/ppc-debian-ppc64-cpuinfo.txt";
+	## x86
+	# $ci = "$fake_data_dir/cpu/amd/16-core-32-mt-ryzen.txt";
+	# $ci = "$fake_data_dir/cpu/amd/2-16-core-epyc-abucodonosor.txt";
+	# $ci = "$fake_data_dir/cpu/amd/2-core-probook-antix.txt";
+	# $ci = "$fake_data_dir/cpu/amd/4-core-jean-antix.txt";
+	# $ci = "$fake_data_dir/cpu/amd/4-core-althlon-mjro.txt";
+	# $ci = "$fake_data_dir/cpu/amd/4-core-apu-vc-box.txt";
+	# $ci = "$fake_data_dir/cpu/amd/4-core-a10-5800k-1.txt";
+	# $ci = "$fake_data_dir/cpu/intel/1-core-486-fourtysixandtwo.txt";
+	# $ci = "$fake_data_dir/cpu/intel/2-core-ht-atom-bruh.txt";
+	# $ci = "$fake_data_dir/cpu/intel/core-2-i3.txt";
+	# $ci = "$fake_data_dir/cpu/intel/8-core-i7-damentz64.txt";
+	# $ci = "$fake_data_dir/cpu/intel/2-10-core-xeon-ht.txt";
+	# $ci = "$fake_data_dir/cpu/intel/4-core-xeon-fake-dual-die-zyanya.txt";
+	# $ci = "$fake_data_dir/cpu/intel/2-core-i5-fake-dual-die-hek.txt";
+	# $ci = "$fake_data_dir/cpu/intel/2-1-core-xeon-vm-vs2017.txt";
+	# $ci = "$fake_data_dir/cpu/intel/4-1-core-xeon-vps-frodo1.txt";
+	# $ci = "$fake_data_dir/cpu/intel/4-6-core-xeon-no-mt-lathander.txt";
+	## Elbrus
+	# $cpu_type = 'elbrus'; # uncomment to test elbrus
+	# $ci = "$fake_data_dir/cpu/elbrus/elbrus-2c3/cpuinfo.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/1xE1C-8.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/1xE2CDSP-4.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/1xE2S4-3-monocub.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/1xMBE8C-7.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/4xEL2S4-3.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/4xE8C-7.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/4xE2CDSP-4.txt";
+	# $ci = "$fake_data_dir/cpu/elbrus/cpuinfo.e8c2.txt";
+	## Loongson 
+	# $cpu_type = 'elbrus'; # uncomment to test loongson
+	# $ci = "$fake_data_dir/cpu/loongson/3A5000M-4-core-4.19.0.txt";
+	
+	## CPU CPUINFO/SYS PAIRS DATA FILES ##
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/android-pocom3-fake-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/android-pocom3-fake-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/arm-pine64-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/arm-pine64-sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/arm-riscyslack2-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/arm-riscyslack2-sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/ppc-stuntkidz~cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/ppc-stuntkidz~sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/riscv-unmatched-2021~cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/riscv-unmatched-2021~sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-brickwizard-atom-n270~cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-brickwizard-atom-n270~sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-amd-phenom-chrisretusn-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-amd-phenom-chrisretusn-sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-drgibbon-intel-i7-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-drgibbon-intel-i7-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/ryzen-threadripper-1x64-3950x-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/ryzen-threadripper-1x64-3950x-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/amd-threadripper-1x12-5945wx-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/amd-threadripper-1x12-5945wx-sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/intel-i7-1165G7-4-core-no-smt-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/intel-i7-1165G7-4-core-no-smt-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/elbrus-e16c-1-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/elbrus-e16c-1-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/intel-raptor-lake-10-core-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/intel-raptor-lake-10-core-sys-1.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/risc-v-spacemit-8-core-cpuinfo.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/risc-v-spacemit-8-core-sys.txt";
+	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/intel-xeon-2x12-core-mt-cpuinfo-1.txt";
+	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/intel-xeon-2x12-core-mt-sys-1.txt";
+	 $ci = "$fake_data_dir/cpu/sys-ci-pairs/amd-epyc-2x-16-core-4-die-cpuinfo-1.txt";
+	 $sys = "$fake_data_dir/cpu/sys-ci-pairs/amd-epyc-2x-16-core-4-die-sys-1.txt";
+	$fake_data{'cpuinfo'} = $ci;
+	$fake_data{'sys'} = $sys;
+}
+
+## CPUINFO DATA
+sub cpuinfo_data_grabber {
+	eval $start if $b_log;
+	my ($file,$cpu_type) = @_; # type by ref
+	$loaded{'cpuinfo'} = 1;
+	# use --arm flag when testing arm cpus, and --fake-cpu to trigger fake data
+	$file = $fake_data{'cpuinfo'} if $fake{'cpu'};
+	my $raw = main::reader($file,'','ref');
+	@$raw = map {$_ =~ s/^\s*$/~~~/;$_;} @$raw;
+	push(@$raw,'~~~') if @$raw;
+	my ($b_processor,$key,$value);
+	my ($i) = (0);
+	my @key_tests = ('firmware','hardware','mmu','model','motherboard',
+	 'platform','system type','timebase');
+	foreach my $row (@$raw){
+		($key,$value) = split(/\s*:\s*/,$row,2);
+		next if !defined $key;
+		# ARM: 'Hardware' can appear in processor block; system type (mips)
+		# ARM: CPU revision; machine: Revision/PPC: revision (CPU implied)
+		# orangepi3 has Hardware/Processor embedded in processor block
+		if (%risc && ((grep {lc($key) eq $_} @key_tests) || 
+		 (!$risc{'ppc'} && lc($key) eq 'revision'))){
+			$b_processor = 0;
+		}
+		else {
+			$b_processor = 1;
+		}
+		if ($b_processor){
+			if ($key eq '~~~'){
+				$i++;
+				next;
+			}
+			# A small handful of ARM devices use Processor instead of 'model name'
+			# Processor   : AArch64 Processor rev 4 (aarch64)
+			# Processor : Feroceon 88FR131 rev 1 (v5l)
+			$key = ($key eq 'Processor') ? 'model name' : lc($key);
+			$cpuinfo[$i]->{$key} = $value;
+		}
+		else {
+			next if $cpuinfo_machine{lc($key)}; 
+			$cpuinfo_machine{lc($key)} = $value;
+		}
+	}
+	if ($b_log){
+		main::log_data('dump','@cpuinfo',\@cpuinfo);
+		main::log_data('dump','%cpuinfo_machine',\%cpuinfo_machine);
+	}
+	if ($dbg[41]){
+		print Data::Dumper::Dumper \@cpuinfo;
+		print Data::Dumper::Dumper \%cpuinfo_machine;
+	}
+	eval $end if $b_log;
+}
+
 sub cpuinfo_data {
 	eval $start if $b_log;
 	my ($file)=  @_;
 	my ($cpu,$arch,$note,$temp);
 	# has to be set above fake cpu section
 	set_cpu_data(\$cpu);
-	set_fake_data() if $fake{'cpu'} && !$loaded{'cpu-fake-data'};
-	# sleep is also set in front of sysctl_data for BSDs, same idea
+	set_fake_cpu_data() if $fake{'cpu'} && !$loaded{'cpu-fake-data'};
+	# sleep is also set in front of cpu_sysctl_data for BSDs, same idea
 	my $sleep = $cpu_sleep * 1000000;
 	if ($b_hires){
 		eval 'Time::HiRes::usleep($sleep)';
@@ -9522,6 +9747,9 @@ sub cpuinfo_data {
 						# print "p0:\n";
 					}
 				}
+				elsif ($cpu->{'model_name'} =~ /loongson|godson/i){
+					$cpu->{'type'} = 'loongson';
+				}
 				elsif ($risc{'mips'} || $cpu->{'model_name'} =~ /mips/i){
 					$cpu->{'type'} = 'mips';
 				}
@@ -9545,6 +9773,10 @@ sub cpuinfo_data {
 				$temp = $block->{'revision'} if defined $block->{'revision'};
 				if ($temp =~ /^\d+$/){
 					$cpu->{'stepping'} = uc(sprintf("%x",$temp));
+				}
+				# loongson, hex: 0x11
+				elsif ($temp =~ /^0x[0-9a-f]{1,2}$/){
+					$cpu->{'stepping'} = $temp;
 				}
 			}
 			# PPC revision is a string, but elbrus revision is hex
@@ -9760,236 +9992,11 @@ sub cpuinfo_speed_sys {
 	eval $end if $b_log;
 }
 
-sub cpuinfo_data_grabber {
-	eval $start if $b_log;
-	my ($file,$cpu_type) = @_; # type by ref
-	$loaded{'cpuinfo'} = 1;
-	# use --arm flag when testing arm cpus, and --fake-cpu to trigger fake data
-	$file = $fake_data{'cpuinfo'} if $fake{'cpu'};
-	my $raw = main::reader($file,'','ref');
-	@$raw = map {$_ =~ s/^\s*$/~~~/;$_;} @$raw;
-	push(@$raw,'~~~') if @$raw;
-	my ($b_processor,$key,$value);
-	my ($i) = (0);
-	my @key_tests = ('firmware','hardware','mmu','model','motherboard',
-	 'platform','system type','timebase');
-	foreach my $row (@$raw){
-		($key,$value) = split(/\s*:\s*/,$row,2);
-		next if !defined $key;
-		# ARM: 'Hardware' can appear in processor block; system type (mips)
-		# ARM: CPU revision; machine: Revision/PPC: revision (CPU implied)
-		# orangepi3 has Hardware/Processor embedded in processor block
-		if (%risc && ((grep {lc($key) eq $_} @key_tests) || 
-		 (!$risc{'ppc'} && lc($key) eq 'revision'))){
-			$b_processor = 0;
-		}
-		else {
-			$b_processor = 1;
-		}
-		if ($b_processor){
-			if ($key eq '~~~'){
-				$i++;
-				next;
-			}
-			# A small handful of ARM devices use Processor instead of 'model name'
-			# Processor   : AArch64 Processor rev 4 (aarch64)
-			# Processor : Feroceon 88FR131 rev 1 (v5l)
-			$key = ($key eq 'Processor') ? 'model name' : lc($key);
-			$cpuinfo[$i]->{$key} = $value;
-		}
-		else {
-			next if $cpuinfo_machine{lc($key)}; 
-			$cpuinfo_machine{lc($key)} = $value;
-		}
-	}
-	if ($b_log){
-		main::log_data('dump','@cpuinfo',\@cpuinfo);
-		main::log_data('dump','%cpuinfo_machine',\%cpuinfo_machine);
-	}
-	if ($dbg[41]){
-		print Data::Dumper::Dumper \@cpuinfo;
-		print Data::Dumper::Dumper \%cpuinfo_machine;
-	}
-	eval $end if $b_log;
-}
-
-sub cpu_sys_data {
-	eval $start if $b_log;
-	my $sys_freq = $_[0];
-	my $cpu_sys = {};
-	my $working = sys_data_grabber();
-	return $cpu_sys if !%$working;
-	$cpu_sys->{'data'} = $working->{'data'} if $working->{'data'};
-	my ($core_id,$fake_core_id,$phys_id,) = (0,0,-1);
-	my (%cache_ids,@ci_freq_max,@ci_freq_min,@sc_freq_max,@sc_freq_min);
-	foreach my $key (sort keys %{$working->{'cpus'}}){
-		($core_id,$phys_id) = (0,0);
-		my $cpu_id = $key + 0;
-		my $speed;
-		my $cpu = $working->{'cpus'}{$key};
-		if (defined $cpu->{'topology'}{'physical_package_id'}){
-			$phys_id = sprintf("%04d",$cpu->{'topology'}{'physical_package_id'});
-		}
-		if (defined $cpu->{'topology'}{'core_id'}){
-			# id is not consistent, seen 5 digit id
-			$core_id = sprintf("%08d",$cpu->{'topology'}{'core_id'});
-			if ($fake{'cpu'}){
-				if (defined $cpu->{'cpufreq'}{'scaling_cur_freq'} && 
-				$cpu->{'cpufreq'}{'affected_cpus'} && 
-				$cpu->{'cpufreq'}{'affected_cpus'} ne 'UNDEFINED' &&
-				# manually generated cpu debuggers will show '', not UNDEFINED
-				$cpu->{'cpufreq'}{'affected_cpus'} ne ''){
-					$speed = clean_speed($cpu->{'cpufreq'}{'scaling_cur_freq'},'khz');
-				}
-			}
-			elsif (defined $sys_freq && defined $sys_freq->{$key}){
-				$speed = $sys_freq->{$key};
-			}
-			if (defined $speed){
-				push(@{$cpu_sys->{'cpus'}{$phys_id}{'cores'}{$core_id}},$speed);
-				push(@{$cpu_sys->{'data'}{'speeds'}{'all'}},$speed);
-			}
-			else {
-				push(@{$cpu_sys->{'data'}{'speeds'}{'all'}},0);
-				# seen cases, riscv, where core id, phys id, are all -1
-				my $id = ($core_id != -1) ? $core_id: $fake_core_id++;
-				push(@{$cpu_sys->{'cpus'}{$phys_id}{'cores'}{$id}},0);
-			}
-			# Only use if topology core-id exists, some virtualized cpus can list 
-			# frequency data for the non available cores, but those do not show 
-			# topology data.
-			# For max / min, we want to prep for the day 1 pys cpu has > 1 min/max freq
-			if (defined $cpu->{'cpufreq'}{'cpuinfo_max_freq'}){
-				$cpu->{'cpufreq'}{'cpuinfo_max_freq'} = clean_speed($cpu->{'cpufreq'}{'cpuinfo_max_freq'},'khz');
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'cpuinfo_max_freq'}} @ci_freq_max){
-					push(@ci_freq_max,$cpu->{'cpufreq'}{'cpuinfo_max_freq'});
-				}
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'cpuinfo_max_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}}){
-					push(@{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}},$cpu->{'cpufreq'}{'cpuinfo_max_freq'});
-				}
-			}
-			if (defined $cpu->{'cpufreq'}{'cpuinfo_min_freq'}){
-				$cpu->{'cpufreq'}{'cpuinfo_min_freq'} = clean_speed($cpu->{'cpufreq'}{'cpuinfo_min_freq'},'khz');
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'cpuinfo_min_freq'}} @ci_freq_min){
-					push(@ci_freq_min,$cpu->{'cpufreq'}{'cpuinfo_min_freq'});
-				}
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'cpuinfo_min_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}}){
-					push(@{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}},$cpu->{'cpufreq'}{'cpuinfo_min_freq'});
-				}
-			}
-			if (defined $cpu->{'cpufreq'}{'scaling_max_freq'}){
-				$cpu->{'cpufreq'}{'scaling_max_freq'} = clean_speed($cpu->{'cpufreq'}{'scaling_max_freq'},'khz');
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'scaling_max_freq'}} @sc_freq_max){
-					push(@sc_freq_max,$cpu->{'cpufreq'}{'scaling_max_freq'});
-				}
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'scaling_max_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}}){
-					push(@{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}},$cpu->{'cpufreq'}{'scaling_max_freq'});
-				}
-			}
-			if (defined $cpu->{'cpufreq'}{'scaling_min_freq'}){
-				$cpu->{'cpufreq'}{'scaling_min_freq'} = clean_speed($cpu->{'cpufreq'}{'scaling_min_freq'},'khz');
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'scaling_min_freq'}} @sc_freq_min){
-					push(@sc_freq_min,$cpu->{'cpufreq'}{'scaling_min_freq'});
-				}
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'scaling_min_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}}){
-					push(@{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}},$cpu->{'cpufreq'}{'scaling_min_freq'});
-				}
-			}
-			if (defined $cpu->{'cpufreq'}{'scaling_governor'}){
-				if (!grep {$_ eq $cpu->{'cpufreq'}{'scaling_governor'}} @{$cpu_sys->{'cpus'}{$phys_id}{'governor'}}){
-					push(@{$cpu_sys->{'cpus'}{$phys_id}{'governor'}},$cpu->{'cpufreq'}{'scaling_governor'});
-				}
-			}
-			if (defined $cpu->{'cpufreq'}{'scaling_driver'}){
-				$cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'} = $cpu->{'cpufreq'}{'scaling_driver'};
-			}
-		}
-		if (!defined $cpu_sys->{'data'}{'cpufreq-boost'} && defined $cpu->{'cpufreq'}{'cpb'}){
-			$cpu_sys->{'data'}{'cpufreq-boost'} = $cpu->{'cpufreq'}{'cpb'};
-		}
-		if (defined $cpu->{'topology'}{'core_cpus_list'}){
-			$cpu->{'topology'}{'thread_siblings_list'} = $cpu->{'topology'}{'core_cpus_list'};
-		}
-		if (defined $cpu->{'cache'} && keys %{$cpu->{'cache'}} > 0){
-			foreach my $key2 (sort keys %{$cpu->{'cache'}}){
-				my $cache = $cpu->{'cache'}{$key2};
-				my $type = ($cache->{'type'} =~ /^([DI])/i) ? lc($1): '';
-				my $level = 'l' . $cache->{'level'} . $type;
-				# Very old systems, 2.6.xx do not have shared_cpu_list
-				if (!defined $cache->{'shared_cpu_list'} && defined $cache->{'shared_cpu_map'}){
-					$cache->{'shared_cpu_list'} = $cache->{'shared_cpu_map'};
-				}
-				# print Data::Dumper::Dumper $cache;
-				if (defined $cache->{'shared_cpu_list'}){
-					# not needed, the cpu is always in the range
-					# my $range = main::regex_range($cache->{'shared_cpu_list'});
-					my $size = main::translate_size($cache->{'size'});
-					# print "cpuid: $cpu_id phys-core: $phys_id-$core_id level: $level range: $range  shared: $cache->{'shared_cpu_list'}\n";
-					if (!(grep {$_ eq $cache->{'shared_cpu_list'}} @{$cache_ids{$phys_id}->{$level}})){
-						push(@{$cache_ids{$phys_id}->{$level}},$cache->{'shared_cpu_list'});
-						push(@{$cpu_sys->{'cpus'}{$phys_id}{'caches'}{$level}},$size);
-					}
-				}
-			}
-		}
-		# die_id is relatively new, core_siblings_list has been around longer
-		if (defined $cpu->{'topology'}{'die_id'} || 
-		defined $cpu->{'topology'}{'core_siblings_list'}){
-			my $die = $cpu->{'topology'}{'die_id'};
-			$die = $cpu->{'topology'}{'core_siblings_list'} if !defined $die;
-			if (!grep {$_ eq $die} @{$cpu_sys->{'cpus'}{$phys_id}{'dies'}}){
-				push(@{$cpu_sys->{'cpus'}{$phys_id}{'dies'}},$die);
-			}
-		}
-	}
-	if (defined $cpu_sys->{'data'}{'cpufreq-boost'} &&
-	$cpu_sys->{'data'}{'cpufreq-boost'} =~ /^[01]$/){
-		if ($cpu_sys->{'data'}{'cpufreq-boost'}){
-			$cpu_sys->{'data'}{'cpufreq-boost'} = 'enabled';
-		}
-		else {
-			$cpu_sys->{'data'}{'cpufreq-boost'} = 'disabled';
-		}
-	}
-	# cpuinfo_max_freq:["2000000"] cpuinfo_max_freq:["1500000"] 
-	# cpuinfo_min_freq:["200000"]
-	if (@ci_freq_max){
-		$cpu_sys->{'data'}{'speeds'}{'max-freq'} = join(':',@ci_freq_max);
-	}
-	if (@ci_freq_min){
-		$cpu_sys->{'data'}{'speeds'}{'min-freq'} = join(':',@ci_freq_min);
-	}
-	# also handle off chance that cpuinfo_min/max not set, but scaling_min/max there
-	if (@sc_freq_max){
-		$cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'} = join(':',@sc_freq_max);
-		if (!$cpu_sys->{'data'}{'speeds'}{'max-freq'}){
-			$cpu_sys->{'data'}{'speeds'}{'max-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'};
-		}
-	}
-	if (@sc_freq_min){
-		$cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'} = join(':',@sc_freq_min);
-		if (!$cpu_sys->{'data'}{'speeds'}{'min-freq'}){
-			$cpu_sys->{'data'}{'speeds'}{'min-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'};
-		}
-	}
-	# this corrects a bug we see sometimes in min/max frequencies
-	if ((scalar @ci_freq_max < 2 && scalar @ci_freq_min < 2) && 
-	(defined $cpu_sys->{'data'}{'speeds'}{'min-freq'} && 
-	defined $cpu_sys->{'data'}{'speeds'}{'max-freq'}) &&
-	($cpu_sys->{'data'}{'speeds'}{'min-freq'} > $cpu_sys->{'data'}{'speeds'}{'max-freq'} || 
-	$cpu_sys->{'data'}{'speeds'}{'min-freq'} == $cpu_sys->{'data'}{'speeds'}{'max-freq'})){
-		$cpu_sys->{'data'}{'speeds'}{'min-freq'} = 0;
-	}
-	main::log_data('dump','%$cpu_sys',$cpu_sys) if $b_log;
-	print 'cpu-sys: ', Data::Dumper::Dumper $cpu_sys if $dbg[8];
-	eval $end if $b_log;
-	return $cpu_sys;
-}
-
-sub sys_data_grabber {
+## SYS DATA 
+sub cpu_sys_data_grabber {
 	eval $start if $b_log;
 	my (@files);
-	set_fake_data() if $fake{'cpu'} && !$loaded{'cpu-fake-data'};
+	set_fake_cpu_data() if $fake{'cpu'} && !$loaded{'cpu-fake-data'};
 	# this data has to match the data in cpuinfo grabber fake cpu, and remember
 	# to use --arm flag if arm tests
 	if ($fake{'cpu'}){
@@ -10005,12 +10012,15 @@ sub sys_data_grabber {
 			$glob .= 'cpufreq,cpu*/topology,cpu*/cpufreq,cpu*/cache/index*,smt,vulnerabilities}/*';
 		}
 		else {
-			$glob .= 'cpu*/topology/{core_cpus_list,core_id,core_siblings_list,die_id,';
-			$glob .= 'physical_package_id,thread_siblings_list}';
+			$glob .= 'cpu*/topology/';
+			$glob .= '{{cluster_cpus,core_cpus,core_siblings,thread_siblings}_list,';
+			$glob .= '{core,die,cluster,node,physical_package,socket}_id}';
 			$glob .= ',cpufreq/{boost,ondemand}';
-			$glob .= ',cpu*/cpufreq/{cpb,cpuinfo_max_freq,cpuinfo_min_freq,';
-			$glob .= 'scaling_max_freq,scaling_min_freq';
-			$glob .= ',scaling_driver,scaling_governor' if $type eq 'full' && $b_admin;
+			$glob .= ',cpu*/cpufreq/';
+			$glob .= '{cpb,{cpuinfo_max,cpuinfo_min,scaling_max,scaling_min}_freq';
+			if ($type eq 'full' && $b_admin){
+				$glob .= ',scaling_driver,scaling_governor';
+			}
 			$glob .= '}';
 			if ($type eq 'full'){
 				$glob .= ',cpu*/cache/index*/{level,shared_cpu_list,shared_cpu_map,size,type}';
@@ -10128,80 +10138,409 @@ sub sys_data_grabber {
 	return $working;
 }
 
-# Set in one place to make sure we get them all consistent
-sub set_fake_data {
-	$loaded{'cpu-fake-data'} = 1;
-	my ($ci,$sys);
-	## CPUINFO DATA FILES ##
-	## ARM/MIPS
-	# $ci = "$fake_data_dir/cpu/arm/arm-4-core-pinebook-1.txt";
-	# $ci = "$fake_data_dir/cpu/arm/armv6-single-core-1.txt";
-	# $ci = "$fake_data_dir/cpu/arm/armv7-dual-core-1.txt";
-	# $ci = "$fake_data_dir/cpu/arm/armv7-new-format-model-name-single-core.txt";
-	# $ci = "$fake_data_dir/cpu/arm/arm-2-die-96-core-rk01.txt";
-	# $ci = "$fake_data_dir/cpu/arm/arm-shevaplug-1.2ghz.txt";
-	# $ci = "$fake_data_dir/cpu/mips/mips-mainusg-cpuinfo.txt";
-	# $ci = "$fake_data_dir/cpu/ppc/ppc-debian-ppc64-cpuinfo.txt";
-	## x86
-	# $ci = "$fake_data_dir/cpu/amd/16-core-32-mt-ryzen.txt";
-	# $ci = "$fake_data_dir/cpu/amd/2-16-core-epyc-abucodonosor.txt";
-	# $ci = "$fake_data_dir/cpu/amd/2-core-probook-antix.txt";
-	# $ci = "$fake_data_dir/cpu/amd/4-core-jean-antix.txt";
-	# $ci = "$fake_data_dir/cpu/amd/4-core-althlon-mjro.txt";
-	# $ci = "$fake_data_dir/cpu/amd/4-core-apu-vc-box.txt";
-	# $ci = "$fake_data_dir/cpu/amd/4-core-a10-5800k-1.txt";
-	# $ci = "$fake_data_dir/cpu/intel/1-core-486-fourtysixandtwo.txt";
-	# $ci = "$fake_data_dir/cpu/intel/2-core-ht-atom-bruh.txt";
-	# $ci = "$fake_data_dir/cpu/intel/core-2-i3.txt";
-	# $ci = "$fake_data_dir/cpu/intel/8-core-i7-damentz64.txt";
-	# $ci = "$fake_data_dir/cpu/intel/2-10-core-xeon-ht.txt";
-	# $ci = "$fake_data_dir/cpu/intel/4-core-xeon-fake-dual-die-zyanya.txt";
-	# $ci = "$fake_data_dir/cpu/intel/2-core-i5-fake-dual-die-hek.txt";
-	# $ci = "$fake_data_dir/cpu/intel/2-1-core-xeon-vm-vs2017.txt";
-	# $ci = "$fake_data_dir/cpu/intel/4-1-core-xeon-vps-frodo1.txt";
-	# $ci = "$fake_data_dir/cpu/intel/4-6-core-xeon-no-mt-lathander.txt";
-	## Elbrus
-	# $cpu_type = 'elbrus'; # uncomment to test elbrus
-	# $ci = "$fake_data_dir/cpu/elbrus/elbrus-2c3/cpuinfo.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/1xE1C-8.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/1xE2CDSP-4.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/1xE2S4-3-monocub.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/1xMBE8C-7.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/4xEL2S4-3.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/4xE8C-7.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/4xE2CDSP-4.txt";
-	# $ci = "$fake_data_dir/cpu/elbrus/cpuinfo.e8c2.txt";
-	
-	## CPU CPUINFO/SYS PAIRS DATA FILES ##
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/android-pocom3-fake-cpuinfo.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/android-pocom3-fake-sys.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/arm-pine64-cpuinfo-1.txt";v
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/arm-pine64-sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/arm-riscyslack2-cpuinfo-1.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/arm-riscyslack2-sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/ppc-stuntkidz~cpuinfo.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/ppc-stuntkidz~sys.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/riscv-unmatched-2021~cpuinfo-1.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/riscv-unmatched-2021~sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-brickwizard-atom-n270~cpuinfo-1.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-brickwizard-atom-n270~sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-amd-phenom-chrisretusn-cpuinfo-1.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-amd-phenom-chrisretusn-sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/x86-drgibbon-intel-i7-cpuinfo.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/x86-drgibbon-intel-i7-sys.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/ryzen-threadripper-1x64-3950x-cpuinfo.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/ryzen-threadripper-1x64-3950x-sys.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/amd-threadripper-1x12-5945wx-cpuinfo-1.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/amd-threadripper-1x12-5945wx-sys-1.txt";
-	# $ci = "$fake_data_dir/cpu/sys-ci-pairs/intel-i7-1165G7-4-core-no-smt-cpuinfo.txt";
-	# $sys = "$fake_data_dir/cpu/sys-ci-pairs/intel-i7-1165G7-4-core-no-smt-sys.txt";
-	 $ci = "$fake_data_dir/cpu/sys-ci-pairs/elbrus-e16c-1-cpuinfo.txt";
-	 $sys = "$fake_data_dir/cpu/sys-ci-pairs/elbrus-e16c-1-sys.txt";
-	$fake_data{'cpuinfo'} = $ci;
-	$fake_data{'sys'} = $sys;
+sub cpu_sys_data {
+	eval $start if $b_log;
+	my $sys_freq = $_[0];
+	my $cpu_sys = {};
+	my $working = cpu_sys_data_grabber();
+	return $cpu_sys if !%$working;
+	$cpu_sys->{'data'} = $working->{'data'} if $working->{'data'};
+	my ($core_id,$fake_core_id,$die_id,$phys_id) = (0,0,0,-1);
+	my (%cache_ids,@ci_freq_max,@ci_freq_min,@sc_freq_max,@sc_freq_min);
+	foreach my $id (sort keys %{$working->{'cpus'}}){
+		($core_id,$phys_id) = (0,0);
+		my $cpu_id = $id + 0;
+		my ($cluster_id,$speed);
+		my $phys_cpu = $working->{'cpus'}{$id};
+		if (defined $phys_cpu->{'topology'}{'physical_package_id'}){
+			$phys_id = sprintf("%04d",$phys_cpu->{'topology'}{'physical_package_id'});
+		}
+		if (defined $phys_cpu->{'topology'}{'die_id'}){
+			$cpu_sys->{'data'}{'die-file'} = 'die_id';
+			$die_id = sprintf("%08d",$phys_cpu->{'topology'}{$cpu_sys->{'data'}{'die-file'}});
+		}
+		else {
+			$die_id = 'ID-UNSET';
+		}
+		# RISCV seen with no die_id but cluster_id with core_ids per cluster
+		# node_id, socket_id not seen but possibles but don't use until real case
+		# also alder lake haw one die but > 1 clusters
+		if (defined $phys_cpu->{'topology'}{'cluster_id'}){
+			$cpu_sys->{'data'}{'cluster-file'} = 'cluster_id';
+			$cluster_id = sprintf("%08d",$phys_cpu->{'topology'}{$cpu_sys->{'data'}{'cluster-file'}});
+		}
+		if (defined $phys_cpu->{'topology'}{'core_id'}){
+			# id is not consistent, seen 5 digit id
+			$core_id = sprintf("%08d",$phys_cpu->{'topology'}{'core_id'});
+			if ($fake{'cpu'}){
+				if (defined $phys_cpu->{'cpufreq'}{'scaling_cur_freq'} && 
+				$phys_cpu->{'cpufreq'}{'affected_cpus'} && 
+				$phys_cpu->{'cpufreq'}{'affected_cpus'} ne 'UNDEFINED' &&
+				# manually generated cpu debuggers will show '', not UNDEFINED
+				$phys_cpu->{'cpufreq'}{'affected_cpus'} ne ''){
+					$speed = clean_speed($phys_cpu->{'cpufreq'}{'scaling_cur_freq'},'khz');
+				}
+			}
+			elsif (defined $sys_freq && defined $sys_freq->{$phys_id}){
+				$speed = $sys_freq->{$phys_id};
+			}
+			# ($cluster_id,$die_id) = ();
+			if (defined $speed){
+				if ($cpu_sys->{'data'}{'die-file'} || !$cluster_id){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'cores'}{$core_id}},$speed);
+				}
+				if ($cluster_id){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}{$cluster_id}{'cores'}{$core_id}},$speed);
+				}
+				push(@{$cpu_sys->{'data'}{'speeds'}{'all'}},$speed);
+			}
+			else {
+				push(@{$cpu_sys->{'data'}{'speeds'}{'all'}},0);
+				# seen cases, riscv, where core id, phys id, are all -1
+				my $id = ($core_id != -1) ? $core_id: $fake_core_id++;
+				if ($cpu_sys->{'data'}{'die-file'} || !$cluster_id){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'cores'}{$id}},0);
+				}
+				if ($cluster_id){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}{$cluster_id}{'cores'}{$id}},0);
+				}
+			}
+			# Only use if topology core-id exists, some virtualized cpus can list 
+			# frequency data for the non available cores, but those do not show 
+			# topology data.
+			# For max / min, we want to prep for the day 1 pys cpu has > 1 min/max freq
+			if (defined $phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'}){
+				$phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'} = clean_speed($phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'},'khz');
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'}} @ci_freq_max){
+					push(@ci_freq_max,$phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'});
+				}
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}}){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}},$phys_cpu->{'cpufreq'}{'cpuinfo_max_freq'});
+				}
+			}
+			if (defined $phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'}){
+				$phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'} = clean_speed($phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'},'khz');
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'}} @ci_freq_min){
+					push(@ci_freq_min,$phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'});
+				}
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}}){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}},$phys_cpu->{'cpufreq'}{'cpuinfo_min_freq'});
+				}
+			}
+			if (defined $phys_cpu->{'cpufreq'}{'scaling_max_freq'}){
+				$phys_cpu->{'cpufreq'}{'scaling_max_freq'} = clean_speed($phys_cpu->{'cpufreq'}{'scaling_max_freq'},'khz');
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'scaling_max_freq'}} @sc_freq_max){
+					push(@sc_freq_max,$phys_cpu->{'cpufreq'}{'scaling_max_freq'});
+				}
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'scaling_max_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}}){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}},$phys_cpu->{'cpufreq'}{'scaling_max_freq'});
+				}
+			}
+			if (defined $phys_cpu->{'cpufreq'}{'scaling_min_freq'}){
+				$phys_cpu->{'cpufreq'}{'scaling_min_freq'} = clean_speed($phys_cpu->{'cpufreq'}{'scaling_min_freq'},'khz');
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'scaling_min_freq'}} @sc_freq_min){
+					push(@sc_freq_min,$phys_cpu->{'cpufreq'}{'scaling_min_freq'});
+				}
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'scaling_min_freq'}} @{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}}){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}},$phys_cpu->{'cpufreq'}{'scaling_min_freq'});
+				}
+			}
+			if (defined $phys_cpu->{'cpufreq'}{'scaling_governor'}){
+				if (!grep {$_ eq $phys_cpu->{'cpufreq'}{'scaling_governor'}} @{$cpu_sys->{'cpus'}{$phys_id}{'governor'}}){
+					push(@{$cpu_sys->{'cpus'}{$phys_id}{'governor'}},$phys_cpu->{'cpufreq'}{'scaling_governor'});
+				}
+			}
+			if (defined $phys_cpu->{'cpufreq'}{'scaling_driver'}){
+				$cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'} = $phys_cpu->{'cpufreq'}{'scaling_driver'};
+			}
+		}
+		if (!defined $cpu_sys->{'data'}{'cpufreq-boost'} && defined $phys_cpu->{'cpufreq'}{'cpb'}){
+			$cpu_sys->{'data'}{'cpufreq-boost'} = $phys_cpu->{'cpufreq'}{'cpb'};
+		}
+		if (defined $phys_cpu->{'topology'}{'core_cpus_list'}){
+			$phys_cpu->{'topology'}{'thread_siblings_list'} = $phys_cpu->{'topology'}{'core_cpus_list'};
+		}
+		if (defined $phys_cpu->{'cache'} && keys %{$phys_cpu->{'cache'}} > 0){
+			foreach my $key2 (sort keys %{$phys_cpu->{'cache'}}){
+				my $cache = $phys_cpu->{'cache'}{$key2};
+				my $type = ($cache->{'type'} =~ /^([DI])/i) ? lc($1): '';
+				my $level = 'l' . $cache->{'level'} . $type;
+				# Very old systems, 2.6.xx do not have shared_cpu_list
+				if (!defined $cache->{'shared_cpu_list'} && defined $cache->{'shared_cpu_map'}){
+					$cache->{'shared_cpu_list'} = $cache->{'shared_cpu_map'};
+				}
+				# print Data::Dumper::Dumper $cache;
+				if (defined $cache->{'shared_cpu_list'}){
+					# not needed, the cpu is always in the range
+					# my $range = main::regex_range($cache->{'shared_cpu_list'});
+					my $size = main::translate_size($cache->{'size'});
+					# print "cpuid: $cpu_id phys-core: $phys_id-$core_id level: $level range: $range  shared: $cache->{'shared_cpu_list'}\n";
+					if (!(grep {$_ eq $cache->{'shared_cpu_list'}} @{$cache_ids{$phys_id}->{$level}})){
+						push(@{$cache_ids{$phys_id}->{$level}},$cache->{'shared_cpu_list'});
+						push(@{$cpu_sys->{'cpus'}{$phys_id}{'caches'}{$level}},$size);
+					}
+				}
+			}
+		}
+	}
+	if (defined $cpu_sys->{'data'}{'cpufreq-boost'} &&
+	$cpu_sys->{'data'}{'cpufreq-boost'} =~ /^[01]$/){
+		if ($cpu_sys->{'data'}{'cpufreq-boost'}){
+			$cpu_sys->{'data'}{'cpufreq-boost'} = 'enabled';
+		}
+		else {
+			$cpu_sys->{'data'}{'cpufreq-boost'} = 'disabled';
+		}
+	}
+	# cpuinfo_max_freq:["2000000"] cpuinfo_max_freq:["1500000"] 
+	# cpuinfo_min_freq:["200000"]
+	if (@ci_freq_max){
+		$cpu_sys->{'data'}{'speeds'}{'max-freq'} = join(':',@ci_freq_max);
+	}
+	if (@ci_freq_min){
+		$cpu_sys->{'data'}{'speeds'}{'min-freq'} = join(':',@ci_freq_min);
+	}
+	# also handle off chance that cpuinfo_min/max not set, but scaling_min/max there
+	if (@sc_freq_max){
+		$cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'} = join(':',@sc_freq_max);
+		if (!$cpu_sys->{'data'}{'speeds'}{'max-freq'}){
+			$cpu_sys->{'data'}{'speeds'}{'max-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'};
+		}
+	}
+	if (@sc_freq_min){
+		$cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'} = join(':',@sc_freq_min);
+		if (!$cpu_sys->{'data'}{'speeds'}{'min-freq'}){
+			$cpu_sys->{'data'}{'speeds'}{'min-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'};
+		}
+	}
+	# this corrects a bug we see sometimes in min/max frequencies
+	if ((scalar @ci_freq_max < 2 && scalar @ci_freq_min < 2) && 
+	(defined $cpu_sys->{'data'}{'speeds'}{'min-freq'} && 
+	defined $cpu_sys->{'data'}{'speeds'}{'max-freq'}) &&
+	($cpu_sys->{'data'}{'speeds'}{'min-freq'} > $cpu_sys->{'data'}{'speeds'}{'max-freq'} || 
+	$cpu_sys->{'data'}{'speeds'}{'min-freq'} == $cpu_sys->{'data'}{'speeds'}{'max-freq'})){
+		$cpu_sys->{'data'}{'speeds'}{'min-freq'} = 0;
+	}
+	main::log_data('dump','%$cpu_sys',$cpu_sys) if $b_log;
+	print 'cpu_sys_data: %$cpu-sys: ', Data::Dumper::Dumper $cpu_sys if $dbg[8];
+	eval $end if $b_log;
+	return $cpu_sys;
 }
 
-sub sysctl_data {
+# all values passed by reference so no need for returns
+sub cp_data_sys {
+	eval $start if $b_log;
+	my ($cpu,$cpu_sys,$caches,$counts) = @_;
+	my @phys_keys = sort keys %{$cpu_sys->{'cpus'}};
+	return if ! @phys_keys;
+	$counts->{'physical'} = scalar  @phys_keys;
+	if ($type eq 'full' && $cpu_sys->{'cpus'}{$phys_keys[0]}{'caches'}){
+		cp_sys_caches($cpu_sys->{'cpus'}{$phys_keys[0]}{'caches'},$caches,'l1','l1d');
+		cp_sys_caches($cpu_sys->{'cpus'}{$phys_keys[0]}{'caches'},$caches,'l1','l1i');
+		cp_sys_caches($cpu_sys->{'cpus'}{$phys_keys[0]}{'caches'},$caches,'l2','');
+		cp_sys_caches($cpu_sys->{'cpus'}{$phys_keys[0]}{'caches'},$caches,'l3','');
+	}
+	if ($cpu_sys->{'data'}{'speeds'}{'all'}){
+		$counts->{'processors'} = scalar @{$cpu_sys->{'data'}{'speeds'}{'all'}};
+	}
+	if (defined $cpu_sys->{'data'}{'smt-active'}){
+		if ($cpu_sys->{'data'}{'smt-active'}){
+			$cpu->{'smt'} = 'enabled';
+		}
+		# values: on/off/notsupported/notimplemented
+		elsif (defined $cpu_sys->{'data'}{'smt-control'} &&
+		 $cpu_sys->{'data'}{'smt-control'} =~ /^not/){
+			$cpu->{'smt'} = main::message('unsupported');
+		}
+		else {
+			$cpu->{'smt'} = 'disabled';
+		}
+	}
+	my $i = 0;
+	my ($b_skip,@governor,@max,@min,@phys_cores);
+	foreach my $phys_id (@phys_keys){
+		cp_dies_clusters(
+		$cpu,
+		$counts,
+		$cpu_sys->{'cpus'}{$phys_id},
+		$cpu_sys->{'data'},
+		$i,
+		$b_skip);
+		$b_skip = 1; # skips count->{cpu-cores} after first phys iteration
+		foreach my $die_id (sort keys %{$cpu_sys->{'cpus'}{$phys_id}{'dies'}}){
+			# If we ever get > 1 min/max speed per phy cpu, we'll need to fix the [0]
+			if ($cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0]){
+				if (!grep {$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0] eq $_} @max){
+					push(@max,$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0]);
+				}
+				$counts->{'cpu-topo'}[$i]{'max'} = $cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0];
+			}
+			if ($cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0]){
+				if (!grep {$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0] eq $_} @min){
+					push(@min,$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0]);
+				}
+				$counts->{'cpu-topo'}[$i]{'min'} = $cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0];
+			}
+			# cheating, this is not a count, but we need the data for topology, must
+			# sort since governors can be in different order if > 1
+			if ($cpu_sys->{'cpus'}{$phys_id}{'governor'}){
+				foreach my $gov (@{$cpu_sys->{'cpus'}{$phys_id}{'governor'}}){
+					push(@governor,$gov) if !grep {$_ eq $gov} @governor;
+				}
+				$cpu->{'governor'} = join(',',@governor);
+			}
+			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'}){
+				$cpu->{'scaling-driver'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'};
+			}
+			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'}){
+				$cpu->{'scaling-driver'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'};
+			}
+			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-max-freq'}){
+				$cpu->{'scaling-max-freq'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-max-freq'};
+			}
+			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-min-freq'}){
+				$cpu->{'scaling-min-freq'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-min-freq'};
+			}
+			if (!grep {$counts->{'cpu-cores'} eq $_} @phys_cores){
+				push(@phys_cores,$counts->{'cpu-cores'});
+			}
+		}
+		if ($counts->{'processors'} && $counts->{'processors'} > $counts->{'cpu-cores'}){
+			foreach my $die_id (sort keys %{$cpu_sys->{'cpus'}{$phys_id}{'dies'}}){
+				if (!$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}){
+					if ($cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'cores'}){
+						cp_set_threads(
+						$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'cores'},
+						$counts,
+						$i);
+					}
+				}
+				else {
+					foreach my $cluster_id (sort keys %{$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}}){
+						if ($cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}{$cluster_id}{'cores'}){
+							cp_set_threads(
+							$cpu_sys->{'cpus'}{$phys_id}{'dies'}{$die_id}{'clusters'}{$cluster_id}{'cores'},
+							$counts,
+							$i);
+						}
+					}
+				}
+				
+			}
+		}
+		$i++;
+	}
+	$counts->{'struct-max'} = 1 if scalar @max > 1;
+	$counts->{'struct-min'} = 1 if scalar @min > 1;
+	$counts->{'struct-cores'} = 1 if scalar @phys_cores > 1;
+	if ($b_log){
+		main::log_data('dump','%$caches',$caches);
+		main::log_data('dump','%$counts',$counts);
+	}
+	if ($dbg[68]){
+		print '%$cpu: ', Data::Dumper::Dumper $cpu;
+		print 'cpu %$caches: ', Data::Dumper::Dumper $caches;
+		print 'cpu %$counts: ', Data::Dumper::Dumper $counts;
+	}
+	eval $end if $b_log;
+}
+
+# args: 0: $cpu by ref; 1: $counts by ref; 2: $phy_cpu by ref; 3: $i 
+sub cp_dies_clusters {
+	eval $start if $b_log;
+	my ($cpu,$counts,$phys_cpu,$data,$i,$b_skip) = @_;
+	# we don't want the placeholder die ID counted as an actual die!
+	if ($phys_cpu->{'dies'} && $data->{'die-file'}){
+		$counts->{'cpu-topo'}[$i]{'dies'} = scalar keys %{$phys_cpu->{'dies'}};
+		$cpu->{'dies-count'} = $counts->{'cpu-topo'}[$i]{'dies'};
+	}
+	foreach my $id (sort keys %{$phys_cpu->{'dies'}}){
+		if ($phys_cpu->{'dies'}{$id}{'clusters'}){
+			# this will show dies x clusters in output, since no way to know if cluster
+			# ids are per phys cpu or per die.
+			$cpu->{'clusters-count'} = scalar keys %{$phys_cpu->{'dies'}{$id}{'clusters'}};
+			$counts->{'cpu-topo'}[$i]{'clusters'} = $cpu->{'clusters-count'};
+			foreach my $cluster_id (sort keys %{$phys_cpu->{'dies'}{$id}{'clusters'}}){
+				if ($phys_cpu->{'dies'}{$id}{'clusters'}{$cluster_id}{'cores'}){
+					cp_core_counter(
+					$cpu,
+					$phys_cpu->{'dies'}{$id}{'clusters'}{$cluster_id}{'cores'},
+					$counts,
+					$i,
+					$b_skip);
+				}
+			}
+		}
+		else {
+			if ($phys_cpu->{'dies'}{$id}{'cores'}){
+				cp_core_counter(
+				$cpu,
+				$phys_cpu->{'dies'}{$id}{'cores'},
+				$counts,
+				$i,
+				$b_skip);
+			}
+		}
+	}
+	eval $end if $b_log;
+}
+
+# args: 0: $cpu by ref; 1: $cores; 2: $counts (by ref); 3: $i; 
+# 4: $b_dies: 0 for first iteration
+sub cp_core_counter {
+	eval $start if $b_log;
+	my ($cpu,$item,$counts,$i,$b_skip) = @_;
+	my $cores = 0;
+	$cores = scalar keys %{$item};
+	$counts->{'cpu-topo'}[$i]{'cores'} += $cores;
+	$cpu->{'cores'} = $cores;
+	$counts->{'cpu-cores'} += $cores if !$b_skip;
+	eval $end if $b_log;
+}
+
+# args: 0: cores hash; 1: $counts, by ref; 2: $i
+sub cp_set_threads {
+	eval $start if $b_log;
+	my ($cores,$counts,$i) = @_;
+	foreach my $core_key (sort keys %{$cores}){
+		if ((my $threads = scalar @{$cores->{$core_key}}) > 1){
+			$counts->{'cpu-topo'}[$i]{'cores-mt'}++;
+			$counts->{'cpu-topo'}[$i]{'threads'} += $threads;
+			# note: for mt+st type cpus, we need to handle tpc on output per type
+			$counts->{'cpu-topo'}[$i]{'tpc'} = $threads;
+			$counts->{'struct-mt'} = 1;
+		}
+		else {
+			$counts->{'cpu-topo'}[$i]{'cores-st'}++;
+			$counts->{'cpu-topo'}[$i]{'threads'}++;
+			$counts->{'struct-st'} = 1;
+		}
+	}
+	eval $end if $b_log;
+}
+
+sub cp_sys_caches {
+	eval $start if $b_log;
+	my ($sys_caches,$caches,$id,$id_di) = @_;
+	my $cache_id = ($id_di) ? $id_di: $id;
+	my %cache_desc;
+	if ($sys_caches->{$cache_id}){
+		# print Data::Dumper::Dumper $cpu_sys->{'cpus'};
+		foreach (@{$sys_caches->{$cache_id}}){
+			# android seen to have cache data without size item
+			next if !defined $_; 
+			$caches->{$cache_id} += $_;
+			$cache_desc{$_}++ if $b_admin;
+		}
+		$caches->{$id} += $caches->{$id_di} if $id_di;
+		$caches->{$cache_id . '-desc'} = cp_cache_desc(\%cache_desc) if $b_admin;
+	}
+	eval $end if $b_log;
+}
+## END SYS DATA ##
+
+## BSD DATA
+sub cpu_sysctl_data {
 	eval $start if $b_log;
 	my ($cpu,@line,%speeds,@working);
 	my ($sep) = ('');
@@ -10210,11 +10549,11 @@ sub sysctl_data {
 	@{$sysctl{'cpu'}} = () if !$sysctl{'cpu'}; # don't want error next!
 	foreach (@{$sysctl{'cpu'}}){
 		@line = split(/\s*:\s*/, $_);
-		next if !$line[0];
+		next if !$line[0] || !defined $line[1];
 		# darwin shows machine, like MacBook7,1, not cpu
 		# machdep.cpu.brand_string: Intel(R) Core(TM)2 Duo CPU     P8600  @ 2.40GHz
-		if (($bsd_type ne 'darwin' && $line[0] eq 'hw.model') || 
-		$line[0] eq 'machdep.cpu.brand_string'){
+		if (($bsd_type ne 'darwin' && ($line[0] eq 'hw.model') || 
+		$line[0] eq 'machdep.cpu.brand_string')){
 			# cut L2 cache/cpu max speed out of model string, if available
 			# openbsd 5.6: AMD Sempron(tm) Processor 3400+ ("AuthenticAMD" 686-class, 256KB L2 cache)
 			# openbsd 6.x has Lx cache data in dmesg.boot
@@ -10351,7 +10690,7 @@ sub sysctl_data {
 		}
 	}
 	if (!$cpu->{'flags'} || !$cpu->{'family'}){
-		my $dmesg_boot = dboot_data();
+		my $dmesg_boot = cp_dboot_data();
 		 # this core count may fix failed MT detection.
 		$cpu->{'cores'} = $dmesg_boot->{'cores'} if $dmesg_boot->{'cores'};
 		$cpu->{'flags'} = $dmesg_boot->{'flags'} if !$cpu->{'flags'};
@@ -10370,13 +10709,12 @@ sub sysctl_data {
 		$cpu->{'type'} = $dmesg_boot->{'type'} if !$cpu->{'type'};
 	}
 	main::log_data('dump','%$cpu',$cpu) if $b_log;
-	print Data::Dumper::Dumper $cpu if $dbg[8];
+	print 'sysctl $cpu: ', Data::Dumper::Dumper $cpu if $dbg[8];
 	eval $end if $b_log;
 	return $cpu;
 }
 
-## DATA GENERATOR DATA SOURCES ##
-sub dboot_data {
+sub cp_dboot_data {
 	eval $start if $b_log;
 	my ($max_freq,$min_freq,@scalings);
 	my ($family,$flags,$microcode,$model,$sep,$stepping,$type) = ('','','','','','','');
@@ -10490,12 +10828,14 @@ sub dboot_data {
 	'stepping' => $stepping,
 	'type' => $type,
 	};
-	print Data::Dumper::Dumper $values if $dbg[27];
+	print 'dboot $values: ', Data::Dumper::Dumper $values if $dbg[27];
 	eval $end if $b_log;
 	return $values;
 }
+## END BSD DATA ##
 
-sub dmidecode_data {
+## DMIDECODE DATA ##
+sub cpu_dmidecode_data {
 	eval $start if $b_log;
 	my $dmi_data = {'L1' => 0, 'L2' => 0,'L3' => 0, 'phys-cnt' => 0,
 	'ext-clock' => undef, 'socket' => undef, 'speed' => undef, 
@@ -10593,12 +10933,61 @@ sub dmidecode_data {
 		$dmi_data->{'upgrade'} = $upgrade;
 	}
 	main::log_data('dump','%$dmi_data',$dmi_data) if $b_log;
-	print Data::Dumper::Dumper $dmi_data if $dbg[27];
+	print 'dmidecode $dmi_data: ', Data::Dumper::Dumper $dmi_data if $dbg[27];
 	eval $end if $b_log;
 	return $dmi_data;
 }
 
-## CPU PROPERTIES MAIN ##
+# everything is passed by reference so no need to return anything
+sub cp_data_dmi {
+	eval $start if $b_log;
+	my ($cpu,$dmi_data,$caches,$counts,$cache_check) = @_;
+	my $cpu_dmi = cpu_dmidecode_data();
+	# fix for bsds that do not show physical cpus, like openbsd
+	if ($cpu_dmi->{'phys-cnt'} && $counts->{'physical'} == 1 && 
+	 $cpu_dmi->{'phys-cnt'} > 1){
+		$counts->{'physical'} = $cpu_dmi->{'phys-cnt'};
+	}
+	# We have to undef all the sys stuff to get back to the true dmidecode results
+	# Too many variants to treat one by one, just clear it out if forced.
+	undef $caches if $force{'dmidecode'};
+	# We don't want to use dmi L1/L2/L3 at all for non BSD systems unless forced
+	# because have seen totally gibberish dmidecode data for caches. /sys cache 
+	# data preferred, more granular and basically consistently right.
+	# Only run for linux if no cache data found, but BSD use to fill in missing
+	# (we don't care about legacy errors for BSD since the data isn't adequate).
+	# legacy dmidecode cache data used the per cache value, NOT the per CPU total 
+	# value like it does today. Which makes it impossible to know for sure if the 
+	# given value is right (new, or if cache matched cpu total) or inadequate.
+	if ((!$bsd_type && !$caches->{'l1'} && !$caches->{'l2'} && !$caches->{'l3'}) ||
+	($bsd_type && (!$caches->{'l1'} || !$caches->{'l2'} || !$caches->{'l3'}))){
+		# Newer dmi: cache type total per phys cpu; Legacy: raw cache size only
+		if ($cpu_dmi->{'l1'} && !$caches->{'l1'}){
+			$caches->{'l1'} = $cpu_dmi->{'l1'};
+			$$cache_check = main::message('note-check');
+		}
+		# note: bsds often won't have L2 catch data found yet, but bsd sysctl can 
+		# have these values so let's check just in case. OpenBSD does have it often.
+		if ($cpu_dmi->{'l2'} && !$caches->{'l2'}){
+			$caches->{'l2'} = $cpu_dmi->{'l2'};
+			$$cache_check = main::message('note-check');
+		}
+		if ($cpu_dmi->{'l3'} && !$caches->{'l3'}){
+			$caches->{'l3'} = $cpu_dmi->{'l3'};
+			$$cache_check = main::message('note-check');
+		}
+	}
+	$dmi_data->{'max-speed'} = $cpu_dmi->{'max-speed'};
+	$dmi_data->{'socket'} = $cpu_dmi->{'socket'} if $cpu_dmi->{'socket'};
+	$dmi_data->{'upgrade'} = $cpu_dmi->{'upgrade'} if $cpu_dmi->{'upgrade'};
+	$dmi_data->{'speed'} = $cpu_dmi->{'speed'} if $cpu_dmi->{'speed'};
+	$dmi_data->{'ext-clock'} = $cpu_dmi->{'ext-clock'} if $cpu_dmi->{'ext-clock'};
+	$dmi_data->{'volts'} = $cpu_dmi->{'volts'} if $cpu_dmi->{'volts'};
+	eval $end if $b_log;
+}
+## END DMIDECODE DATA ##
+
+## CPU PROPERTIES ##
 sub cpu_properties {
 	my ($cpu) = @_;
 	my ($cpu_sys,$arch_level);
@@ -10649,7 +11038,7 @@ sub cpu_properties {
 	if (%risc && $counts->{'dies'} > 1 && 
 	$counts->{'cpu-cores'} == $counts->{'dies'}){
 		$counts->{'dies'} = 1;
-		$cpu->{'dies'} = 1;
+		$cpu->{'dies-count'} = 1;
 	}
 	if ($type eq 'full' && ($extra > 1 || ($bsd_type && !$cpu->{'l2-cache'}))){
 		cp_data_dmi(
@@ -10705,7 +11094,9 @@ sub cpu_properties {
 	$tests
 	);
 	my $topology = {};
-	cp_cpu_topology($counts,$topology);
+	cp_topology($counts,$topology);
+	# print "$cpu->{'type'}\n";
+	# print Data::Dumper::Dumper $cpu;
 	my $arch = cp_cpu_arch(
 	$cpu->{'type'},
 	$cpu->{'family'},
@@ -10713,6 +11104,7 @@ sub cpu_properties {
 	$cpu->{'stepping'},
 	$cpu->{'model_name'},
 	);
+	# print Data::Dumper::Dumper $arch;
 	# arm cpuinfo case only; confirm on bsds, not sure all get family/ids
 	if ($arch->[0] && !$cpu->{'arch'}){
 		($cpu->{'arch'},$cpu->{'arch-note'},$cpu->{'process'},$cpu->{'gen'},
@@ -10787,350 +11179,7 @@ sub cpu_properties {
 	return $cpu_properties;
 }
 
-## CPU DATA ENGINES ##
-# everything is passed by reference so no need to return anything
-sub cp_data_dmi {
-	eval $start if $b_log;
-	my ($cpu,$dmi_data,$caches,$counts,$cache_check) = @_;
-	my $cpu_dmi = dmidecode_data();
-	# fix for bsds that do not show physical cpus, like openbsd
-	if ($cpu_dmi->{'phys-cnt'} && $counts->{'physical'} == 1 && 
-	 $cpu_dmi->{'phys-cnt'} > 1){
-		$counts->{'physical'} = $cpu_dmi->{'phys-cnt'};
-	}
-	# We have to undef all the sys stuff to get back to the true dmidecode results
-	# Too many variants to treat one by one, just clear it out if forced.
-	undef $caches if $force{'dmidecode'};
-	# We don't want to use dmi L1/L2/L3 at all for non BSD systems unless forced
-	# because have seen totally gibberish dmidecode data for caches. /sys cache 
-	# data preferred, more granular and basically consistently right.
-	# Only run for linux if no cache data found, but BSD use to fill in missing
-	# (we don't care about legacy errors for BSD since the data isn't adequate).
-	# legacy dmidecode cache data used the per cache value, NOT the per CPU total 
-	# value like it does today. Which makes it impossible to know for sure if the 
-	# given value is right (new, or if cache matched cpu total) or inadequate.
-	if ((!$bsd_type && !$caches->{'l1'} && !$caches->{'l2'} && !$caches->{'l3'}) ||
-	($bsd_type && (!$caches->{'l1'} || !$caches->{'l2'} || !$caches->{'l3'}))){
-		# Newer dmi: cache type total per phys cpu; Legacy: raw cache size only
-		if ($cpu_dmi->{'l1'} && !$caches->{'l1'}){
-			$caches->{'l1'} = $cpu_dmi->{'l1'};
-			$$cache_check = main::message('note-check');
-		}
-		# note: bsds often won't have L2 catch data found yet, but bsd sysctl can 
-		# have these values so let's check just in case. OpenBSD does have it often.
-		if ($cpu_dmi->{'l2'} && !$caches->{'l2'}){
-			$caches->{'l2'} = $cpu_dmi->{'l2'};
-			$$cache_check = main::message('note-check');
-		}
-		if ($cpu_dmi->{'l3'} && !$caches->{'l3'}){
-			$caches->{'l3'} = $cpu_dmi->{'l3'};
-			$$cache_check = main::message('note-check');
-		}
-	}
-	$dmi_data->{'max-speed'} = $cpu_dmi->{'max-speed'};
-	$dmi_data->{'socket'} = $cpu_dmi->{'socket'} if $cpu_dmi->{'socket'};
-	$dmi_data->{'upgrade'} = $cpu_dmi->{'upgrade'} if $cpu_dmi->{'upgrade'};
-	$dmi_data->{'speed'} = $cpu_dmi->{'speed'} if $cpu_dmi->{'speed'};
-	$dmi_data->{'ext-clock'} = $cpu_dmi->{'ext-clock'} if $cpu_dmi->{'ext-clock'};
-	$dmi_data->{'volts'} = $cpu_dmi->{'volts'} if $cpu_dmi->{'volts'};
-	eval $end if $b_log;
-}
-
-sub cp_data_fallback {
-	eval $start if $b_log;
-	my ($cpu,$caches,$cache_check,$counts,$tests) = @_;
-	if (!$counts->{'physical'}){
-		# handle case where cpu reports say, phys id 0, 2, 4, 6
-		foreach (@{$cpu->{'ids'}}){
-			$counts->{'physical'}++ if $_;
-		}
-	}
-	# count unique processors ##
-	# note, this fails for intel cpus at times
-	# print ref $cpu->{'processors'}, "\n";
-	if (!$counts->{'processors'}){
-		$counts->{'processors'} = scalar @{$cpu->{'processors'}};
-	}
-	# print "p count:$counts->{'processors'}\n";
-	# print Data::Dumper::Dumper $cpu->{'processors'};
-	# $counts->{'cpu-cores'} is per physical cpu
-	# note: elbrus supports turning off cores, so we need to add one for cases 
-	# where rounds to 0 or 1 less
-	# print "$cpu{'type'},$cpu{'family'},$cpu{'model-id'},$cpu{'arch'}\n";
-	if ($tests->{'elbrus'} && $counts->{'processors'}){
-		my $elbrus = cp_elbrus_data($cpu->{'family'},$cpu->{'model-id'},
-		$counts->{'processors'},$cpu->{'arch'});
-		$counts->{'cpu-cores'} = $elbrus->[0];
-		$counts->{'physical'} = $elbrus->[1];
-		$cpu->{'arch'} = $elbrus->[2];
-		# print 'model id: ' . $cpu->{'model-id'} . ' arch: ' . $cpu->{'arch'} . " cpc: $counts->{'cpu-cores'} phyc: $counts->{'physical'} proc: $counts->{'processors'} \n";
-	}
-	$counts->{'physical'} ||= 1; # assume 1 if no id found, as with ARM
-	foreach my $die_ref (@{$cpu->{'ids'}}){
-		next if ref $die_ref ne 'ARRAY';
-		$counts->{'cores'} = 0;
-		$counts->{'dies'} = scalar @$die_ref;
-		#$cpu->{'dies'} = $counts->{'dies'};
-		foreach my $core_ref (@$die_ref){
-			next if ref $core_ref ne 'ARRAY';
-			$counts->{'cores'} = 0;# reset for each die!!
-			# NOTE: the counters can be undefined because the index comes from 
-			# core id: which can be 0 skip 1 then 2, which leaves index 1 undefined
-			# risc cpus do not actually show core id so ignore that counter
-			foreach my $id (@$core_ref){
-				$counts->{'cores'}++ if defined $id && !%risc;
-			}
-			# print 'cores: ' . $counts->{'cores'}, "\n";
-		}
-	}
-	# this covers potentially cases where ARM cpus have > 1 die 
-	# maybe applies to all risc, not sure, but dies is broken anyway for cpuinfo
-	if (!$cpu->{'dies'}){
-		if ($risc{'arm'} && $counts->{'dies'} <= 1 && $cpu->{'dies'} > 1){
-			$counts->{'dies'} = $cpu->{'dies'};
-		}
-		else {
-			$cpu->{'dies'} = $counts->{'dies'};
-		}
-	}
-	# this is an attempt to fix the amd family 15 bug with reported cores vs actual cores
-	# NOTE: amd A6-4400M APU 2 core reports: cores: 1 siblings: 2
-	# NOTE: AMD A10-5800K APU 4 core reports: cores: 2 siblings: 4
-	if (!$counts->{'cpu-cores'}){
-		if ($cpu->{'cores'} && !$counts->{'cores'} || 
-		 $cpu->{'cores'} >= $counts->{'cores'}){
-			$counts->{'cpu-cores'} = $cpu->{'cores'};
-		}
-		elsif ($counts->{'cores'} > $cpu->{'cores'}){
-			$counts->{'cpu-cores'} = $counts->{'cores'};
-		}
-	}
-	# print "cpu-c:$counts->{'cpu-cores'}\n";
-	# $counts->{'cpu-cores'} = $cpu->{'cores'}; 
-	# like, intel core duo
-	# NOTE: sadly, not all core intel are HT/MT, oh well...
-	# xeon may show wrong core / physical id count, if it does, fix it. A xeon
-	# may show a repeated core id : 0 which gives a fake num_of_cores=1
-	if ($tests->{'intel'}){
-		if ($cpu->{'siblings'} && $cpu->{'siblings'} > 1 && 
-		 $cpu->{'cores'} && $cpu->{'cores'} > 1){
-			if ($cpu->{'siblings'}/$cpu->{'cores'} == 1){
-				$tests->{'intel'} = 0;
-				$tests->{'ht'} = 0;
-			}
-			else {
-				$counts->{'cpu-cores'} = ($cpu->{'siblings'}/2); 
-				$tests->{'ht'} = 1;
-			}
-		}
-	}
-	# ryzen is made out of blocks of 2, 4, or 8 core dies...
-	if ($tests->{'ryzen'}){
-		$counts->{'cpu-cores'} = $cpu->{'cores'}; 
-		 # note: posix ceil isn't present in Perl for some reason, deprecated?
-		my $working = $counts->{'cpu-cores'} / 8;
-		my @temp = split('\.', $working);
-		$cpu->{'dies'} = ($temp[1] && $temp[1] > 0) ? $temp[0]++ : $temp[0];
-		$counts->{'dies'} = $cpu->{'dies'};
-	}
-	# these always have 4 dies
-	elsif ($tests->{'epyc'}){
-		$counts->{'cpu-cores'} = $cpu->{'cores'}; 
-		$counts->{'dies'} = $cpu->{'dies'} = 4;
-	}
-	# final check, override the num of cores value if it clearly is wrong
-	# and use the raw core count and synthesize the total instead of real count
-	if ($counts->{'cpu-cores'} == 0 && 
-	 $cpu->{'cores'} * $counts->{'physical'} > 1){
-		$counts->{'cpu-cores'} = ($cpu->{'cores'} * $counts->{'physical'});
-	}
-	# last check, seeing some intel cpus and vms with intel cpus that do not show any
-	# core id data at all, or siblings.
-	if ($counts->{'cpu-cores'} == 0 && $counts->{'processors'} > 0){
-		$counts->{'cpu-cores'} = $counts->{'processors'};
-	}
-	# this happens with BSDs which have very little cpu data available
-	if ($counts->{'processors'} == 0 && $counts->{'cpu-cores'} > 0){
-		$counts->{'processors'} = $counts->{'cpu-cores'};
-		if ($bsd_type && ($tests->{'ht'} || $tests->{'amd-zen'}) && 
-		 $counts->{'cpu-cores'} > 2){
-			$counts->{'cpu-cores'} = $counts->{'cpu-cores'}/2;;
-		}
-		my $count = $counts->{'processors'};
-		$count-- if $count > 0;
-		$cpu->{'processors'}[$count] = 0;
-		# no way to get per processor speeds yet, so assign 0 to each
-		# must be a numeric value. Could use raw speed from core 0, but 
-		# that would just be a hack.
-		foreach (0 .. $count){
-			$cpu->{'processors'}[$_] = 0;
-		}
-	}
-	# so far only OpenBSD has a way to detect MT cpus, but Openbsd has disabled MT
-	if ($bsd_type){
-		if ($cpu->{'siblings'} && 
-		 $counts->{'cpu-cores'} && $counts->{'cpu-cores'} > 1){
-			$counts->{'cores-multiplier'} = $counts->{'cpu-cores'};
-		}
-		# if no siblings we couldn't get MT status of cpu so can't trust cache
-		else {
-			$$cache_check = main::message('note-check');
-		}
-	}
-	# only elbrus shows L1 / L3 cache data in cpuinfo, cpu_sys data should show 
-	# for newer full linux.
-	elsif ($counts->{'cpu-cores'} &&
-	 ($tests->{'elbrus'} || $counts->{'cpu-cores'} > 1)) {
-		$counts->{'cores-multiplier'} = $counts->{'cpu-cores'};
-	}
-	# last test to catch some corner cases 
-	# seen a case where a xeon vm in a dual xeon system actually had 2 cores, no MT
-	# so it reported 4 siblings, 2 cores, but actually only had 1 core per virtual cpu
-	# print "prc: $counts->{'processors'} phc: $counts->{'physical'} coc: $counts->{'cores'} cpc: $counts->{'cpu-cores'}\n";
-	# this test was for arm but I think it applies to all risc, but risc will be sys
-	if (!%risc && 
-	 $counts->{'processors'} == $counts->{'physical'} * $counts->{'cores'} && 
-	 $counts->{'cpu-cores'} > $counts->{'cores'}){
-		$tests->{'ht'} = 0;
-		# $tests->{'xeon'} = 0;
-		$tests->{'intel'} = 0;
-		$counts->{'cpu-cores'} = 1;
-		$counts->{'cores'} = 1;
-		$cpu->{'siblings'} = 1;
-	}
-	eval $end if $b_log;
-}
-
-# all values passed by reference so no need for returns
-sub cp_data_sys {
-	eval $start if $b_log;
-	my ($cpu,$cpu_sys,$caches,$counts) = @_;
-	my (@keys) = (sort keys %{$cpu_sys->{'cpus'}});
-	return if !@keys;
-	$counts->{'physical'} = scalar @keys;
-	if ($type eq 'full' && $cpu_sys->{'cpus'}{$keys[0]}{'caches'}){
-		cp_sys_caches($cpu_sys->{'cpus'}{$keys[0]}{'caches'},$caches,'l1','l1d');
-		cp_sys_caches($cpu_sys->{'cpus'}{$keys[0]}{'caches'},$caches,'l1','l1i');
-		cp_sys_caches($cpu_sys->{'cpus'}{$keys[0]}{'caches'},$caches,'l2','');
-		cp_sys_caches($cpu_sys->{'cpus'}{$keys[0]}{'caches'},$caches,'l3','');
-	}
-	if ($cpu_sys->{'data'}{'speeds'}{'all'}){
-		$counts->{'processors'} = scalar @{$cpu_sys->{'data'}{'speeds'}{'all'}};
-	}
-	if (defined $cpu_sys->{'data'}{'smt-active'}){
-		if ($cpu_sys->{'data'}{'smt-active'}){
-			$cpu->{'smt'} = 'enabled';
-		}
-		# values: on/off/notsupported/notimplemented
-		elsif (defined $cpu_sys->{'data'}{'smt-control'} &&
-		 $cpu_sys->{'data'}{'smt-control'} =~ /^not/){
-			$cpu->{'smt'} = main::message('unsupported');
-		}
-		else {
-			$cpu->{'smt'} = 'disabled';
-		}
-	}
-	my $i = 0;
-	my (@governor,@max,@min,@phys_cores);
-	foreach my $phys_id (@keys){
-		if ($cpu_sys->{'cpus'}{$phys_id}{'cores'}){
-			my ($mt,$st) = (0,0);
-			my (@core_keys) = keys %{$cpu_sys->{'cpus'}{$phys_id}{'cores'}};
-			$cpu->{'cores'} = $counts->{'cpu-cores'} = scalar @core_keys;
-			$counts->{'cpu-topo'}[$i]{'cores'} = $cpu->{'cores'};
-			if ($cpu_sys->{'cpus'}{$phys_id}{'dies'}){
-				$counts->{'cpu-topo'}[$i]{'dies'} = scalar @{$cpu_sys->{'cpus'}{$phys_id}{'dies'}};
-				$cpu->{'dies'} = $counts->{'cpu-topo'}[$i]{'dies'};
-			}
-			# If we ever get > 1 min/max speed per phy cpu, we'll need to fix the [0]
-			if ($cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0]){
-				if (!grep {$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0] eq $_} @max){
-					push(@max,$cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0]);
-				}
-				$counts->{'cpu-topo'}[$i]{'max'} = $cpu_sys->{'cpus'}{$phys_id}{'max-freq'}[0];
-			}
-			if ($cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0]){
-				if (!grep {$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0] eq $_} @min){
-					push(@min,$cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0]);
-				}
-				$counts->{'cpu-topo'}[$i]{'min'} = $cpu_sys->{'cpus'}{$phys_id}{'min-freq'}[0];
-			}
-			# cheating, this is not a count, but we need the data for topology, must
-			# sort since governors can be in different order if > 1
-			if ($cpu_sys->{'cpus'}{$phys_id}{'governor'}){
-				foreach my $gov (@{$cpu_sys->{'cpus'}{$phys_id}{'governor'}}){
-					push(@governor,$gov) if !grep {$_ eq $gov} @governor;
-				}
-				$cpu->{'governor'} = join(',',@governor);
-			}
-			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'}){
-				$cpu->{'scaling-driver'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'};
-			}
-			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'}){
-				$cpu->{'scaling-driver'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-driver'};
-			}
-			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-max-freq'}){
-				$cpu->{'scaling-max-freq'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-max-freq'};
-			}
-			if ($cpu_sys->{'cpus'}{$phys_id}{'scaling-min-freq'}){
-				$cpu->{'scaling-min-freq'} = $cpu_sys->{'cpus'}{$phys_id}{'scaling-min-freq'};
-			}
-			if (!grep {$counts->{'cpu-cores'} eq $_} @phys_cores){
-				push(@phys_cores,$counts->{'cpu-cores'});
-			}
-			if ($counts->{'processors'}){
-				if ($counts->{'processors'} > $counts->{'cpu-cores'}){
-					for my $key (@core_keys){
-						if ((my $threads = scalar @{$cpu_sys->{'cpus'}{$phys_id}{'cores'}{$key}}) > 1){
-							$counts->{'cpu-topo'}[$i]{'cores-mt'}++;
-							$counts->{'cpu-topo'}[$i]{'threads'} += $threads;
-							# note: for mt+st type cpus, we need to handle tpc on output per type
-							$counts->{'cpu-topo'}[$i]{'tpc'} = $threads;
-							$counts->{'struct-mt'} = 1;
-						}
-						else {
-							$counts->{'cpu-topo'}[$i]{'cores-st'}++;
-							$counts->{'cpu-topo'}[$i]{'threads'}++;
-							$counts->{'struct-st'} = 1;
-						}
-					}
-				}
-			}
-			$i++;
-		}
-	}
-	$counts->{'struct-max'} = 1 if scalar @max > 1;
-	$counts->{'struct-min'} = 1 if scalar @min > 1;
-	$counts->{'struct-cores'} = 1 if scalar @phys_cores > 1;
-	if ($b_log){
-		main::log_data('dump','%cpu_properties',$caches);
-		main::log_data('dump','%cpu_properties',$counts);
-	}
-	# print Data::Dumper::Dumper $caches;
-	# print Data::Dumper::Dumper $counts;
-	eval $end if $b_log;
-}
-
-sub cp_sys_caches {
-	eval $start if $b_log;
-	my ($sys_caches,$caches,$id,$id_di) = @_;
-	my $cache_id = ($id_di) ? $id_di: $id;
-	my %cache_desc;
-	if ($sys_caches->{$cache_id}){
-		# print Data::Dumper::Dumper $cpu_sys->{'cpus'};
-		foreach (@{$sys_caches->{$cache_id}}){
-			# android seen to have cache data without size item
-			next if !defined $_; 
-			$caches->{$cache_id} += $_;
-			$cache_desc{$_}++ if $b_admin;
-		}
-		$caches->{$id} += $caches->{$id_di} if $id_di;
-		$caches->{$cache_id . '-desc'} = cp_cache_desc(\%cache_desc) if $b_admin;
-	}
-	eval $end if $b_log;
-}
-
-## CPU PROPERTIES TOOLS ## 
+## CP TOOLS
 sub cp_cache_desc {
 	my ($cache_desc) = @_;
 	my ($desc,$sep) = ('','');
@@ -11214,6 +11263,358 @@ sub cp_caches_fallback {
 	eval $end if $b_log;
 }
 
+sub cp_cores_alpha {
+	my $cores = $_[0];
+	my $string = '';
+	if ($cores > 4){
+		$string = $cores . '-core';
+	}
+	elsif ($cores == 0){
+		$string = main::message('unknown-cpu-topology');
+	}
+	else {
+		my @alpha = qw(single dual triple quad);
+		$string = $alpha[$cores-1] . ' core';
+	}
+	return $string;
+}
+
+# Only AMD/Intel 64 bit cpus
+sub cp_cpu_level {
+	eval $start if $b_log;
+	my %flags = map {$_ =>1} split(/\s+/,$_[0]);
+	my ($level,$note,@found);
+	# note, each later cpu level must contain all subsequent cpu flags
+	# baseline: all x86_64 cpus  lm cmov cx8 fpu fxsr mmx syscall sse2
+	my @l1 = qw(cmov cx8 fpu fxsr lm mmx syscall sse2);
+	my @l2 = qw(cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3);
+	my @l3 = qw(abm avx avx2 bmi1 bmi2 f16c fma movbe xsave);
+	my @l4 = qw(avx512f avx512bw avx512cd avx512dq avx512vl);
+	if ((@found = grep {$flags{$_}} @l1) && scalar(@found) == scalar(@l1)){
+		$level = 'v1';
+		# print 'v1: ', Data::Dumper::Dumper \@found;
+		if ((@found = grep {$flags{$_}} @l2) && scalar(@found) == scalar(@l2)){
+			$level = 'v2';
+			# print 'v2: ', Data::Dumper::Dumper \@found;
+			# It's not 100% certain that if flags exist v3/v4 supported. flags don't 
+			# give full possible outcomes in these cases. See: docs/inxi-cpu.txt
+			if ((@found = grep {$flags{$_}} @l3) && scalar(@found) == scalar(@l3)){
+				$level = 'v3';
+				# print 'v3: ', Data::Dumper::Dumper \@found;
+				$note = main::message('note-check');
+				if ((@found = grep {$flags{$_}} @l4) && scalar(@found) == scalar(@l4)){
+					$level = 'v4';
+					# print 'v4: ', Data::Dumper::Dumper \@found;
+				}
+			}
+		}
+	}
+	$level = [$level,$note] if $level;
+	eval $end if $b_log;
+	return $level;
+}
+
+# Logic:
+# if > 1 processor && processor id (physical id) == core id then Multi threaded (MT)
+# if siblings > 1 && siblings ==  2 * num_of_cores ($cpu->{'cores'}) then Multi threaded (MT)
+# if > 1 processor && processor id (physical id) != core id then Multi-Core Processors (MCP)
+# if > 1 processor && processor ids (physical id) > 1 then Symmetric Multi Processing (SMP)
+# if = 1 processor then single core/processor Uni-Processor (UP)
+sub cp_cpu_type {
+	eval $start if $b_log;
+	my ($counts,$cpu,$tests) = @_;
+	my $cpu_type = '';
+	if ($counts->{'processors'} > 1 || 
+	 (defined $tests->{'intel'} && $tests->{'intel'} && $cpu->{'siblings'} > 0)){
+		# cpu_sys detected MT
+		if ($counts->{'struct-mt'}){
+			if ($counts->{'struct-mt'} && $counts->{'struct-st'}){
+				$cpu_type .= 'MST'; 
+			}
+			else {
+				$cpu_type .= 'MT'; 
+			}
+		}
+		# handle case of OpenBSD that has hw.smt but no other meaningful topology
+		elsif ($cpu->{'smt'}){
+			$cpu_type .= 'MT' if $cpu->{'smt'} eq 'enabled'; 
+		}
+		# non-multicore MT, with 2 or more threads per core
+		elsif ($counts->{'processors'} && $counts->{'physical'} && 
+		 $counts->{'cpu-cores'} && 
+		 $counts->{'processors'}/($counts->{'physical'} * $counts->{'cpu-cores'}) >= 2){
+			# print "mt:1\n";
+			$cpu_type .= 'MT'; 
+		}
+		# 2 or more siblings per cpu real core
+		elsif ($cpu->{'siblings'} > 1 && $cpu->{'siblings'}/$counts->{'cpu-cores'} >= 2){
+			# print "mt:3\n";
+			$cpu_type .= 'MT'; 
+		}
+		# non-MT multi-core or MT multi-core
+		if ($counts->{'cpu-cores'} > 1){
+			if ($counts->{'struct-mt'} && $counts->{'struct-st'}){
+				$cpu_type .= ' AMCP';
+			}
+			else {
+				$cpu_type .= ' MCP';
+			}
+		}
+		# only solidly known > 1 die cpus will use this
+		if (defined $cpu->{'dies'} && $cpu->{'dies'} > 1){
+			$cpu_type .= ' MCM'; 
+		}
+		# >1 cpu sockets active: Symetric Multi Processing
+		if ($counts->{'physical'} > 1){
+			if ($counts->{'struct-cores'} || $counts->{'struct-max'} || 
+			 $counts->{'struct-min'}){
+				$cpu_type .= ' AMP'; 
+			}
+			else {
+				$cpu_type .= ' SMP'; 
+			}
+		}
+		$cpu_type =~ s/^\s+//;
+	}
+	else {
+		$cpu_type = 'UP';
+	}
+	eval $end if $b_log;
+	return $cpu_type;
+}
+
+sub cp_speed_data {
+	eval $start if $b_log;
+	my ($cpu,$cpu_sys) = @_;
+	my $info = {};
+	if (defined $cpu_sys->{'data'}){
+		if (defined $cpu_sys->{'data'}{'speeds'}{'min-freq'}){
+			$cpu->{'min-freq'} = $cpu_sys->{'data'}{'speeds'}{'min-freq'};
+		}
+		if (defined $cpu_sys->{'data'}{'speeds'}{'max-freq'}){
+			$cpu->{'max-freq'} = $cpu_sys->{'data'}{'speeds'}{'max-freq'};
+		}
+		if (defined $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'}){
+			$cpu->{'scaling-min-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'};
+		}
+		if (defined $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'}){
+			$cpu->{'scaling-max-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'};
+		}
+		# we don't need to see these if they are the same
+		if ($cpu->{'min-freq'} && $cpu->{'max-freq'} && 
+		 $cpu->{'scaling-min-freq'} && $cpu->{'scaling-max-freq'} && 
+		 $cpu->{'min-freq'} eq $cpu->{'scaling-min-freq'} &&
+		 $cpu->{'max-freq'} eq $cpu->{'scaling-max-freq'}){
+			undef $cpu->{'scaling-min-freq'};
+			undef $cpu->{'scaling-max-freq'};
+		}
+		if (defined $cpu_sys->{'data'}{'speeds'}{'all'}){
+			# only replace if we got actual speed values from cpufreq, or if no legacy
+			# sourced processors data. Handles fake syz core speeds for counts.
+			if ((grep {$_} @{$cpu_sys->{'data'}{'speeds'}{'all'}}) ||
+			 !@{$cpu->{'processors'}}){
+				$cpu->{'processors'} = $cpu_sys->{'data'}{'speeds'}{'all'};
+			}
+		}
+		if (defined $cpu_sys->{'data'}{'cpufreq-boost'}){
+			$cpu->{'boost'} = $cpu_sys->{'data'}{'cpufreq-boost'};
+		}
+	}
+	if (defined $cpu->{'processors'}){
+		if (scalar @{$cpu->{'processors'}} > 1){
+			my ($agg,$high) = (0,0);
+			for (@{$cpu->{'processors'}}){
+				next if !$_; # bsds might have 0 or undef value, that's junk
+				$agg += $_;
+				$high = $_ if $_ > $high;
+			}
+			if ($agg){
+				$cpu->{'avg-freq'} = int($agg/scalar @{$cpu->{'processors'}});
+				$cpu->{'cur-freq'} = $high;
+				$info->{'avg-speed-key'} = 'avg';
+				$info->{'speed'} = $cpu->{'avg-freq'};
+				if ($high > $cpu->{'avg-freq'}){
+					$cpu->{'high-freq'} = $high;
+					$info->{'high-speed-key'} = 'high';
+				}
+			}
+		}
+		elsif ($cpu->{'processors'}[0]) {
+			$cpu->{'cur-freq'} = $cpu->{'processors'}[0];
+			$info->{'speed'} = $cpu->{'cur-freq'};
+		}
+	}
+	# BSDs generally will have processors count, but not per core speeds
+	if ($cpu->{'cur-freq'} && !$info->{'speed'}){
+		$info->{'speed'} = $cpu->{'cur-freq'};
+	}
+	if ($cpu->{'min-freq'} || $cpu->{'max-freq'}){
+		($info->{'min-max'},$info->{'min-max-key'}) = cp_speed_min_max(
+		$cpu->{'min-freq'},
+		$cpu->{'max-freq'});
+	}
+	if ($cpu->{'scaling-min-freq'} || $cpu->{'scaling-max-freq'}){
+		($info->{'scaling-min-max'},$info->{'scaling-min-max-key'}) = cp_speed_min_max(
+		$cpu->{'scaling-min-freq'},
+		$cpu->{'scaling-max-freq'},
+		'sc');
+	}
+ 	if ($cpu->{'cur-freq'}){
+		if ($show{'short'}){
+			$info->{'speed-key'} = 'speed';
+		}
+		elsif ($show{'cpu-basic'}){
+			$info->{'speed-key'} = 'speed (MHz)';
+		}
+		else {
+			$info->{'speed-key'} = 'Speed (MHz)';
+		}
+ 	}
+ 	eval $end if $b_log;
+ 	return $info;
+}
+
+sub cp_speed_min_max {
+	my ($min,$max,$type) = @_;
+	my ($min_max,$key);
+	if ($min && $max){
+		$min_max = "$min/$max";
+		$key = "min/max";
+ 	}
+ 	elsif ($max){
+		$min_max = $max;
+		$key = "max";
+ 	}
+ 	elsif ($min){
+		$min_max = $min;
+		$key = "min";
+ 	}
+ 	$key = $type . '-' . $key if $type && $key;
+ 	return ($min_max,$key);
+}
+
+# args: 0: cpu, by ref; 1: update $tests by reference
+sub cp_test_types {
+	my ($cpu,$tests) = @_;
+	if ($cpu->{'type'} eq 'intel'){
+		$$tests{'intel'} = 1;
+		$$tests{'xeon'} = 1 if $cpu->{'model_name'} =~ /Xeon/i;
+	}
+	elsif ($cpu->{'type'} eq 'amd'){
+		if ($cpu->{'family'} && $cpu->{'family'} eq '17'){
+			$$tests{'amd-zen'} = 1;
+			if ($cpu->{'model_name'}){
+				if ($cpu->{'model_name'} =~ /Ryzen/i){ 
+					$$tests{'ryzen'} = 1;
+				}
+				elsif ($cpu->{'model_name'} =~ /EPYC/i){
+					$$tests{'epyc'} = 1;
+				}
+			}
+		}
+	}
+	elsif ($cpu->{'type'} eq 'elbrus'){
+		$$tests{'elbrus'} = 1;
+	}
+}
+
+sub cp_topology {
+	my ($counts,$topology) = @_;
+	my @alpha = qw(Single Dual Triple Quad);
+	my ($sep) = ('');
+	my (%keys,%done);
+	my @tests = ('x'); # prefill [0] because iterator runs before 'next' test.
+	if ($counts->{'cpu-topo'}){
+		# first we want to find out how many of each physical variant there are
+		foreach my $topo (@{$counts->{'cpu-topo'}}){
+			# turn sorted hash into string
+			my $test = join('::', map{$_ . ':' . $topo->{$_}} sort keys %$topo);
+			if ($keys{$test}){
+				$keys{$test}++;
+			}
+			else {
+				$keys{$test} = 1;
+			}
+			push(@tests,$test);
+		}
+		my ($i,$j) = (0,0);
+		# then we build up the topology data per variant
+		foreach my $topo (@{$counts->{'cpu-topo'}}){
+			my $key = '';
+			$i++;
+			next if $done{$tests[$i]};
+			$done{$tests[$i]} = 1;
+			if ($b_admin && $type eq 'full'){
+				$topology->{'full'}[$j]{'cpus'} = $keys{$tests[$i]};
+				$topology->{'full'}[$j]{'cores'} = $topo->{'cores'};
+				if ($topo->{'threads'} && $topo->{'cores'} != $topo->{'threads'}){
+					$topology->{'full'}[$j]{'threads'} = $topo->{'threads'};
+				}
+				if ($topo->{'dies'}){
+					$topology->{'full'}[$j]{'dies-count'} = $topo->{'dies'};
+				}
+				if ($topo->{'clusters'}){
+					# clusters _should_ be per die, but it's not a guarantee
+					if ($topo->{'dies'} && $topo->{'dies'} > 1){
+						$topo->{'clusters'} = $topo->{'dies'} . 'x' . $topo->{'clusters'};
+					}
+					$topology->{'full'}[$j]{'clusters'} = $topo->{'clusters'};
+				}
+				if ($counts->{'struct-mt'}){
+					$topology->{'full'}[$j]{'cores-mt'} = $topo->{'cores-mt'};
+				}
+				if ($counts->{'struct-st'}){
+					$topology->{'full'}[$j]{'cores-st'} = $topo->{'cores-st'};
+				}
+				if ($counts->{'struct-max'} || $counts->{'struct-min'}){
+					$topology->{'full'}[$j]{'max'} = $topo->{'max'};
+					$topology->{'full'}[$j]{'min'} = $topo->{'min'};
+				}
+				if ($topo->{'smt'}){
+					$topology->{'full'}[$j]{'smt'} = $topo->{'smt'};
+				}
+				if ($topo->{'tpc'}){
+					$topology->{'full'}[$j]{'tpc'} = $topo->{'tpc'};
+				}
+				$j++;
+			}
+			else {
+				# start building string
+				$topology->{'string'} .= $sep;
+				$sep = ',';
+				if ($counts->{'physical'} > 1) {
+					my $phys = ($topology->{'struct-cores'}) ? $keys{$tests[$i]} : $counts->{'physical'};
+					$topology->{'string'} .= $phys . 'x ';
+					$topology->{'string'} .= $topo->{'cores'} . '-core';
+				}
+				else {
+					$topology->{'string'} .= cp_cores_alpha($topo->{'cores'});
+				}
+				# alder lake type cpu
+				if ($topo->{'cores-st'} && $topo->{'cores-mt'}){
+					$topology->{'string'} .= ' (' . $topo->{'cores-mt'} . '-mt/';
+					$topology->{'string'} .= $topo->{'cores-st'} . '-st)';
+				}
+				# we only want to show > 1 phys short form basic if cpus have different 
+				# core counts, not different min/max frequencies
+				last if !$topology->{'struct-cores'};
+			}
+		}
+	}
+	else {
+		if ($counts->{'physical'} > 1) {
+			$topology->{'string'} = $counts->{'physical'} . 'x ';
+			$topology->{'string'} .= $counts->{'cpu-cores'} . '-core';
+		}
+		else {
+			$topology->{'string'} = cp_cores_alpha($counts->{'cpu-cores'});
+		}
+	}
+	$topology->{'string'} ||= '';
+}
+## END CP TOOLS
+## END CPU PROPERTIES ##
+
 ## START CPU ARCH ##
 sub cp_cpu_arch {
 	eval $start if $b_log;
@@ -11221,7 +11622,7 @@ sub cp_cpu_arch {
 	# we can get various random strings for rev/stepping, particularly for arm,ppc
 	# but we want stepping to be integer for math comparisons, so convert, or set
 	# to 0 so it won't break anything.
-	if (defined $stepping && $stepping =~ /^[A-F0-9]{1,3}$/i){
+	if (defined $stepping && $stepping =~ /^(0x)?[A-F0-9]{1,3}$/i){
 		$stepping = hex($stepping);
 	}
 	else {
@@ -11229,6 +11630,7 @@ sub cp_cpu_arch {
 	}
 	$family ||= '';
 	$model = '' if !defined $model; # model can be 0
+	$name = '' if !defined $name;
 	my ($arch,$gen,$note,$process,$year);
 	my $check = main::message('note-check');
 	# See: docs/inxi-cpu.txt 
@@ -11445,13 +11847,13 @@ sub cp_cpu_arch {
 			# shares model 8 with zen, stepping unknown
 			elsif ($model =~ /^(8)$/){
 				$arch = 'Zen+';
-				$gen = '2';
+				$gen = '1+';
 				$process = 'GF 12nm';
 				$year = '2018-21';}
 			# used this but it didn't age well:  ^(2[0123456789ABCDEF]|
 			elsif ($model =~ /^(3.|4.|5.|6.|7.|8.|9.|A.)$/){
 				$arch = 'Zen 2';
-				$gen = '3';
+				$gen = '2';
 				$process = 'TSMC n7 (7nm)'; # some consumer maybe GF 14nm
 				$year = '2020-22';}
 			else {
@@ -11473,26 +11875,26 @@ sub cp_cpu_arch {
 			# zen4c is for cloud hyperscale
 			if ($model =~ /^(78)$/){
 				$arch = 'Zen 4c';
-				$gen = '5';
-				$process = 'TSMC n4 (4nm)';
+				$gen = '4';
+				$process = 'TSMC n5 (5nm)'; # roadmapped to n4 originally
 				$year = '2023+';}
 			# ext model 6,7, base models trickling in
 			# 10 engineering sample
 			elsif ($model =~ /^(1.|6.|7.|A.)$/){
 				$arch = 'Zen 4';
-				$gen = '5';
+				$gen = '4';
 				$process = 'TSMC n5 (5nm)';
 				$year = '2022+';}
 			# double check 40, 44; 21 confirmed
 			elsif ($model =~ /^(21|4.)$/){
 				$arch = 'Zen 3+';
-				$gen = '4';
+				$gen = '3';
 				$process = 'TSMC n6 (7nm)';
 				$year = '2022';}
 			# 21, 50: step 0; known: 21, 3x, 50
 			elsif ($model =~ /^(0|1|8|2.|3.|5.)$/){
 				$arch = 'Zen 3';
-				$gen = '4';
+				$gen = '3';
 				$process = 'TSMC n7 (7nm)';
 				$year = '2021-22';}
 			else {
@@ -11506,13 +11908,18 @@ sub cp_cpu_arch {
 			if ($model =~ /^(0)$/){
 				$arch = 'Zen 5';
 				$gen = '5';
-				$process = 'TSMC n3 (3nm)'; # turin could be 4nm, need more data
+				$process = 'TSMC n4 (4nm)'; # turin could be 4nm, need more data
 				$year = '2023+';}
+			elsif ($model =~ /^(1.)$/){
+				$arch = 'Zen 5c';
+				$gen = '5';
+				$process = 'TSMC n3 (3nm)'; # turin could be 4nm, need more data
+				$year = '2024+';}
 			# Strix Point; Granite Ridge; Krackan Point; Strix Halo
-			elsif ($model =~ /^(10|20|40|60|70)$/){
+			elsif ($model =~ /^(2.|4.|6.|7.)$/){
 				$arch = 'Zen 5';
 				$gen = '5';
-				$process = 'TSMC n3 (3nm)'; # desktop, granite ridge, confirm 2024
+				$process = 'TSMC n4 (4nm)'; # desktop, granite ridge, confirm 2024
 				$year = '2024+';}
 			else {
 				$arch = 'Zen 5';
@@ -11994,7 +12401,11 @@ sub cp_cpu_arch {
 				$year = '2023+';}
 			elsif ($model =~ /^(AD|AE)$/){
 				$arch = 'Granite Rapids'; # ?
-				$process = 'Intel 3 (7nm+)'; # confirm
+				$process = 'Intel 3 (7nm+)'; # listed with intel 3 and 7
+				$year = '2024+';}
+			elsif ($model =~ /^(AF)$/){
+				$arch = 'Sierra Forest'; # ?
+				$process = 'Intel 3 (5nm)'; 
 				$year = '2024+';}
 			elsif ($model =~ /^(B6)$/){
 				$arch = 'Grand Ridge'; # 14 gen
@@ -12006,10 +12417,10 @@ sub cp_cpu_arch {
 				$year = '2022+';}
 			elsif ($model =~ /^(BC|BD)$/){
 				$arch = 'Lunar Lake'; # 15 gn
-				$process = 'Intel 18a (1.8nm)';
+				$process = 'TSMC n3b (3nm)'; # n6 controller tile. Announced w/intel 18a
 				$year = '2024+';} # seen APU IDs, so out there
 			# Meteor Lake-S maybe cancelled, replaced by arrow
-			elsif ($model =~ /^(C5|C6)$/){
+			elsif ($model =~ /^(C5|C6|CA)$/){
 				$arch = 'Arrow Lake'; # 15 gen; igpu battleimage 3/4nm
 				# gfx tile is TSMC 3nm
 				$process = 'Intel 20a (2nm)';# TSMC 3nm (corei3-5)/Intel 20A 2nm (core i5-9)
@@ -12022,6 +12433,10 @@ sub cp_cpu_arch {
 				$arch = 'Emerald Rapids'; # 5th gen xeon
 				$process = 'Intel 7 (10nm)';
 				$year = '2023+';}
+			elsif ($model =~ /^(DD)$/){
+				$arch = 'Clearwater Forest'; 
+				$process = 'Intel 18a (1.8nm)';
+				$year = '2025+';}
 			## roadmaps: check and update, since Intel misses their targets often
 			# Sapphire Rapids: 13 gen (?), Intel 7 (10nm), 2023
 			# Emerald Rapids: Intel 7 (10nm), 2023
@@ -12109,217 +12524,237 @@ sub cp_cpu_arch {
 			}
 		}
 	}
+	# Note: their cpu family value is either missing for early, or generic
+	# No model: [id]/family: [id]. Just cpu family: [string], model name: [string]
+	elsif ($type eq 'loongson'){
+		# can't safely match model 1, but nobody will run inxi on that
+		# Not certain when SMIC took over from STM, which is a swiss firm.
+		if ($name =~ /\b2[BCE]\b/){
+			$arch = 'Godson';
+			$process = 'STM 180nm';
+			$year = '2003-2006';}
+		elsif ($name =~ /\b1[ABCD]\b/){
+			$arch = 'Loongson-1';
+			$process = 'STM 130nm';
+			$year = '2010-2014';}
+		elsif ($name =~ /\b1C101/){
+			$arch = 'Loongson-1';
+			$process = 'STM 130nm';
+			$year = '2018';}
+		elsif ($name =~ /\b2F\b/){
+			$arch = 'Loongson-2';
+			$process = 'STM 90nm';
+			$year = '2007';}
+		elsif ($name =~ /\b2[GIH]\b/){
+			$arch = 'Loongson-2';
+			$process = 'STM 65nm';
+			$year = '2012-2013';}
+		elsif ($name =~ /\b2K(1000)?\b/){
+			$arch = 'Loongson-2';
+			$process = 'STM 40nm';
+			$year = '2017';}
+		elsif ($name =~ /3A1000/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 65nm';
+			$year = '2009';}
+		elsif ($name =~ /3B1000/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 65nm';
+			$year = '2010';}
+		elsif ($name =~ /3B1500/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 32nm';
+			$year = '2012';}
+		elsif ($name =~ /3A1500-I|3[AB]2000/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 40nm';
+			$year = '2015';}
+		elsif ($name =~ /3[AB]3000/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 28nm';
+			$year = '2016';}
+		elsif ($name =~ /3[AB]4000/){
+			$arch = 'Godson-3/Loongson-3';
+			$process = 'SMIC 28nm';
+			$year = '2019';}
+		elsif ($name =~ /3[A-C]5000/){
+			$arch = 'Loongson-3/LoongArch';
+			$process = 'SMIC 12-14nm';
+			$year = '2021+';}
+		elsif ($name =~ /3[A-C]6000/){
+			$arch = 'Loongson-3/LoongArch';
+			$process = 'SMIC 12-14nm';
+			$year = '2023+';}
+	}
 	eval $end if $b_log;
 	return [$arch,$note,$process,$gen,$year];
 }
 ## END CPU ARCH ##
 
-# Only AMD/Intel 64 bit cpus
-sub cp_cpu_level {
+## LEGACY CPU DATA ENGINE ##
+sub cp_data_fallback {
 	eval $start if $b_log;
-	my %flags = map {$_ =>1} split(/\s+/,$_[0]);
-	my ($level,$note,@found);
-	# note, each later cpu level must contain all subsequent cpu flags
-	# baseline: all x86_64 cpus  lm cmov cx8 fpu fxsr mmx syscall sse2
-	my @l1 = qw(cmov cx8 fpu fxsr lm mmx syscall sse2);
-	my @l2 = qw(cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3);
-	my @l3 = qw(abm avx avx2 bmi1 bmi2 f16c fma movbe xsave);
-	my @l4 = qw(avx512f avx512bw avx512cd avx512dq avx512vl);
-	if ((@found = grep {$flags{$_}} @l1) && scalar(@found) == scalar(@l1)){
-		$level = 'v1';
-		# print 'v1: ', Data::Dumper::Dumper \@found;
-		if ((@found = grep {$flags{$_}} @l2) && scalar(@found) == scalar(@l2)){
-			$level = 'v2';
-			# print 'v2: ', Data::Dumper::Dumper \@found;
-			# It's not 100% certain that if flags exist v3/v4 supported. flags don't 
-			# give full possible outcomes in these cases. See: docs/inxi-cpu.txt
-			if ((@found = grep {$flags{$_}} @l3) && scalar(@found) == scalar(@l3)){
-				$level = 'v3';
-				# print 'v3: ', Data::Dumper::Dumper \@found;
-				$note = main::message('note-check');
-				if ((@found = grep {$flags{$_}} @l4) && scalar(@found) == scalar(@l4)){
-					$level = 'v4';
-					# print 'v4: ', Data::Dumper::Dumper \@found;
-				}
-			}
+	my ($cpu,$caches,$cache_check,$counts,$tests) = @_;
+	if (!$counts->{'physical'}){
+		# handle case where cpu reports say, phys id 0, 2, 4, 6
+		foreach (@{$cpu->{'ids'}}){
+			$counts->{'physical'}++ if $_;
 		}
 	}
-	$level = [$level,$note] if $level;
-	eval $end if $b_log;
-	return $level;
-}
-
-sub cp_cpu_topology {
-	my ($counts,$topology) = @_;
-	my @alpha = qw(Single Dual Triple Quad);
-	my ($sep) = ('');
-	my (%keys,%done);
-	my @tests = ('x'); # prefill [0] because iterator runs before 'next' test.
-	if ($counts->{'cpu-topo'}){
-		# first we want to find out how many of each physical variant there are
-		foreach my $topo (@{$counts->{'cpu-topo'}}){
-			# turn sorted hash into string
-			my $test = join('::', map{$_ . ':' . $topo->{$_}} sort keys %$topo);
-			if ($keys{$test}){
-				$keys{$test}++;
+	# count unique processors ##
+	# note, this fails for intel cpus at times
+	# print ref $cpu->{'processors'}, "\n";
+	if (!$counts->{'processors'}){
+		$counts->{'processors'} = scalar @{$cpu->{'processors'}};
+	}
+	# print "p count:$counts->{'processors'}\n";
+	# print Data::Dumper::Dumper $cpu->{'processors'};
+	# $counts->{'cpu-cores'} is per physical cpu
+	# note: elbrus supports turning off cores, so we need to add one for cases 
+	# where rounds to 0 or 1 less
+	# print "$cpu{'type'},$cpu{'family'},$cpu{'model-id'},$cpu{'arch'}\n";
+	if ($tests->{'elbrus'} && $counts->{'processors'}){
+		my $elbrus = cp_elbrus_data($cpu->{'family'},$cpu->{'model-id'},
+		$counts->{'processors'},$cpu->{'arch'});
+		$counts->{'cpu-cores'} = $elbrus->[0];
+		$counts->{'physical'} = $elbrus->[1];
+		$cpu->{'arch'} = $elbrus->[2];
+		# print 'model id: ' . $cpu->{'model-id'} . ' arch: ' . $cpu->{'arch'} . " cpc: $counts->{'cpu-cores'} phyc: $counts->{'physical'} proc: $counts->{'processors'} \n";
+	}
+	$counts->{'physical'} ||= 1; # assume 1 if no id found, as with ARM
+	foreach my $die_ref (@{$cpu->{'ids'}}){
+		next if ref $die_ref ne 'ARRAY';
+		$counts->{'cores'} = 0;
+		$counts->{'dies'} = scalar @$die_ref;
+		#$cpu->{'dies-count'} = $counts->{'dies'};
+		foreach my $core_ref (@$die_ref){
+			next if ref $core_ref ne 'ARRAY';
+			$counts->{'cores'} = 0;# reset for each die!!
+			# NOTE: the counters can be undefined because the index comes from 
+			# core id: which can be 0 skip 1 then 2, which leaves index 1 undefined
+			# risc cpus do not actually show core id so ignore that counter
+			foreach my $id (@$core_ref){
+				$counts->{'cores'}++ if defined $id && !%risc;
 			}
-			else {
-				$keys{$test} = 1;
-			}
-			push(@tests,$test);
-		}
-		my ($i,$j) = (0,0);
-		# then we build up the topology data per variant
-		foreach my $topo (@{$counts->{'cpu-topo'}}){
-			my $key = '';
-			$i++;
-			next if $done{$tests[$i]};
-			$done{$tests[$i]} = 1;
-			if ($b_admin && $type eq 'full'){
-				$topology->{'full'}[$j]{'cpus'} = $keys{$tests[$i]};
-				$topology->{'full'}[$j]{'cores'} = $topo->{'cores'};
-				if ($topo->{'threads'} && $topo->{'cores'} != $topo->{'threads'}){
-					$topology->{'full'}[$j]{'threads'} = $topo->{'threads'};
-				}
-				if ($topo->{'dies'} && $topo->{'dies'} > 1){
-					$topology->{'full'}[$j]{'dies'} = $topo->{'dies'};
-				}
-				if ($counts->{'struct-mt'}){
-					$topology->{'full'}[$j]{'cores-mt'} = $topo->{'cores-mt'};
-				}
-				if ($counts->{'struct-st'}){
-					$topology->{'full'}[$j]{'cores-st'} = $topo->{'cores-st'};
-				}
-				if ($counts->{'struct-max'} || $counts->{'struct-min'}){
-					$topology->{'full'}[$j]{'max'} = $topo->{'max'};
-					$topology->{'full'}[$j]{'min'} = $topo->{'min'};
-				}
-				if ($topo->{'smt'}){
-					$topology->{'full'}[$j]{'smt'} = $topo->{'smt'};
-				}
-				if ($topo->{'tpc'}){
-					$topology->{'full'}[$j]{'tpc'} = $topo->{'tpc'};
-				}
-				$j++;
-			}
-			else {
-				# start building string
-				$topology->{'string'} .= $sep;
-				$sep = ',';
-				if ($counts->{'physical'} > 1) {
-					my $phys = ($topology->{'struct-cores'}) ? $keys{$tests[$i]} : $counts->{'physical'};
-					$topology->{'string'} .= $phys . 'x ';
-					$topology->{'string'} .= $topo->{'cores'} . '-core';
-				}
-				else {
-					$topology->{'string'} .= cp_cpu_alpha($topo->{'cores'});
-				}
-				# alder lake type cpu
-				if ($topo->{'cores-st'} && $topo->{'cores-mt'}){
-					$topology->{'string'} .= ' (' . $topo->{'cores-mt'} . '-mt/';
-					$topology->{'string'} .= $topo->{'cores-st'} . '-st)';
-				}
-				# we only want to show > 1 phys short form basic if cpus have different 
-				# core counts, not different min/max frequencies
-				last if !$topology->{'struct-cores'};
-			}
+			# print 'cores: ' . $counts->{'cores'}, "\n";
 		}
 	}
-	else {
-		if ($counts->{'physical'} > 1) {
-			$topology->{'string'} = $counts->{'physical'} . 'x ';
-			$topology->{'string'} .= $counts->{'cpu-cores'} . '-core';
+	# this covers potentially cases where ARM cpus have > 1 die 
+	# maybe applies to all risc, not sure, but dies is broken anyway for cpuinfo
+	if (!$cpu->{'dies-count'}){
+		if ($risc{'arm'} && $counts->{'dies'} <= 1 && $cpu->{'dies-count'} > 1){
+			$counts->{'dies'} = $cpu->{'dies-count'};
 		}
 		else {
-			$topology->{'string'} = cp_cpu_alpha($counts->{'cpu-cores'});
+			$cpu->{'dies-count'} = $counts->{'dies'};
 		}
 	}
-	$topology->{'string'} ||= '';
-}
-
-sub cp_cpu_alpha {
-	my $cores = $_[0];
-	my $string = '';
-	if ($cores > 4){
-		$string = $cores . '-core';
+	# this is an attempt to fix the amd family 15 bug with reported cores vs actual cores
+	# NOTE: amd A6-4400M APU 2 core reports: cores: 1 siblings: 2
+	# NOTE: AMD A10-5800K APU 4 core reports: cores: 2 siblings: 4
+	if (!$counts->{'cpu-cores'}){
+		if ($cpu->{'cores'} && !$counts->{'cores'} || 
+		 $cpu->{'cores'} >= $counts->{'cores'}){
+			$counts->{'cpu-cores'} = $cpu->{'cores'};
+		}
+		elsif ($counts->{'cores'} > $cpu->{'cores'}){
+			$counts->{'cpu-cores'} = $counts->{'cores'};
+		}
 	}
-	elsif ($cores == 0){
-		$string = main::message('unknown-cpu-topology');
-	}
-	else {
-		my @alpha = qw(single dual triple quad);
-		$string = $alpha[$cores-1] . ' core';
-	}
-	return $string;
-}
-
-# Logic:
-# if > 1 processor && processor id (physical id) == core id then Multi threaded (MT)
-# if siblings > 1 && siblings ==  2 * num_of_cores ($cpu->{'cores'}) then Multi threaded (MT)
-# if > 1 processor && processor id (physical id) != core id then Multi-Core Processors (MCP)
-# if > 1 processor && processor ids (physical id) > 1 then Symmetric Multi Processing (SMP)
-# if = 1 processor then single core/processor Uni-Processor (UP)
-sub cp_cpu_type {
-	eval $start if $b_log;
-	my ($counts,$cpu,$tests) = @_;
-	my $cpu_type = '';
-	if ($counts->{'processors'} > 1 || 
-	 (defined $tests->{'intel'} && $tests->{'intel'} && $cpu->{'siblings'} > 0)){
-		# cpu_sys detected MT
-		if ($counts->{'struct-mt'}){
-			if ($counts->{'struct-mt'} && $counts->{'struct-st'}){
-				$cpu_type .= 'MST'; 
+	# print "cpu-c:$counts->{'cpu-cores'}\n";
+	# $counts->{'cpu-cores'} = $cpu->{'cores'}; 
+	# like, intel core duo
+	# NOTE: sadly, not all core intel are HT/MT, oh well...
+	# xeon may show wrong core / physical id count, if it does, fix it. A xeon
+	# may show a repeated core id : 0 which gives a fake num_of_cores=1
+	if ($tests->{'intel'}){
+		if ($cpu->{'siblings'} && $cpu->{'siblings'} > 1 && 
+		 $cpu->{'cores'} && $cpu->{'cores'} > 1){
+			if ($cpu->{'siblings'}/$cpu->{'cores'} == 1){
+				$tests->{'intel'} = 0;
+				$tests->{'ht'} = 0;
 			}
 			else {
-				$cpu_type .= 'MT'; 
+				$counts->{'cpu-cores'} = ($cpu->{'siblings'}/2); 
+				$tests->{'ht'} = 1;
 			}
 		}
-		# handle case of OpenBSD that has hw.smt but no other meaningful topology
-		elsif ($cpu->{'smt'}){
-			$cpu_type .= 'MT' if $cpu->{'smt'} eq 'enabled'; 
-		}
-		# non-multicore MT, with 2 or more threads per core
-		elsif ($counts->{'processors'} && $counts->{'physical'} && 
-		 $counts->{'cpu-cores'} && 
-		 $counts->{'processors'}/($counts->{'physical'} * $counts->{'cpu-cores'}) >= 2){
-			# print "mt:1\n";
-			$cpu_type .= 'MT'; 
-		}
-		# 2 or more siblings per cpu real core
-		elsif ($cpu->{'siblings'} > 1 && $cpu->{'siblings'}/$counts->{'cpu-cores'} >= 2){
-			# print "mt:3\n";
-			$cpu_type .= 'MT'; 
-		}
-		# non-MT multi-core or MT multi-core
-		if ($counts->{'cpu-cores'} > 1){
-			if ($counts->{'struct-mt'} && $counts->{'struct-st'}){
-				$cpu_type .= ' AMCP';
-			}
-			else {
-				$cpu_type .= ' MCP';
-			}
-		}
-		# only solidly known > 1 die cpus will use this
-		if ($cpu->{'dies'} > 1){
-			$cpu_type .= ' MCM'; 
-		}
-		# >1 cpu sockets active: Symetric Multi Processing
-		if ($counts->{'physical'} > 1){
-			if ($counts->{'struct-cores'} || $counts->{'struct-max'} || 
-			 $counts->{'struct-min'}){
-				$cpu_type .= ' AMP'; 
-			}
-			else {
-				$cpu_type .= ' SMP'; 
-			}
-		}
-		$cpu_type =~ s/^\s+//;
 	}
-	else {
-		$cpu_type = 'UP';
+	# ryzen is made out of blocks of 2, 4, or 8 core dies...
+	if ($tests->{'ryzen'}){
+		$counts->{'cpu-cores'} = $cpu->{'cores'}; 
+		 # note: posix ceil isn't present in Perl for some reason, deprecated?
+		my $working = $counts->{'cpu-cores'} / 8;
+		my @temp = split('\.', $working);
+		$cpu->{'dies-count'} = ($temp[1] && $temp[1] > 0) ? $temp[0]++ : $temp[0];
+		$counts->{'dies'} = $cpu->{'dies-count'};
+	}
+	# these always have 4 dies
+	elsif ($tests->{'epyc'}){
+		$counts->{'cpu-cores'} = $cpu->{'cores'}; 
+		$counts->{'dies'} = $cpu->{'dies-count'} = 4;
+	}
+	# final check, override the num of cores value if it clearly is wrong
+	# and use the raw core count and synthesize the total instead of real count
+	if ($counts->{'cpu-cores'} == 0 && 
+	 $cpu->{'cores'} * $counts->{'physical'} > 1){
+		$counts->{'cpu-cores'} = ($cpu->{'cores'} * $counts->{'physical'});
+	}
+	# last check, seeing some intel cpus and vms with intel cpus that do not show any
+	# core id data at all, or siblings.
+	if ($counts->{'cpu-cores'} == 0 && $counts->{'processors'} > 0){
+		$counts->{'cpu-cores'} = $counts->{'processors'};
+	}
+	# this happens with BSDs which have very little cpu data available
+	if ($counts->{'processors'} == 0 && $counts->{'cpu-cores'} > 0){
+		$counts->{'processors'} = $counts->{'cpu-cores'};
+		if ($bsd_type && ($tests->{'ht'} || $tests->{'amd-zen'}) && 
+		 $counts->{'cpu-cores'} > 2){
+			$counts->{'cpu-cores'} = $counts->{'cpu-cores'}/2;;
+		}
+		my $count = $counts->{'processors'};
+		$count-- if $count > 0;
+		$cpu->{'processors'}[$count] = 0;
+		# no way to get per processor speeds yet, so assign 0 to each
+		# must be a numeric value. Could use raw speed from core 0, but 
+		# that would just be a hack.
+		foreach (0 .. $count){
+			$cpu->{'processors'}[$_] = 0;
+		}
+	}
+	# so far only OpenBSD has a way to detect MT cpus, but Openbsd has disabled MT
+	if ($bsd_type){
+		if ($cpu->{'siblings'} && 
+		 $counts->{'cpu-cores'} && $counts->{'cpu-cores'} > 1){
+			$counts->{'cores-multiplier'} = $counts->{'cpu-cores'};
+		}
+		# if no siblings we couldn't get MT status of cpu so can't trust cache
+		else {
+			$$cache_check = main::message('note-check');
+		}
+	}
+	# only elbrus shows L1 / L3 cache data in cpuinfo, cpu_sys data should show 
+	# for newer full linux.
+	elsif ($counts->{'cpu-cores'} &&
+	 ($tests->{'elbrus'} || $counts->{'cpu-cores'} > 1)) {
+		$counts->{'cores-multiplier'} = $counts->{'cpu-cores'};
+	}
+	# last test to catch some corner cases 
+	# seen a case where a xeon vm in a dual xeon system actually had 2 cores, no MT
+	# so it reported 4 siblings, 2 cores, but actually only had 1 core per virtual cpu
+	# print "prc: $counts->{'processors'} phc: $counts->{'physical'} coc: $counts->{'cores'} cpc: $counts->{'cpu-cores'}\n";
+	# this test was for arm but I think it applies to all risc, but risc will be sys
+	if (!%risc && 
+	 $counts->{'processors'} == $counts->{'physical'} * $counts->{'cores'} && 
+	 $counts->{'cpu-cores'} > $counts->{'cores'}){
+		$tests->{'ht'} = 0;
+		# $tests->{'xeon'} = 0;
+		$tests->{'intel'} = 0;
+		$counts->{'cpu-cores'} = 1;
+		$counts->{'cores'} = 1;
+		$cpu->{'siblings'} = 1;
 	}
 	eval $end if $b_log;
-	return $cpu_type;
 }
 
 # Legacy: this data should be comfing from the /sys tool now.
@@ -12355,148 +12790,15 @@ sub cp_elbrus_data {
 	eval $end if $b_log;
 	return $return;
 }
+## END LEGACY CPU DATA ENGINE ##
 
-sub cp_speed_data {
-	eval $start if $b_log;
-	my ($cpu,$cpu_sys) = @_;
-	my $info = {};
-	if (defined $cpu_sys->{'data'}){
-		if (defined $cpu_sys->{'data'}{'speeds'}{'min-freq'}){
-			$cpu->{'min-freq'} = $cpu_sys->{'data'}{'speeds'}{'min-freq'};
-		}
-		if (defined $cpu_sys->{'data'}{'speeds'}{'max-freq'}){
-			$cpu->{'max-freq'} = $cpu_sys->{'data'}{'speeds'}{'max-freq'};
-		}
-		if (defined $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'}){
-			$cpu->{'scaling-min-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-min-freq'};
-		}
-		if (defined $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'}){
-			$cpu->{'scaling-max-freq'} = $cpu_sys->{'data'}{'speeds'}{'scaling-max-freq'};
-		}
-		# we don't need to see these if they are the same
-		if ($cpu->{'min-freq'} && $cpu->{'max-freq'} && 
-		 $cpu->{'scaling-min-freq'} && $cpu->{'scaling-max-freq'} && 
-		 $cpu->{'min-freq'} eq $cpu->{'scaling-min-freq'} &&
-		 $cpu->{'max-freq'} eq $cpu->{'scaling-max-freq'}){
-			undef $cpu->{'scaling-min-freq'};
-			undef $cpu->{'scaling-max-freq'};
-		}
-		if (defined $cpu_sys->{'data'}{'speeds'}{'all'}){
-			# only replace if we got actual speed values from cpufreq, or if no legacy
-			# sourced processors data. Handles fake syz core speeds for counts.
-			if ((grep {$_} @{$cpu_sys->{'data'}{'speeds'}{'all'}}) ||
-			 !@{$cpu->{'processors'}}){
-				$cpu->{'processors'} = $cpu_sys->{'data'}{'speeds'}{'all'};
-			}
-		}
-		if (defined $cpu_sys->{'data'}{'cpufreq-boost'}){
-			$cpu->{'boost'} = $cpu_sys->{'data'}{'cpufreq-boost'};
-		}
-	}
-	if (defined $cpu->{'processors'}){
-		if (scalar @{$cpu->{'processors'}} > 1){
-			my ($agg,$high) = (0,0);
-			for (@{$cpu->{'processors'}}){
-				next if !$_; # bsds might have 0 or undef value, that's junk
-				$agg += $_;
-				$high = $_ if $_ > $high;
-			}
-			if ($agg){
-				$cpu->{'avg-freq'} = int($agg/scalar @{$cpu->{'processors'}});
-				$cpu->{'cur-freq'} = $high;
-				$info->{'avg-speed-key'} = 'avg';
-				$info->{'speed'} = $cpu->{'avg-freq'};
-				if ($high > $cpu->{'avg-freq'}){
-					$cpu->{'high-freq'} = $high;
-					$info->{'high-speed-key'} = 'high';
-				}
-			}
-		}
-		elsif ($cpu->{'processors'}[0]) {
-			$cpu->{'cur-freq'} = $cpu->{'processors'}[0];
-			$info->{'speed'} = $cpu->{'cur-freq'};
-		}
-	}
-	# BSDs generally will have processors count, but not per core speeds
-	if ($cpu->{'cur-freq'} && !$info->{'speed'}){
-		$info->{'speed'} = $cpu->{'cur-freq'};
-	}
-	if ($cpu->{'min-freq'} || $cpu->{'max-freq'}){
-		($info->{'min-max'},$info->{'min-max-key'}) = cp_speed_min_max(
-		$cpu->{'min-freq'},
-		$cpu->{'max-freq'});
-	}
-	if ($cpu->{'scaling-min-freq'} || $cpu->{'scaling-max-freq'}){
-		($info->{'scaling-min-max'},$info->{'scaling-min-max-key'}) = cp_speed_min_max(
-		$cpu->{'scaling-min-freq'},
-		$cpu->{'scaling-max-freq'},
-		'sc');
-	}
- 	if ($cpu->{'cur-freq'}){
-		if ($show{'short'}){
-			$info->{'speed-key'} = 'speed';
-		}
-		elsif ($show{'cpu-basic'}){
-			$info->{'speed-key'} = 'speed (MHz)';
-		}
-		else {
-			$info->{'speed-key'} = 'Speed (MHz)';
-		}
- 	}
- 	eval $end if $b_log;
- 	return $info;
-}
-
-sub cp_speed_min_max {
-	my ($min,$max,$type) = @_;
-	my ($min_max,$key);
-	if ($min && $max){
-		$min_max = "$min/$max";
-		$key = "min/max";
- 	}
- 	elsif ($max){
-		$min_max = $max;
-		$key = "max";
- 	}
- 	elsif ($min){
-		$min_max = $min;
-		$key = "min";
- 	}
- 	$key = $type . '-' . $key if $type && $key;
- 	return ($min_max,$key);
-}
-
-# args: 0: cpu, by ref; 1: update $tests by reference
-sub cp_test_types {
-	my ($cpu,$tests) = @_;
-	if ($cpu->{'type'} eq 'intel'){
-		$$tests{'intel'} = 1;
-		$$tests{'xeon'} = 1 if $cpu->{'model_name'} =~ /Xeon/i;
-	}
-	elsif ($cpu->{'type'} eq 'amd'){
-		if ($cpu->{'family'} && $cpu->{'family'} eq '17'){
-			$$tests{'amd-zen'} = 1;
-			if ($cpu->{'model_name'}){
-				if ($cpu->{'model_name'} =~ /Ryzen/i){ 
-					$$tests{'ryzen'} = 1;
-				}
-				elsif ($cpu->{'model_name'} =~ /EPYC/i){
-					$$tests{'epyc'} = 1;
-				}
-			}
-		}
-	}
-	elsif ($cpu->{'type'} eq 'elbrus'){
-		$$tests{'elbrus'} = 1;
-	}
-}
-
-## CPU UTILITIES ##
-# only elbrus ID is actually used live
+## CPU SHARED UTILITIES ##
+# args: 0: vendor_id,like GenuineIntel, AuthenticAMD
 sub cpu_vendor {
 	eval $start if $b_log;
-	my ($string) = @_;
-	my ($vendor) = ('');
+	return '' if !defined $_[0];
+	my $string = $_[0];
+	my $vendor = '';
 	$string = lc($string);
 	if ($string =~ /intel/){
 		$vendor = "intel";
@@ -12523,7 +12825,6 @@ sub set_cpu_data {
 	'bogomips' => 0,
 	'cores' => 0,
 	'cur-freq' => 0, # MHz
-	'dies' => 0,
 	'family' => '',
 	'flags' => '',
 	'ids' => [],
@@ -12569,6 +12870,7 @@ sub system_cpu_name {
 	eval $end if $b_log;
 	return $cpus;
 }
+## END CPU SHARED UTILITIES ##
 
 ## CLEANERS/OUTPUT HANDLERS ##
 # MHZ - cell cpus
@@ -12609,9 +12911,11 @@ sub hex_and_decimal {
 	}
 	return $data;
 }
+## END CLEANERS/OUTPUT HANDLERS
 }
+## END CpuItem ##
 
-## DriveItem
+## DriveItem ##
 {
 package DriveItem;
 my ($b_hddtemp,$b_nvme,$smartctl_missing,$vendors);
@@ -13915,14 +14219,14 @@ sub set_disk_vendors {
 	['(\bINTEL\b|^(SSD(PAM|SA2)|HBR|(MEM|SSD)PEB?K|SSD(MCE|S[AC])))','\bINTEL\b','Intel',''], 
 	['^(Intel[\s_-]?)?SRCSAS?','^Intel','Intel RAID',''], 
 	# note: S[AV][1-9]\d can trigger false positives
-	['(K(ING)?STON|^(OM8P|RBU|S[AV][1234]00|S[HMN]S|SK[CY]|SQ5|SS200|SVP|SS0|SUV|SNV|T52|T[AB]29|Ultimate CF)|V100|DataTraveler|DT\s?(DUO|Microduo|101)|HyperX|13fe\b)','(KINGSTON|13fe)','Kingston',''], # maybe SHS: SHSS37A SKC SUV
+	['(K(ING)?STON|^(A400|ASTC|OM8P|RBU|S100\d\d|S[AV][1234]00|S[HMN]S|SK[CY]|SQ5|SS200|SVP|SS0|SUV|SNV|T52|T[ABY]29|Y29\d|Ultimate CF)|V100|DataTraveler|DT\s?(DUO|Microduo|101)|HyperX|13fe\b)','(KINGSTON|13fe)','Kingston',''], # maybe SHS: SHSS37A SKC SUV
 	# must come before samsung MU. NOTE: toshiba can have: TOSHIBA_MK6475GSX: mush: MKNSSDCR120GB_
 	['(^MKN|Mushkin)','Mushkin','Mushkin',''], # MKNS
 	# MU = Multiple_Flash_Reader too risky: |M[UZ][^L] HD103SI HD start risky
 	# HM320II HM320II HM
-	['(SAMSUNG|^(AWMB|[BC]DS20|[BC]WB|BJ[NT]|[BC]GND|CJ[NT]|CKT|CUT|[DG]3 Station|DUO\b|DUT|EB\dMW|E[CS]\d[A-Z]\d|FD\d[A-Z]\dGE4S5|[GS]2 Portable|GN|HD\d{3}[A-Z]{2}$|(HM|SP)\d{2}|HS\d|M[AB]G\d[FG]|MCC|MCBOE|MCG\d+GC|[CD]JN|MZ|^G[CD][1-9][QS]|P[BM]\d|(SSD\s?)?SM\s?841)|^SSD\s?[89]\d{2}\s(DCT|PRO|QVD|\d+[GT]B)|\bEVO\b|SV\d|[BE][A-Z][1-9]QT|YP\b|[CH]N-M|MMC[QR]E)','SAMSUNG','Samsung',''], # maybe ^SM, ^HM
+	['(SAMSUNG|^(AGN[BD]|AWMB|[BC]DS20|[BCD]WB|BJ[NT]|[BC]GND|CJ[NT]|CKT|CUT|[DG]3 Station|DUO\b|DUT|EB\dMW|E[CS]\d[A-Z]\d|ED2|EE4|FD\d[A-Z]\d|[GS]2 Portable|GE4|GN|HD\d{3}[A-Z]{2}$|(HM|SP)\d{2}|HS\d|KLUD|M[AB]G\d[FG]|MCC|MCBOE|MCG\d+GC|[CD]JN|MZ|^G[CD][1-9][QS]|P[BM]\d|(SSD\s?)?SM\s?841)|^SSD\s?[89]\d{2}\s(DCT|PRO|QVD|\d+[GT]B)|\bEVO\b|SV\d|[BE][A-Z][1-9]QT|YP\b|[CH]N-M|MMC[QR]E)','SAMSUNG','Samsung',''], # maybe ^SM, ^HM
 	# Android UMS Composite?U1
-	['(SanDisk|0781|^(A[BCD]LC[DE]|AFGCE|D[AB]4|DX[1-9]|Extreme|Firebird|S[CD]\d{2}G|SC\d{3,4}|SD(CF|S[S]?[ADQ]|SL\d+G|SU\d|U\d|\sUltra)|SDW[1-9]|SE\d{2}|SEM\d{2}|\d[STU]|U(3\b|1\d0))|Clip Sport|Cruzer|iXpand|SN(\d+G|128|256)|SSD (Plus|U1[01]0) [1-9]|ULTRA\s(FIT|trek|II)|^X[1-6]\d{2})','(SanDisk|0781)','SanDisk',''],
+	['(SanDisk|0781|^(A[BCD]LC[DE]|AFGCE|D[AB]4|DX[1-9]|Extreme|EZSD|Firebird|S[CD]\d{2}G|SB\d+G|SC\d{3,4}|SD(CF|S[S]?[ADQ]|SL\d+G|SU\d|U\d|\sUltra)|SDW[1-9]|SE\d{2}|SEM\d{2}|\d[STU]|U(3\b|1\d0))|Clip Sport|Cruzer|iXpand|SN(\d+G|128|256)|SSD (Plus|U1[01]0) [1-9]|SU(02|04|08|16|32|64)G|ULTRA\s(FIT|trek|II)|^X[1-6]\d{2})','(SanDisk|0781)','SanDisk',''],
 	# these are HP/Sandisk cobranded. DX110064A5xnNMRI ids as HP and Sandisc
 	['(^DX[1-9])','^(HP\b|SANDDISK)','Sandisk/HP',''], # ssd drive, must come before seagate ST test
 	# real, SSEAGATE Backup+; XP1600HE30002 | 024 HN (spinpoint) ; possible usb: 24AS
@@ -13951,7 +14255,7 @@ sub set_disk_vendors {
 	['^((ATA\s)?Hitachi|HCS|HD[PST]|DK\d|IC|(HDD\s)?HT|HU|HMS|HDE|0G\d|IHAT)','Hitachi','Hitachi',''], 
 	# vb: VB0250EAVER but clashes with vbox; HP_SSD_S700_120G ;GB0500EAFYL GB starter too generic?
 	['^(HP\b|c350|DF\d|EG0\d{3}|EX9\d\d|G[BJ]\d|F[BK]|0-9]|HC[CPY]\d|MM\d{4}|[MV]B[0-6]|PSS|VO0|VK0|v\d{3}[bgorw]$|x\d{3}[w]$|XR\d{4})','^HP','HP',''], 
-	['^(Lexar|LSD|JumpDrive|JD\s?Firefly|LX\d|WorkFlow)','^Lexar','Lexar',''], # mmc-LEXAR_0xb016546c; JD Firefly;
+	['^(Lexar|LSD|JumpDrive|JD\s?Firefly|LX\d|NCard|ND\d+GB|WorkFlow)','^Lexar','Lexar',''], # mmc-LEXAR_0xb016546c; JD Firefly;
 	# these must come before maxtor because STM
 	['^STmagic','^STmagic','STmagic',''],
 	['^(STMicro|SMI|CBA)','^(STMicroelectronics|SMI)','SMI (STMicroelectronics)',''],
@@ -13973,6 +14277,7 @@ sub set_disk_vendors {
 	['^2[\s-]?Power','^2[\s-]?Power','2-Power',''], 
 	['^(3ware|9650SE)','^3ware','3ware (controller)',''], 
 	['^5ACE','^5ACE','5ACE',''], # could be seagate: ST316021 5ACE
+	['^51RISC','^51RISC','51risc',''],
 	['^(Aar(vex)?|AX\d{2})','^AARVEX','AARVEX',''],
 	['^(AbonMax|ASU\d)','^AbonMax','AbonMax',''],
 	['^Acasis','^Acasis','Acasis (hub)',''],
@@ -13990,6 +14295,7 @@ sub set_disk_vendors {
 	['^Aigo','^Aigo','Aigo',''],
 	['^AirDisk','^AirDisk','AirDisk',''],
 	['^Aireye','^Aireye','Aireye',''],
+	['^AiteFeir','^AiteFeir','AiteFeir',''],
 	['^Alcatel','^Alcatel','Alcatel',''],
 	['^(Alcor(\s?Micro)?|058F)','^(Alcor(\s?Micro)?|058F)','Alcor Micro',''],
 	['^Alfawise','^Alfawise','Alfawise',''],
@@ -13997,8 +14303,10 @@ sub set_disk_vendors {
 	['^ANACOMDA','^ANACOMDA','ANACOMDA',''],
 	['^Android','^Android','Android',''],
 	['^ANK','^Anker','Anker',''],
-	['^Ant[\s_-]?Esports','^Ant[\s_-]?Esports','Ant Esports',''],
+	['^(Ant[\s_-]?Esports|\d+\sNEO)','^Ant[\s_-]?Esports','Ant Esports',''],
 	['^Anucell','^Anucell','Anucell',''],
+	['^Aoluska','^Aoluska','Aoluska',''],
+	['^(Aotec|AOK)','^Aotec','Aotec',''],
 	['^Apotop','^Apotop','Apotop',''],
 	# must come before AP|Apacer
 	['^(APPLE|iPod|SSD\sSM\d+[CEGT])','^APPLE','Apple',''],
@@ -14006,6 +14314,7 @@ sub set_disk_vendors {
 	['^(Apricom|SATAWire)','^Apricom','Apricom',''],
 	['^(A-?RAM|ARSSD)','^A-?RAM','A-RAM',''],
 	['^Arch','^Arch(\s*Memory)?','Arch Memory',''],
+	['(Ardor|\bAlly\b|\bAL\d\d)','Ardor(\sGaming)?','Ardor Gaming',''],
 	['^(Asenno|AS[1-9])','^Asenno','Asenno',''],
 	['^Asgard','^Asgard','Asgard',''],
 	['^ASint','^ASint','ASint',''],
@@ -14027,6 +14336,8 @@ sub set_disk_vendors {
 	['^BIWIN','^BIWIN','BIWIN',''],
 	['^Blackpcs','^Blackpcs','Blackpcs',''],
 	['^(BlitzWolf|BW-?PSSD)','^BlitzWolf','BlitzWolf',''],
+	['^(BlueCase|BS2N\d)','^BlueCase[\s-]?(Horizon)?','BlueCase Horizon',''],
+	['^(Blue[\s-]?Feather|BF\d)','^Blue[\s-]?Feather','Blue Feather',''],
 	['^(BlueRay|SDM\d)','^BlueRay','BlueRay',''],
 	['^Bory','^Bory','Bory',''],
 	['^Braveeagle','^Braveeagle','BraveEagle',''],
@@ -14041,7 +14352,9 @@ sub set_disk_vendors {
 	['^CHIPAL','^CHIPAL','CHIPAL',''],
 	['^(Chipsbank|CHIPSBNK)','^Chipsbank','Chipsbank',''],
 	['^(Chipfancie)','^Chipfancier','Chipfancier',''],
+	['\bCKS','\bCKS','CKS',''],
 	['^Clover','^Clover','Clover',''],
+	['^Codeo','^Codeo','Codeo',''],
 	['^CODi','^CODi','CODi',''],
 	['^Colorful\b','^Colorful','Colorful',''],
 	['^CONSISTENT','^CONSISTENT','Consistent',''],
@@ -14067,8 +14380,9 @@ sub set_disk_vendors {
 	['^DGM','^DGM\b','DGM',''],
 	['^(DICOM|MAESTRO)','^DICOM','DICOM',''],
 	['^Digifast','^Digifast','Digifast',''],
+	['^(DIGIRICH|DGSSD)','^DIGIRICH','DIGIRICH',''],
 	['^DIGITAL\s?FILM','DIGITAL\s?FILM','Digital Film',''],
-	['^(Digma|Run(\sY2)?\b)','^Digma','Digma',''],
+	['(Digma|\bRun\s)','\bDigma','Digma',''],
 	['^Dikom','^Dikom','Dikom',''],
 	['^DINGGE','^DINGGE','DINGGE',''],
 	['^Disain','^Disain','Disain',''],
@@ -14079,12 +14393,13 @@ sub set_disk_vendors {
 	['^(Dogfish|M\.2 2242|Shark)','^Dogfish(\s*Technology)?','Dogfish Technology',''],
 	['^DragonDiamond','^DragonDiamond','DragonDiamond',''],
 	['^(DREVO\b|X1\s\d+[GT])','^DREVO','Drevo',''],
+	['^Drobo','^Drobo','Drobo',''],
 	['^DSS','^DSS DAHUA','DSS DAHUA',''],
 	['^(Duex|DX\b)','^Duex','Duex',''], # DX\d may be starter for sandisk string
 	['^(Dynabook|AE[1-3]00)','^Dynabook','Dynabook',''],
 	# DX1100 is probably sandisk, but could be HP, or it could be hp branded sandisk
 	['^(Eaget|V8$)','^Eaget','Eaget',''],
-	['^(Easy[\s-]?Memory)','^Easy[\s-]?Memory','Easy Memory',''],
+	['^(Easy[\s-]?Memory|EYM\d)','^Easy[\s-]?Memory','Easy Memory',''],
 	['^EDGE','^EDGE','EDGE Tech',''],
 	['^(EDILOCA|ES\d+\b)','^EDILOCA','Ediloca',''],
 	['^Elecom','^Elecom','Elecom',''],
@@ -14099,8 +14414,10 @@ sub set_disk_vendors {
 	['^(Shenzhen\s)?Etopso(\sTechnology)?','^(Shenzhen\s)?Etopso(\sTechnology)?','Etopso',''],
 	['^EURS','^EURS','EURS',''],
 	['^eVAULT','^eVAULT','eVAULT',''],
-	['^EVM','^EVM','EVM',''],
+	['\bEVM','\bEVM','EVM',''],
 	['^eVtran','^eVtran','eVtran',''],
+	['\bExbom','^\bExbom','Exbom',''],
+	['^(ExeGate|EX\d\d)','^ExeGate','ExeGate',''],
 	# NOTE: ESA3... may be IBM PCIe SAD card/drives
 	['^(EXCELSTOR|r technology)','^EXCELSTOR( TECHNO(LOGY)?)?','ExcelStor',''],
 	['^EXRAM','^EXRAM','EXRAM',''],
@@ -14115,15 +14432,18 @@ sub set_disk_vendors {
 	['^FiiO','^FiiO','FiiO',''],
 	['^FixMeStick','^FixMeStick','FixMeStick',''],
 	['^(FIKWOT|FS\d{3})','^FIKWOT','Kikwot',''],
+	['^FNK[\s-]?TECH','^FNK[\s-]?TECH','FNK Tech',''],
 	['^Fordisk','^Fordisk','Fordisk',''],
 	# FK0032CAAZP/FB160C4081 FK or FV can be HP but can be other things
 	['^(FORESEE|B[123]0)|P900F|S900M','^FORESEE','Foresee',''],
 	['^Founder','^Founder','Founder',''],
+	['^(FOXIN|FX\d\d)','^FOXIN','FOXIN',''],
 	['^(FOXLINE|FLD)','^FOXLINE','Foxline',''], # russian vendor?
 	['^(Gateway|W800S)','^Gateway','Gateway',''],
 	['^Freecom','^Freecom(\sFreecom)?','Freecom',''],
 	['^(FronTech)','^FronTech','Frontech',''],
 	['^(Fuhler|FL-D\d{3})','^Fuhler','Fuhler',''],
+	['^(FuturePath|FPT)','^FuturePath([\s-]?Technologies)?','FuturePath',''],
 	['^Gaiver','^Gaiver','Gaiver',''],
 	['^(GALAX\b|Gamer\s?L|TA\dD|Gamer[\s-]?V)','^GALAX','GALAX',''],
 	['^Galaxy\b','^Galaxy','Galaxy',''],
@@ -14131,14 +14451,17 @@ sub set_disk_vendors {
 	['^(Garmin|Fenix|Nuvi|Zumo)','^Garmin','Garmin',''],
 	['^Geil','^Geil','Geil',''],
 	['^GelL','^GelL','GelL',''], # typo for Geil? GelL ZENITH R3 120GB
-	['^(Generic|A3A|G1J3|M0S00|SCA\d{2}|SCY|SLD|S0J\d|UY[567])','^Generic','Generic',''],
+	['^(GemiBook|G52)','^GemiBook','GemiBook',''],
+	['^(Generic|58A4|58K7|A3A|G1J3|M0S00|SCA\d{2}|SCY|SLD|S0J\d|UY[567])','^Generic','Generic',''],
 	['^(Genesis(\s?Logic)?|05e3)','(Genesis(\s?Logic)?|05e3)','Genesis Logic',''],
 	['^Geonix','^Geonix','Geonix',''],
+	['^(Gerffins)','^Gerffins','Gerffins',''],
 	['^Getrich','^Getrich','Getrich',''],
 	['^(Gigabyte|GP-G)','^Gigabyte','Gigabyte',''], # SSD
 	['^Gigastone','^Gigastone','Gigastone',''],
 	['^Gigaware','^Gigaware','Gigaware',''],
 	['^GJN','^GJN\b','GJN',''],
+	['^(Global[\s-]?Memory)','Global[\s-]?Memory','Global Memory',''],
 	['^(Gloway|FER\d)','^Gloway','Gloway',''],
 	['^GLOWY','^GLOWY','Glowy',''],
 	['^Goldendisk','^Goldendisk','Goldendisk',''],
@@ -14149,13 +14472,15 @@ sub set_disk_vendors {
 	['^(Goline)','^Goline','Goline',''],
 	# Wilk Elektronik SA, poland
 	['^((Wilk|WE)\s*)?(GOODRAM|GOODDRIVE|IR[\s-]?SSD|IRP|SSDPR|Iridium)','^GOODRAM','GOODRAM',''],
+	['^(Gost)','^Gost','Gost',''],
 	['^(GreatWall|GW\d{3})','^GreatWall','GreatWall',''],
 	['^(GreenHouse|GH\b)','^GreenHouse','GreenHouse',''],
 	['^Gritronix','^Gritronixx?','Gritronix',''],
 	# supertalent also has FM: |FM
 	['^(G[\.]?SKILL)','^G[\.]?SKILL','G.SKILL',''],
 	['^G[\s-]*Tech','^G[\s-]*Tech(nology)?','G-Technology',''],
-	['^(Gudga|GIM\d+|G[NV](R\d|\d{2,4}\b))','^Gudga','Gudga',''],
+	['\b(GTL|XEON)','\bGTL\b','GTL',''],
+	['^(Gudga|GIM\d+|G[NV](R\d|\d{2,4}\b)|GS-?\d\d)','^Gudga','Gudga',''],
 	['^(Hajaan|HS[1-9])','^Haajan','Haajan',''],
 	['^Haizhide','^Haizhide','Haizhide',''],
 	['^(Hama|FlashPen\s?Fancy)','^Hama','Hama',''],
@@ -14164,20 +14489,24 @@ sub set_disk_vendors {
 	['^Hectron','^Hectron','Hectron',''],
 	['^HEMA','^HEMA','HEMA',''],
 	['(HEORIADY|^HX-0)','^HEORIADY','HEORIADY',''],
+	['^(Heovose)','^Heovose','Heovose',''],
 	['^(Hikvision|HKVSN|HS-SSD)','^Hikvision','Hikvision',''],
 	['^Hi[\s-]?Level ','^Hi[\s-]?Level ','Hi-Level',''], # ^HI\b with no Level?
 	['^(Hisense|H8G)','^Hisense','Hisense',''],
+	['^(HJDK|MHD)','^HJDK','HJDK',''],
+	['^(HMZM)','^HMZM','HMZM',''],
 	['^Hoodisk','^Hoodisk','Hoodisk',''],
+	['^(HRUIYL)','^HRUIYL','HRUIYL',''],
 	['^(HUAWEI|HWE)','^HUAWEI','Huawei',''],
 	['^Hypertec','^Hypertec','Hypertec',''],
 	['^HyperX','^HyperX','HyperX',''],
 	['^(HYSSD|HY-)','^HYSSD','HYSSD',''],
 	['^(Hyundai|C2S\d|Sapphire)','^Hyundai','Hyundai',''],
 	['^iMRAM','^iMRAM','iMRA',''], 
-	['^(IBM|DT|ESA[1-9]|ServeRaid)','^IBM','IBM',''], # M5110 too common
+	['^(IBM|DT|ESA[1-9]|GBR|ServeRaid)','^IBM','IBM',''], # M5110 too common
 	['^IEI Tech','^IEI Tech(\.|nology)?( Corp(\.|oration)?)?','IEI Technology',''],
 	['^(IGEL|UD Pocket)','^IGEL','IGEL',''],
-	['^(Imation|Nano\s?Pro|HQT)','^Imation(\sImation)?','Imation',''], # Imation_ImationFlashDrive; TF20 is imation/tdk
+	['^(Imation|Nano\s?Pro|HQT|Ridge)','^Imation(\sImation)?','Imation',''], # Imation_ImationFlashDrive; TF20 is imation/tdk
 	['^(IMC|Kanguru)','^IMC\b','IMC',''],
 	['^(Inateck|FE20)','^Inateck','Inateck',''],
 	['^(Inca\b|Npenterprise)','^Inca','Inca',''],
@@ -14199,6 +14528,7 @@ sub set_disk_vendors {
 	['^(INO-|i\.?norys)','^i\.?norys','i.norys',''], 
 	['^(Integrated[\s-]?Technology|IT\d+)','^Integrated[\s-]?Technology','Integrated Technology',''], 
 	['^(Iomega|ZIP\b|Clik!)','^Iomega','Iomega',''], 
+	['^(IPASON|PD\d\d)','^IPASON','IPASON',''],
 	['^(i[\s_-]?portable\b|ATCS)','^i[\s_-]?portable','i-Portable',''],
 	['^ISOCOM','^ISOCOM','ISOCOM (Shenzhen Longsys Electronics)',''],
 	['^iTE[\s-]*Tech','^iTE[\s-]*Tech(nology)?','iTE Tech',''],
@@ -14208,9 +14538,13 @@ sub set_disk_vendors {
 	['^Jingyi','^Jingyi','Jingyi',''],
 	# NOTE: ITY2 120GB hard to find
 	['^JMicron','^JMicron(\s?Tech(nology)?)?','JMicron Tech',''], #JMicron H/W raid
+	['^Joint','^Joint','Joint',''],
 	['^JSYERA','^JSYERA','Jsyera',''],
 	['^(Jual|RX7)','^Jual','Jual',''], 
 	['^(J\.?ZAO|JZ)','^J\.?ZAO','J.ZAO',''], 
+	['^(KAPBOM|KA-)','KAPBOM','KAPBOM',''],
+	['^(KaBuM!?|KBM)','KaBuM!?','KaBuM!',''],
+	['(Kaizen|KZ\d\d)','Kaizen','Kaizen',''],
 	['^Kazuk','^Kazuk','Kazuk',''],
 	['(\bKDI\b|^OM3P)','\bKDI\b','KDI',''],
 	['^KEEPDATA','^KEEPDATA','KeepData',''],
@@ -14222,21 +14556,23 @@ sub set_disk_vendors {
 	['^Kingchux[\s-]?ing','^Kingchux[\s-]?ing','Kingchuxing',''],
 	['^(KINGCOMP|KCSSD)','^KINGCOMP','KingComp',''],
 	['(KingDian|^NGF|S(280|400))','KingDian','KingDian',''],
-	['^(Kingfast|TYFS)','^Kingfast','Kingfast',''],
+	['^(Kingfast|TYFS|2710)','^Kingfast','Kingfast',''],
 	['^KingMAX','^KingMAX','KingMAX',''],
 	['^Kingrich','^Kingrich','Kingrich',''],
 	['^Kingsand','^Kingsand','Kingsand',''],
 	['KING\s?SHA\s?RE','KING\s?SHA\s?RE','KingShare',''],
-	['^(KingSpec|ACSC|C3000|KS[DQ]|MSH|N[ET]-\d|NX-\d{2,4}|P3$|P4\b|PA[_-]?(18|25)|Q-180|SPK|T-(3260|64|128)|Z(\d\s|F\d))','^KingSpec','KingSpec',''],
+	['^(KingSpec|ACSC|C3000|CHA|KS[DQ]|MSH|N[ET]-\d|NX-\d{2,4}|P3$|P4\b|PA[_-]?(18|25)|Q-180|SPK|T-(3260|64|128)|Z(\d\s|F\d))','^KingSpec','KingSpec',''],
 	['^KingSSD','^KingSSD','KingSSD',''],
 	# kingwin docking, not actual drive
 	['^(EZD|EZ-Dock)','','Kingwin Docking Station',''],
 	['^Kingwin','^Kingwin','Kingwin',''],
 	['^KLLISRE','^KLLISRE','KLLISRE',''],
-	['(KIOXIA|^K[BX]G\d)','KIOXIA','KIOXIA',''], # company name comes after product ID
+	# company name comes after product ID
+	['(KIOXIA|\bCL\d-|^K[BX]G\d|SSSTC|Solid\s?State\s?Storage\s?Tech)','KIOXIA','KIOXIA',''], 
 	['^(KLEVV|NEO\sN|CRAS)','^KLEVV','KLEVV',''],
+	['^(KNUP|KP\b)','^KNUP','KNUP',''],
 	['^(Kodak|Memory\s?Saver)','^Kodak','Kodak',''],
-	['^(KOOTION)','^KOOTION','KOOTION',''],
+	['^(KOOTION|X12)','^KOOTION','KOOTION',''],
 	['^(KUAIKAI|MSAM)','^KUAIKAI','KuaKai',''],
 	['(KUIJIA|DAHUA)','^KUIJIA','KUIJIA',''],
 	['^KUNUP','^KUNUP','KUNUP',''],
@@ -14248,6 +14584,7 @@ sub set_disk_vendors {
 	['^Lapcare','^Lapcare','Lapcare',''],
 	['^(Lazos|L-?ISS)','^Lazos','Lazos',''],
 	['^LDLC','^LDLC','LDLC',''],
+	['^(Leica|MSD\d\d)','^Leica','Leica',''], 
 	# LENSE30512GMSP34MEAT3TA / UMIS RPITJ256PED2MWX
 	['^(LEN|UMIS|Think)','^Lenovo','Lenovo',''],
 	['^RPFT','','Lenovo O.E.M.',''],
@@ -14268,6 +14605,8 @@ sub set_disk_vendors {
 	['^(Mach\s*Xtreme|MXSSD|MXU|MX[\s-])','^Mach\s*Xtreme','Mach Xtreme',''],
 	['^(MacroVIP|MV(\d|GLD))','^MacroVIP','MacroVIP',''], # maybe MV alone
 	['^Mainic','^Mainic','Mainic',''],
+	['^(Mancer|MCR)','^ Mancer[\s-]?Reaper','Mancer Reaper',''],
+	['^MARKVISION','^MARKVISION','MarkVision',''],
 	['^(MARSHAL\b|MAL\d)','^MARSHAL','Marshal',''],
 	['^Maxell','^Maxell','Maxell',''],
 	['^Maximus','^Maximus','Maximus',''],
@@ -14276,19 +14615,23 @@ sub set_disk_vendors {
 	['^Maxone','^Maxone','Maxone',''],
 	['^MARVELL','^MARVELL','Marvell',''],
 	['^Maxsun','^Maxsun','Maxsun',''],
+	['^(McQuest)','^McQuest([\s-]?Digital)?','McQuest Digital',''],
 	['^MDT\b','^MDT','MDT (rebuilt WD/Seagate)',''], # mdt rebuilds wd/seagate hdd
 	# MD1TBLSSHD, careful with this MD starter!!
 	['^MD[1-9]','^Max\s*Digital','MaxDigital',''],
+	['^(Media[\s-]?Dice|MD[\s-])','^Media[\s-]?Dice','MediaDice',''],
 	['^Medion','^Medion','Medion',''],
 	['^(MEDIAMAX|WL\d{2})','^MEDIAMAX','MediaMax',''],
 	['^(Memorex|TravelDrive|TD\s?Classic)','^Memorex','Memorex',''],
 	['^Mengmi','^Mengmi','Mengmi',''],
-	['^MicroFrom','^MicroFrom','MicroFrom',''],
 	['^MGTEC','^MGTEC','MGTEC',''],
+	['^MicroFrom','^MicroFrom','MicroFrom',''],
+	['^(MILLENNIUM[\s-]?TECHNOLOGY|MIL\d\d)','^MILLENNIUM[\s-]?TECHNOLOGY','Millenium Technology',''],
 	# must come before micron
 	['^(Mtron|MSP)','^Mtron','Mtron',''],
 	# note: C300/400 can be either micron or crucial, but C400 is M4 from crucial
-	['(^(Micron|2200[SV]|MT|M5|(\d+|[CM]\d+)\sMTF)|00-MT)','^Micron','Micron',''],# C400-MTFDDAK128MAM
+	# micron can be in middle of model name
+	['(\bMicron|^(2200[SV]|MT|M5|(\d+|[CM]\d+)\sMTF)|00-MT)','\bMicron','Micron',''],# C400-MTFDDAK128MAM
 	['^(Microsoft|S31)','^Microsoft','Microsoft',''],
 	['^MidasForce','^MidasForce','MidasForce',''],
 	['^Milan','^Milan','Milan',''],
@@ -14315,7 +14658,7 @@ sub set_disk_vendors {
 	['^(Myson)','^Myson([\s-]?Century)?([\s-]?Inc\.?)?','Myson Century',''],
 	['^(Natusun|i-flashdisk)','^Natusun','Natusun',''],
 	['^(Neo\s*Forza|NFS\d)','^Neo\s*Forza','Neo Forza',''],
-	['^(Netac|NS\d{3}|OnlyDisk|S535N)','^Netac','Netac',''],
+	['^(Netac|NS\d{3}|OnlyDisk|S535N|SMTC)','^Netac','Netac',''],
 	['^Newsmy','^Newsmy','Newsmy',''],
 	['^NFHK','^NFHK','NFHK',''],
 	# NGFF is a type, like msata, sata
@@ -14326,6 +14669,7 @@ sub set_disk_vendors {
 	['^ODYS','^ODYS','ODYS',''],
 	['^Olympus','^Olympus','Olympus',''],
 	['^Orico','^Orico','Orico',''],
+	['(Origin|Inception|^TLC\d)','^Origin','Origin',''],
 	['^Ortial','^Ortial','Ortial',''],
 	['^OSC','^OSC\b','OSC',''],
 	['^(Ovation)','^Ovation','Ovation',''],
@@ -14335,8 +14679,9 @@ sub set_disk_vendors {
 	['^(Parker|TP00)','^Parker','Parker',''],
 	['^(Pasoul|OASD)','^Pasoul','Pasoul',''],
 	['^(Patriot|PS[8F]|P2\d{2}|PBT|VPN|Viper|Burst|Blast|Blaze|Pyro|Ignite)','^Patriot([-\s]?Memory)?','Patriot',''],#Viper M.2 VPN100
-	['^PERC\b','','Dell PowerEdge RAID Card',''], # ssd 
-	['(PHISON[\s-]?|ESR\d|PSE)','PHISON[\s-]?','Phison',''],# E12-256G-PHISON-SSD-B3-BB1
+	['^PERC\b','','Dell PowerEdge RAID Card',''], # ssd
+	['(\bPhilips)','\bPhilips','Philips',''],
+	['(PHISON[\s-]?|ESR\d|PS[5E]|311CD|\bSSG\d\d)','PHISON[\s-]?','Phison',''],# E12-256G-PHISON-SSD-B3-BB1
 	['^(Pichau[\s-]?Gaming|PG\d{2})','^Pichau[\s-]?Gaming','Pichau Gaming',''],
 	['^Pioneer','Pioneer','Pioneer',''],
 	['^Platinet','Platinet','Platinet',''],
@@ -14349,7 +14694,9 @@ sub set_disk_vendors {
 	# PS3109S9 is the result of an error condition with ssd controller: Phison PS3109
 	['^PUSKILL','^PUSKILL','Puskill',''],
 	['QEMU','^\d*QEMU( QEMU)?','QEMU',''], # 0QUEMU QEMU HARDDISK
+	['^QNIX','^QNIX','QNIX',''],
 	['(^Quantum|Fireball)','^Quantum','Quantum',''],
+	['(^Quanxing)','^Quanxing','Quanxing',''],
 	['(^QOOTEC|QMT)','^QOOTEC','QOOTEC',''],
 	['^(QUMO|Q\dDT)','^QUMO','Qumo',''],
 	['^QOPP','^QOPP','Qopp',''],
@@ -14361,6 +14708,7 @@ sub set_disk_vendors {
 	['^(Ramsta|R[1-9])','^Ramsta','Ramsta',''],
 	['^RCESSD','^RCESSD','RCESSD',''],
 	['^(Realtek|RTL)','^Realtek','Realtek',''],
+	['^(Redragon|\bHaste)','^Redragon','Redragon',''],
 	['^(Reletech)','^Reletech','Reletech',''], # id: P400 but that's too short
 	['^RENICE','^RENICE','Renice',''],
 	['^RevuAhn','^RevuAhn','RevuAhn',''],
@@ -14370,6 +14718,7 @@ sub set_disk_vendors {
 	 #RTDMA008RAV2BWL comes with lenovo but don't know brand
 	['^Runcore','^Runcore','Runcore',''],
 	['^Rundisk','^Rundisk','RunDisk',''],
+	['^(RUNENG)','^RUNENG','RUNENG',''],
 	['^RZX','^RZX\b','RZX',''],
 	['^(S3Plus|S3\s?SSD)','^S3Plus','S3Plus',''],
 	['^(Sabrent|Rocket)','^Sabrent','Sabrent',''],
@@ -14382,6 +14731,8 @@ sub set_disk_vendors {
 	# SATAFIRM is an ssd failure message
 	['^SCUDA','^SCUDA','SCUDA',''],
 	['^(Sea\s?Tech|Transformer)','^Sea\s?Tech','Sea Tech',''],
+	['^(SEIWHALE)','^SEIWHALE','SEIWHALE',''],
+	['^(SIEMENS)','^SIEMENS','Siemens',''],
 	['^SigmaTel','^SigmaTel','SigmaTel',''],
 	# DIAMOND_040_GB
 	['^(SILICON\s?MOTION|SM\d|090c)','^(SILICON\s?MOTION|090c)','Silicon Motion',''],
@@ -14402,6 +14753,7 @@ sub set_disk_vendors {
 	['^Solidata','^Solidata','Solidata',''],
 	['^(SOLIDIGM|SSDPFK)','^SOLIDIGM\b','solidgm',''],
 	['^(Sony|IM9|Microvalut|S[FR]-)','^Sony','Sony',''],
+	# Note: SSC can be prefix for several companies
 	['^SSK\b','^SSK','SSK',''],
 	['^(SSSTC|CL1-)','^SSSTC','SSSTC',''],
 	['^(SST|SG[AN])','^SST\b','SST',''],
@@ -14410,6 +14762,8 @@ sub set_disk_vendors {
 	['\dSUN\d','^SUN(\sMicrosystems)?','Sun Microsystems',''],
 	['^Sundisk','^Sundisk','Sundisk',''],
 	['^SUNEAST','^SUNEAST','SunEast',''],
+	['^Suntrsi','^Suntrsi','Suntrsi',''],
+	['^(Sunwind|SW)','^Sunwind','Sunwind',''],
 	['^SuperMicro','^SuperMicro','SuperMicro',''],
 	['^Supersonic','^Supersonic','Supersonic',''],
 	['^SuperSSpeed','^SuperSSpeed','SuperSSpeed',''],
@@ -14425,7 +14779,7 @@ sub set_disk_vendors {
 	['^TANDBERG','^TANDBERG','Tanberg',''],
 	['^(TC[\s-]*SUNBOW|X3\s\d+[GT])','^TC[\s-]*SUNBOW','TCSunBow',''],
 	['^(TDK|TF[1-9]\d|LoR)','^TDK','TDK',''],
-	['^TEAC','^TEAC','TEAC',''],
+	['(^TEAC|\bUF00)','^TEAC','TEAC',''],
 	['^(TEAM|T[\s-]?Create|CX[12]\b|L\d\s?Lite|T\d{3,}[A-Z]|TM\d|(Dark\s?)?L3\b|T[\s-]?Force)','^TEAM(\s*Group)?','TeamGroup',''],
 	['^(Teclast|CoolFlash)','^Teclast','Teclast',''],
 	['^(tecmiyo)','^tecmiyo','TECMIYO',''],
@@ -14456,6 +14810,7 @@ sub set_disk_vendors {
 	['^USBTech','^USBTech','USBTech',''],
 	['^(UNIC2)','^UNIC2','UNIC2',''],
 	['^(UG|Unigen)','^Unigen','Unigen',''],
+	['^UnionSine','UnionSine','UnionSine',''],
 	['^(UNIREX)','^UNIREX','UNIREX',''],
 	['^(UNITEK)','^UNITEK','UNITEK',''],
 	['^(USBest|UT16)','^USBest','USBest',''],
@@ -14464,6 +14819,7 @@ sub set_disk_vendors {
 	['^(Value\s?Tech|VTP\d)','^Value\s?Tech','ValueTech',''],
 	['^VBOX','','VirtualBox',''],
 	['^(Veno|Scorp)','^Veno','Veno',''],
+	['^(VenomRX|VRX)','^VenomRX','VenomRX',''],
 	['^(Verbatim|STORE\s?\'?N\'?\s?(FLIP|GO)|Vi[1-9]|OTG\s?Tiny)','^Verbatim','Verbatim',''],
 	['^V-?GEN','^V-?GEN','V-Gen',''],
 	['^VICK','VICK','VICK',''],
@@ -14478,10 +14834,12 @@ sub set_disk_vendors {
 	['^Walram','^Walram','WALRAM',''],
 	['^Walton','^Walton','Walton',''],
 	['^(Wearable|Air-?Stash)','^Wearable','Wearable',''],
+	['\b(WiebeTech|eRazer)','WiebeTech','WiebeTech',''],
 	['^Wellcomm','^Wellcomm','Wellcomm',''],
+	['^(WHALEKOM|WK)','^WHALEKOM','Whalekom',''],
 	['^(wicgtyp|[MN][V]?900)','^wicgtyp','wicgtyp',''],
 	['^Wilk','^Wilk','Wilk',''],
-	['^(WinMemory|SWG\d)','^WinMemory','WinMemory',''],
+	['^(WinMemory|SW[GR]\d)','^WinMemory','WinMemory',''],
 	['^(Winton|WT\d{2})','^Winton','Winton',''],
 	['^(WISE)','^WISE','WISE',''],
 	['^WPC','^WPC','WPC',''], # WPC-240GB
@@ -14497,6 +14855,7 @@ sub set_disk_vendors {
 	['^XUNZHE','^XUNZHE','XUNZHE',''],
 	['^(Yangtze|ZhiTai|PC00[5-9]|SC00[1-9])','^Yangtze(\s*Memory)?','Yangtze Memory',''],
 	['^(Yeyian|valk)','^Yeyian','Yeyian',''],
+	['^(YHJC|YHS)','^YHJC','YHJC',''],
 	['^(YingChu|YGC)','^YingChu','YingChu',''],
 	['^YongzhenWeiye','^YongzhenWeiye','YongzhenWeiye',''],
 	['^(YUCUN|R880)','^YUCUN','YUCUN',''],
@@ -14512,6 +14871,7 @@ sub set_disk_vendors {
 	['^(Zotac|ZTSSD)','^Zotac','Zotac',''],
 	['^ZOZT','^ZOZT','ZOZT',''],
 	['^ZSPEED','^ZSPEED','ZSpeed',''],
+	['^Zsuit','^Zsuit','Zsuit',''],
 	['^ZTC','^ZTC','ZTC',''],
 	['^ZTE','^ZTE','ZTE',''],
 	['^(ZY|ZhanYao)','^ZhanYao([\s-]?data)','ZhanYao',''],
@@ -14763,12 +15123,12 @@ sub drive_speed {
 }
 }
 
-## GraphicItem 
+## GraphicItem ##
 {
 package GraphicItem;
-my ($b_primary,$b_wayland_data,%graphics,%mesa_drivers,
+my ($b_primary,$b_wayland_data,%gfx_ids,%graphics,%mesa_drivers,
 $monitor_ids,$monitor_map);
-my ($gpu_amd,$gpu_intel,$gpu_nv);
+my ($gpu_amd,$gpu_intel,$gpu_loongson,$gpu_nv);
 
 sub get {
 	eval $start if $b_log;
@@ -14782,7 +15142,7 @@ sub get {
 	}
 	else {
 		device_output($rows);
-		($gpu_amd,$gpu_intel,$gpu_nv) = ();
+		($gpu_amd,$gpu_intel,$gpu_loongson,$gpu_nv) = ();
 		if (!@$rows){
 			my $key = 'Message';
 			my $message = '';
@@ -14804,7 +15164,8 @@ sub get {
 	# note: not perfect, but we need usb gfx to show for all types, soc, pci, etc
 	usb_output($rows);
 	display_output($rows);
-	display_api($rows);
+	display_api($rows) if !$force{'no-graphics-api'};
+	info_output($rows);
 	(%graphics,$monitor_ids,$monitor_map) = ();
 	eval $end if $b_log;
 	return $rows;
@@ -14834,7 +15195,7 @@ sub device_output {
 		$device = ($device) ? main::clean_pci($device,'output') : 'N/A';
 		# have seen absurdly verbose card descriptions, with non related data etc
 		if (length($device) > 85 || $size{'max-cols'} < 110){
-			$device = main::filter_pci_long($device);
+			main::filter_pci_long(\$device);
 		}
 		push(@$rows, {
 		main::key($num++,1,1,'Device') => $device,
@@ -14843,6 +15204,8 @@ sub device_output {
 			my $item = main::get_pci_vendor($row->[4],$row->[12]);
 			$rows->[$j]{main::key($num++,0,2,'vendor')} = $item if $item;
 		}
+		# used to detect bad gpu generations for APIs
+		push(@{$gfx_ids{$row->[5]}},$row->[6]) if $row->[5] && $row->[6];
 		push(@{$graphics{'gpu-drivers'}},$row->[9]) if $row->[9];
 		my $driver = ($row->[9]) ? $row->[9]:'N/A';
 		$rows->[$j]{main::key($num++,1,2,'driver')} = $driver;
@@ -14856,9 +15219,10 @@ sub device_output {
 			$rows->[$j]{main::key($num++,0,3,'alternate')} = $row->[10] if $row->[10];
 		}
 		if ($extra > 0 && $row->[5] && $row->[6] && 
-		$row->[5] =~ /^(1002|10de|12d2|8086)$/){
+		$row->[5] =~ /^(0014|1002|10de|12d2|8086)$/){
 			# legacy: 1180 0df7 0029 current: 13bc 1c8d 24b1 regex: H100, RTX 4000
 			# ($row->[5],$row->[6],$row->[4]) = ('12de','0029','');
+			# ($row->[5],$row->[6],$row->[4]) = ('0014','7a25',''); # loongson
 			my ($gpu_data,$b_nv) = gpu_data($row->[5],$row->[6],$row->[4]);
 			if (!$bsd_type && $b_nv && $b_admin){
 				if ($gpu_data->{'legacy'}){
@@ -15027,7 +15391,7 @@ sub port_output {
 }
 
 ## DISPLAY OUTPUT ##
-sub display_output(){
+sub display_output {
 	eval $start if $b_log;
 	my $rows = $_[0];
 	my ($num,$j) = (0,scalar @$rows);
@@ -15356,7 +15720,26 @@ sub monitors_output_full {
 				$resolution = $monitors->{$key}{'res-x'} . 'x' . $monitors->{$key}{'res-y'};
 			}
 			$resolution ||= 'N/A';
-			$rows->[$$j]{main::key($$num++,0,$m2,'res')} = $resolution;
+			# if we have scaling-calc we have res-x,y and log-x,y
+			if ($extra > 2 && $monitors->{$key}{'scale-used'}){
+				$rows->[$$j]{main::key($$num++,1,$m2,'res')} = '';
+				$rows->[$$j]{main::key($$num++,0,$m2+1,'mode')} = $resolution;
+				if ($monitors->{$key}{'hz'}){
+					$rows->[$$j]{main::key($$num++,0,$m2+1,'hz')} = $monitors->{$key}{'hz'};
+				}
+				my $scale = $monitors->{$key}{'scale-percent'} . '% (' . $monitors->{$key}{'scale-used'}. ')';
+				$rows->[$$j]{main::key($$num++,1,$m2+1,'scale')} = $scale;
+				if ($monitors->{$key}{'scale-used'} != 1){
+					my $scaled = $monitors->{$key}{'log-x'} . 'x' . $monitors->{$key}{'log-y'};
+					$rows->[$$j]{main::key($$num++,0,$m2+2,'to')} = $scaled;
+				}
+			}
+			else {
+				$rows->[$$j]{main::key($$num++,1,$m2,'res')} = $resolution;
+				if ($monitors->{$key}{'hz'}){
+					$rows->[$$j]{main::key($$num++,0,$m2,'hz')} = $monitors->{$key}{'hz'};
+				}
+			}
 		}
 		else {
 			if ($b_display){
@@ -15367,9 +15750,6 @@ sub monitors_output_full {
 			}
 			$b_no_size = 1;
 			$rows->[$$j]{main::key($$num++,0,$m2,'size-res')} = $resolution;
-		}
-		if ($extra > 2 && $monitors->{$key}{'hz'}){
-			$rows->[$$j]{main::key($$num++,0,$m2,'hz')} = $monitors->{$key}{'hz'};
 		}
 		if ($monitors->{$key}{'dpi'}){
 			$rows->[$$j]{main::key($$num++,0,$m2,'dpi')} = $monitors->{$key}{'dpi'};
@@ -15391,9 +15771,6 @@ sub monitors_output_full {
 			$rows->[$$j]{main::key($$num++,1,$m3,'white')} = '';
 			$rows->[$$j]{main::key($$num++,0,$m4,'x')} = $monitors->{$key}{'colors'}{'white_x'};
 			$rows->[$$j]{main::key($$num++,0,$m4,'y')} = $monitors->{$key}{'colors'}{'white_y'};
-		}
-		if ($extra > 2 && $monitors->{$key}{'scale'}){
-			$rows->[$$j]{main::key($$num++,0,$m2,'scale')} = $monitors->{$key}{'scale'};
 		}
 		if ($extra > 2 && $monitors->{$key}{'size-x'} && $monitors->{$key}{'size-y'}){
 			my $size =  $monitors->{$key}{'size-x'} . 'x' . $monitors->{$key}{'size-y'} .
@@ -15471,11 +15848,19 @@ sub display_api {
 	}
 	my ($b_egl,$b_egl_print,$b_glx,$b_glx_print,$b_vulkan,$api,$program,$type);
 	my $gl = {};
-	if ($fake{'egl'} || ($program = main::check_program('eglinfo'))){
-		gl_data('egl',$program,$rows,$gl);
+	if (!$force{'no-egl'} && 
+	($fake{'egl'} || ($program = main::check_program('eglinfo')))){
+		if (!$fake{'glx'} && !$force{'egl'} && $bits_sys && $bits_sys == 32 && 
+		unsafe_api_device('egl')){
+			$gl->{'egl'}{'unsafe'} = 1;
+		}
+		else {
+			gl_data('egl',$program,$rows,$gl);
+		}
 		$b_egl = 1;
 	}
-	if ($fake{'glx'} || ($program = main::check_program('glxinfo'))){
+	if (!$force{'no-opengl'} && 
+	($fake{'glx'} || ($program = main::check_program('glxinfo')))){
 		gl_data('glx',$program,$rows,$gl) if $b_display;
 		$b_glx = 1;
 	}
@@ -15498,8 +15883,9 @@ sub display_api {
 		$b_glx_print = 1;
 	}
 	# if ($fake{'vulkan'} || ($program = main::check_program('vulkaninfo'))){
-	if (($fake{'vulkan'} || ($program = main::check_program('vulkaninfo'))) &&
-	($show{'graphic-full'} || (!$b_egl_print && !$b_glx_print))){
+	if (!$force{'no-vulkan'} && 
+	(($fake{'vulkan'} || ($program = main::check_program('vulkaninfo'))) &&
+	($show{'graphic-full'} || (!$b_egl_print && !$b_glx_print)))){
 		vulkan_output($program,$rows);
 		$b_vulkan = 1;
 	}
@@ -15507,40 +15893,42 @@ sub display_api {
 		# remember, sudo/root usually has empty $DISPLAY as well
 		if ($b_display){
 			# first do positive tests, won't be set for sudo/root
-			if (!$b_glx && $graphics{'protocol'} eq 'x11'){
+			if (!$force{'no-opengl'} && !$b_glx && $graphics{'protocol'} eq 'x11'){
 				$api = 'OpenGL';
 				$type = 'glx-missing';
 			}
-			elsif (!$b_egl && $graphics{'protocol'} eq 'wayland'){
+			elsif (!$force{'no-egl'} && !$b_egl && $graphics{'protocol'} eq 'wayland'){
 				$api = 'EGL'; # /GBM
 				$type = 'egl-missing';
 			}
-			elsif (!$b_glx && 
+			elsif (!$force{'no-opengl'} && !$b_glx && 
 			(main::check_program('X') || main::check_program('Xorg'))){
 				$api = 'OpenGL';
 				$type = 'glx-missing';
 			}
-			elsif (!$b_egl && main::check_program('Xwayland')){
+			elsif (!$force{'no-egl'} && !$b_egl && main::check_program('Xwayland')){
 				$api = 'EGL';
 				$type = 'egl-missing';
 			}
-			elsif (!$b_egl && !$b_glx && !$b_vulkan) {
+			elsif (!$force{'no-egl'} && !$force{'no-opengl'} && 
+			!$force{'no-vulkan'} && !$b_egl && !$b_glx && !$b_vulkan) {
 				$api = 'N/A';
 				$type = 'gfx-api';
 			}
 		}
 		else {
-			if (!$b_glx && 
+			if (!$force{'no-opengl'} && !$b_glx && 
 			(main::check_program('X') || main::check_program('Xorg'))){
 				$api = 'OpenGL';
 				$type = 'glx-missing-console';
 			}
-			elsif (!$b_egl && main::check_program('Xwayland')){
+			elsif (!$force{'no-egl'} && !$b_egl && main::check_program('Xwayland')){
 				$api = 'EGL';
 				$type = 'egl-missing-console';
 			}
 			# we don't know what it is, headless system, non xwayland wayland
-			elsif (!$b_egl && !$b_glx && !$b_vulkan) {
+			elsif (!$force{'no-egl'} && !$force{'no-opengl'} && 
+			!$force{'no-vulkan'} && !$b_egl && !$b_glx && !$b_vulkan) {
 				$api = 'N/A';
 				$type = 'gfx-api-console';
 			}
@@ -15552,22 +15940,49 @@ sub display_api {
 
 sub no_data_output {
 	eval $start if $b_log;
-	my ($api,$type,$rows) = @_;
+	my ($api,$type,$rows,$extra) = @_;
 	my $num = 0;
 	push(@$rows, {
 	main::key($num++,1,1,'API') => $api,
-	main::key($num++,0,2,'Message') => main::message($type)
+	main::key($num++,0,2,'Message') => main::message($type,$extra)
 	});
+	eval $end if $b_log;
+}
+
+sub unsafe_api_device {
+	eval $start if $b_log;
+	my $api = $_[0];
+	my %test = (
+	'egl' => {
+	'8086' => '1132|3577|7120|7121|7122|7123|7124|7125|7126|7128|712a|7800|' . 
+	'2562|2572|2582|3577|3582|358e',
+	# '1002' => '68f9',
+	},
+	);
+	return if !$test{$api};
+	foreach my $vendor (keys %{$test{$api}}){
+		next if !$gfx_ids{$vendor};
+		foreach my $id (@{$gfx_ids{$vendor}}){
+			return 1 if $id =~ /^($test{$api}->{$vendor})$/;
+		}
+	}
 	eval $end if $b_log;
 }
 
 sub egl_output {
 	eval $start if $b_log;
 	my ($rows,$gl) = @_;
-	if (!$gl->{'egl'}){
+	if (!$gl->{'egl'} || $gl->{'egl'}{'unsafe'}){
 		my $api = 'EGL';
-		my $type = 'egl-null';
-		no_data_output($api,$type,$rows);
+		my ($extra,$type);
+		if (!$gl->{'egl'}){
+			$type = 'egl-null';
+		}
+		else {
+			$type = 'gfx-api-unsafe';
+			$extra = 'egl';
+		}
+		no_data_output($api,$type,$rows,$extra);
 		return 0;
 	}
 	my ($i,$j,$num) = (0,scalar @$rows,0);
@@ -15858,7 +16273,27 @@ sub xvesa_output {
 	eval $end if $b_log;
 }
 
-# API Data #
+## INFO OUTPUT ##
+sub info_output {
+	eval $start if $b_log;
+	my $rows = $_[0];
+	my ($num,$j) = (0,scalar @$rows);
+	my ($list,$space,$tools) = ('','',{});
+	tools_data($tools);
+	$list = main::message('gfx-tools') if !%$tools;
+	$rows->[$j]{main::key($num++,1,1,'Info')} = '';
+	$rows->[$j]{main::key($num++,1,2,'Tools')} = $list;
+	foreach my $key (sort keys %$tools){
+		$space = (scalar @{$tools->{$key}} > 2) ? ' ' : ''; 
+		$list = join(','. $space, @{$tools->{$key}});
+		$rows->[$j]{main::key($num++,0,3,$key)} = $list;
+	}
+	eval $end if $b_log;
+}
+
+## DATA ##################
+
+## API Data ##
 sub gl_data {
 	eval $start if $b_log;
 	my ($source,$program,$rows,$gl) = @_;
@@ -15889,6 +16324,7 @@ sub gl_data {
 			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-intel-atom-dell_studio-bm.txt";
 			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-asus_1025c-atom-bm.txt";
 			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-2011-nvidia-glx1.4.txt";
+			# $file = "$fake_data_dir/graphics/glxinfo/glxinfo-amd-dz-mesa-git.txt";
 			$gl_data= main::reader($file,'','ref');
 		}
 	}
@@ -15905,7 +16341,7 @@ sub gl_data {
 			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-intel-atom-dell_studio-bm.txt";
 			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-asus_1025c-atom-bm.txt";
 			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-x11-amd-raphael-1.txt";
-			 $file = "$fake_data_dir/graphics/egl-es/eglinfo-x11-vm-version-odd.txt";
+			# $file = "$fake_data_dir/graphics/egl-es/eglinfo-x11-vm-version-odd.txt";
 			$gl_data = main::reader($file,'','ref');
 		}
 	}
@@ -16129,15 +16565,18 @@ sub gl_data {
 				if ($working[1]){
 					# first grab the actual gl version
 					# non free drivers like nvidia may only show their driver version info 
+					# $working[1] = '4.5 (Compatibility Profile) Mesa 22.3.6';
 					if ($working[1] =~ /^(\S+)(\s|$)/){
 						push(@{$gl->{'glx'}{'opengl'}{'versions'}}, $1);
 					}
-					# handle legacy format: 1.2 (1.5 Mesa 6.5.1) as well as more current:
+					# handle legacy format: 1.2 (1.5 Mesa 6.5.1) 
+					# as well as more current:
 					# 4.5 (Compatibility Profile) Mesa 22.3.6
 					# Note: legacy: fglrx starting adding compat strings but they don't
 					# change this result:
 					# 4.5 Compatibility Profile Context Mesa 15.3.6
-					if ($working[1] =~ /(Mesa|NVIDIA)\s(\S+?)\)?$/i){
+					# 4.6 (Core Profile) Mesa 24.2.0-devel (git-92f0620dae)
+					if ($working[1] =~ /(Mesa|NVIDIA)\s(\S+?)\)?(\s.*)?$/i){
 						if ($1 && $2 && !$gl->{'glx'}{'opengl'}{'driver'}){
 							$gl->{'glx'}{'opengl'}{'driver'}{'vendor'} = lc($1);
 							$gl->{'glx'}{'opengl'}{'driver'}{'version'} = $2;
@@ -16158,6 +16597,7 @@ sub gl_data {
 		if ($b_opengl){
 			if ($working[0] =~ /^OpenGL (compatibility|core) profile version( string)?$/){
 				$value = lc($1);
+				# $working[1] = '4.6 (Core Profile) Mesa 24.2.0-devel (git-92f0620dae)';
 				# note: no need to apply empty message here since we don't have the data
 				# anyway
 				if ($working[1]){
@@ -16167,7 +16607,9 @@ sub gl_data {
 					}
 					# fglrx started appearing with this extra string, does not appear 
 					# to communicate anything of value
-					if ($working[1] =~ /\s+(Mesa|NVIDIA)\s+(\S+)$/){
+					# 4.6 (Core Profile) Mesa 24.2.0-devel
+					# 4.6 (Core Profile) Mesa 24.2.0-devel (git-92f0620dae)
+					if ($working[1] =~ /\s+(Mesa|NVIDIA)\s+(\S+)(\s.*)?$/){
 						if ($1 && $2 && !$gl->{'glx'}{'opengl'}{$value}{'vendor'}){
 							$gl->{'glx'}{'opengl'}{$value}{'driver'}{'vendor'} = lc($1);
 							$gl->{'glx'}{'opengl'}{$value}{'driver'}{'version'} = $2;
@@ -16373,11 +16815,12 @@ sub vulkan_data {
 	}
 	else {
 		my $file;
-		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-llvm-1.txt";
-		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-nvidia-1.txt";
-		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-1.txt";
-		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-amd-dz.txt";
-		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-mali-3.txt";
+		# $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-llvm-1.txt";
+		# $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-nvidia-1.txt";
+		# $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-intel-1.txt";
+		# $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-amd-dz.txt";
+		# $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-mali-3.txt";
+		 $file = "$fake_data_dir/graphics/vulkan/vulkaninfo-2-gpu-no-DriverProperties-1.3.296.1.txt";
 		$data = main::reader($file,'','ref');
 	}
 	if (!$data){
@@ -16441,7 +16884,8 @@ sub vulkan_data {
 		elsif ($working[0] eq 'VkPhysicalDeviceProperties'){
 			$active{'props'} = 1;
 		}
-		elsif ($working[0] eq 'VkPhysicalDeviceDriverProperties'){
+		# note: VkPhysicalDeviceDriverProperties was dropped after 1.3.255, by 1.3.296
+		elsif ($working[0] eq 'VkPhysicalDeviceVulkan12Properties'){
 			$active{'driver'} = 1;
 		}
 		elsif ($working[0] =~ /^\S+Features/i){
@@ -16536,6 +16980,11 @@ sub vulkan_data {
 					$vulkan->{'devices'}{$id}{'mesa'} = lc($2) if $2;
 					$vulkan->{'devices'}{$id}{'driver-info'} = $3;
 				}
+				# this is a long block, just exit after driver info. If we want the
+				# conforming data in future, move exit down to shading line.
+				elsif ($line =~ /^\s+conformanceVersion/){
+					$active{'driver'} = undef;
+				}
 			}
 		}
 	}
@@ -16545,7 +16994,56 @@ sub vulkan_data {
 	eval $end if $b_log;
 }
 
-## DISPLAY DATA WAYLAND ##
+## DISPLAY DATA ##
+sub display_protocol {
+	eval $start if $b_log;
+	$graphics{'protocol'} = '';
+	if ($ENV{'XDG_SESSION_TYPE'}){
+		$graphics{'protocol'} = $ENV{'XDG_SESSION_TYPE'};
+	}
+	if (!$graphics{'protocol'} && $ENV{'WAYLAND_DISPLAY'}){
+		$graphics{'protocol'} = $ENV{'WAYLAND_DISPLAY'};
+	}
+	# can show as wayland-0
+	if ($graphics{'protocol'} && $graphics{'protocol'} =~ /wayland/i){
+		$graphics{'protocol'} = 'wayland';
+	}
+	# yes, I've seen this in 2019 distros, sigh
+	elsif ($graphics{'protocol'} eq 'tty'){
+		$graphics{'protocol'} = '';
+	}
+	# If no other source, get user session id, then grab session type.
+	# loginctl also results in the session id
+	# undef $graphics{'protocol'};
+	if (!$graphics{'protocol'}){
+		if (my $program = main::check_program('loginctl')){
+			my $id = '';
+			# $id = $ENV{'XDG_SESSION_ID'}; # returns tty session in console
+			my @data = main::grabber("$program --no-pager --no-legend 2>/dev/null",'','strip');
+			foreach (@data){
+				# some systems show empty or ??? for TTY field, but whoami should do ok
+				next if /(ttyv?\d|pts\/)/; # freebsd: ttyv3
+				# in display, root doesn't show in the logins
+				next if $client{'whoami'} && $client{'whoami'} ne 'root' && !/\b$client{'whoami'}\b/;
+				$id = (split(/\s+/, $_))[0];
+				# multiuser? too bad, we'll go for the first one that isn't a tty/pts
+				last; 
+			}
+			if ($id){
+				my $temp = (main::grabber("$program show-session $id -p Type --no-pager --no-legend 2>/dev/null"))[0];
+				$temp =~ s/Type=// if $temp;
+				# ssh will not show /dev/ttyx so would have passed the first test
+				$graphics{'protocol'} = $temp if $temp && $temp ne 'tty';
+			}
+		}
+	}
+	$graphics{'protocol'} = lc($graphics{'protocol'}) if $graphics{'protocol'};
+	eval $end if $b_log;
+}
+
+## DISPLAY DATA: WAYLAND ##
+# NOTE: have added gnome-randr and kscreen-console/kscreen-doctor to debugger
+# but need many samples before using those as data sources if below are absent.
 sub display_data_wayland {
 	eval $start if $b_log;
 	my ($b_skip_pos,$program);
@@ -16554,16 +17052,23 @@ sub display_data_wayland {
 		# return as wayland-0 or 0?
 		$graphics{'display-id'} =~ s/wayland-?//i;
 	}
-	if ($fake{'swaymsg'} || ($program = main::check_program('swaymsg'))){
+	if (!$force{'kscreen'} && !$force{'wl-info'} && !$force{'wlr-randr'} && 
+	($fake{'swaymsg'} || ($program = main::check_program('swaymsg')))){
 		swaymsg_data($program);
 	}
 	# until we get data proving otherwise, assuming these have same output
-	elsif ($fake{'wl-info'} || (($program = main::check_program('wayland-info')) || 
-	($program = main::check_program('weston-info')))){
+	elsif (!$force{'kscreen'} && !$force{'wlr-randr'} && ($fake{'wl-info'} || 
+	(($program = main::check_program('wayland-info')) || 
+	($program = main::check_program('weston-info'))))){
 		wlinfo_data($program);
 	}
-	elsif ($fake{'wlr-randr'} || ($program = main::check_program('wlr-randr'))){
+	elsif (!$force{'kscreen'} && ($fake{'wlr-randr'} ||
+	($program = main::check_program('wlr-randr')))){
 		wlrrandr_data($program);
+	}
+	elsif (($fake{'kscreen'} ||
+	($program = main::check_program('kscreen-console')))){
+		kscreen_data($program);
 	}
 	# make sure we got enough for advanced position data, might be from /sys
 	if ($extra > 1 && $monitor_ids){
@@ -16661,7 +17166,31 @@ sub wayland_data_advanced {
 	eval $end if $b_log;
 }
 
-## WAYLAND COMPOSITOR DATA TOOLS ##
+# WAYLAND TOOLS DATA #
+# Note: not used yet because it's hard to know what is controlling the desktop
+sub kscreen_data {
+	eval $start if $b_log;
+	my ($program) = @_;
+	my ($data,%mon,@temp,$ref);
+	my ($b_iwlo,$b_izxdg,$file,$hz,$id,$pos_x,$pos_y,$res_x,$res_y,$scale);
+	if (!$fake{'kscreen'}){
+		$data = main::grabber("$program outputs 2>/dev/null",'','strip','ref');
+	}
+	else {
+		undef $monitor_ids;
+		$file = "$fake_data_dir/graphics/wayland/kscreen-console-laptop-1-monitor-1.txt";
+		$data = main::reader($file,'strip','ref');
+	}
+	print 'kscreen-console raw: ', Data::Dumper::Dumper $data if $dbg[46]; 
+	main::log_data('dump','@$data', $data) if $b_log;
+	foreach (@$data){
+	
+	}
+	print '%mon: ', Data::Dumper::Dumper \%mon if $dbg[46]; 
+	main::log_data('dump','%mon', \%mon) if $b_log;
+	print 'kscreen-console: monitor_ids: ', Data::Dumper::Dumper $monitor_ids if $dbg[46];
+	eval $end if $b_log;
+}
 # NOTE: These patterns are VERY fragile, and depend on no changes at all to 
 # the data structure, and more important, the order. Something I would put 
 # almost no money on being able to count on.
@@ -16671,26 +17200,34 @@ sub wlinfo_data {
 	my ($data,%mon,@temp,$ref);
 	my ($b_iwlo,$b_izxdg,$file,$hz,$id,$pos_x,$pos_y,$res_x,$res_y,$scale);
 	if (!$fake{'wl-info'}){
-		undef $monitor_ids;
 		$data = main::grabber("$program 2>/dev/null",'','strip','ref');
 	}
 	else {
-		$file = "$fake_data_dir/graphics/wayland/weston-info-2-mon-1.txt";
-		$file = "$fake_data_dir/graphics/wayland/wayland-info-weston-vm-sparky.txt";
+		undef $monitor_ids;
+		# $file = "$fake_data_dir/graphics/wayland/weston-info-2-mon-1.txt";
+		# $file = "$fake_data_dir/graphics/wayland/wayland-info-weston-vm-sparky.txt";
+		$file = "$fake_data_dir/graphics/wayland/wayland-info-3-monitors-1.txt";
+		# $file = "$fake_data_dir/graphics/wayland/wayland-info-1-monitor-laptop-1.txt";
 		$data = main::reader($file,'strip','ref');
 	}
 	print 'wayland/weston-info raw: ', Data::Dumper::Dumper $data if $dbg[46]; 
 	main::log_data('dump','@$data', $data) if $b_log;
 	foreach (@$data){
 		# print 'l: ', $_,"\n";
-		if (/^interface: 'wl_output', version: \d+, name: (\d+)$/){
+		if (/^interface:\s+'wl_output',\s+version:\s+\d+,\s+name:\s+(\d+)$/){
 			$b_iwlo = 1;
+			$b_izxdg = 0;
 			$id = $1;
 		}
 		elsif (/^interface: 'zxdg_output/){
 			$b_izxdg = 1;
 			$b_iwlo = 0;
 		}
+		elsif (/^interface: '(?!(wl_output|zxdg_output))'/){
+			$b_izxdg = 0;
+			$b_iwlo = 0;
+		}
+		next if !$b_izxdg && !$b_iwlo;
 		if ($b_iwlo){
 			if (/^x: (\d+), y: (\d+), scale: ([\d\.]+)/){
 				$mon{$id}->{'pos-x'} = $1;
@@ -16719,6 +17256,7 @@ sub wlinfo_data {
 					$mon{$id}->{'model'} = main::clean_dmi($mon{$id}->{'model'});
 				}
 			}
+			# this is physical px width/height, not scaled, though may be same
 			elsif (/^width: (\d+) px, height: (\d+) px, refresh: ([\d\.]+) Hz,/){
 				$mon{$id}->{'res-x'} = $1;
 				$mon{$id}->{'res-y'} = $2;
@@ -16743,9 +17281,6 @@ sub wlinfo_data {
 				$mon{$id}->{'log-y'} = $2;
 			}
 		}
-		if ($b_izxdg && /^interface: '(?!zxdg_output)/){
-			last;
-		}
 	}
 	# now we need to map %mon back to $monitor_ids
 	if (%mon){
@@ -16754,6 +17289,7 @@ sub wlinfo_data {
 			next if !$mon{$key}->{'monitor'}; # no way to know what it is, sorry
 			$id = $mon{$key}->{'monitor'};
 			$monitor_ids->{$id}{'monitor'} = $id;
+			$monitor_ids->{$id}{'connector-id'} = $key;
  			$monitor_ids->{$id}{'log-x'} = $mon{$key}->{'log-x'} if defined $mon{$key}->{'log-x'};
 			$monitor_ids->{$id}{'log-y'} = $mon{$key}->{'log-y'} if defined $mon{$key}->{'log-y'};
 			$monitor_ids->{$id}{'pos-x'} = $mon{$key}->{'pos-x'} if defined $mon{$key}->{'pos-x'};
@@ -16763,9 +17299,15 @@ sub wlinfo_data {
 			$monitor_ids->{$id}{'size-x'} = $mon{$key}->{'size-x'} if defined $mon{$key}->{'size-x'};
 			$monitor_ids->{$id}{'size-y'} = $mon{$key}->{'size-y'} if defined $mon{$key}->{'size-y'};
 			$monitor_ids->{$id}{'hz'} = $mon{$key}->{'hz'} if defined $mon{$key}->{'hz'};
+			if ($mon{$key}->{'log-x'} && $mon{$key}->{'res-x'}){
+				$monitor_ids->{$id}{'scale-type'} = 'wl'; 
+				$monitor_ids->{$id}{'scale-used'} = sprintf('%0.2f',($mon{$key}->{'res-x'}/$mon{$key}->{'log-x'})) + 0;
+				$monitor_ids->{$id}{'scale-percent'} = int($monitor_ids->{$id}{'scale-used'} * 100);
+			}
 			if (defined $mon{$key}->{'model'} && !$monitor_ids->{$id}{'model'}){
 				$monitor_ids->{$id}{'model'} = $mon{$key}->{'model'};
 			}
+			# note, this value seems nonsensical, seen actual scale 0.8 show 2
 			$monitor_ids->{$id}{'scale'} = $mon{$key}->{'scale'} if defined $mon{$key}->{'scale'};
 			# fallbacks in case wl_output block is not present, which happens
 			if (!defined $mon{$key}->{'pos-x'} && defined $mon{$key}->{'log-pos-x'}){
@@ -16794,7 +17336,8 @@ sub swaymsg_data {
 	eval $start if $b_log;
 	my ($program) = @_;
 	my (@data,%json,@temp,$ref);
-	my ($b_json,$file,$hz,$id,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial);
+	my ($b_json,$file,$hz,$id,$log_x,$log_y,$model,$pos_x,$pos_y,$res_x,$res_y,
+	$scale,$serial);
 	if (!$fake{'swaymsg'}){
 		main::load_json() if !$loaded{'json'};
 		if ($use{'json'}){
@@ -16811,7 +17354,8 @@ sub swaymsg_data {
 	}
 	else {
 		undef $monitor_ids;
-		$file = "$fake_data_dir/graphics/wayland/swaymsg-2-monitor-1.txt";
+		# $file = "$fake_data_dir/graphics/wayland/swaymsg-2-monitor-1.txt";
+		$file = "$fake_data_dir/graphics/wayland/swaymsg-1-monitor-laptop-1.txt";
 		@data = main::reader($file,'strip');
 	}
 	print 'swaymsg: ', Data::Dumper::Dumper \@data if $dbg[46]; 
@@ -16856,11 +17400,15 @@ sub swaymsg_data {
 					$monitor_ids->{$id}{'res-y'} = $mon->{'current_mode'}{'height'};
 				}
 				if ($mon->{'rect'}){
+					$monitor_ids->{$id}{'log-x'} = $mon->{'rect'}{'width'};
+					$monitor_ids->{$id}{'log-y'} = $mon->{'rect'}{'height'};
 					$monitor_ids->{$id}{'pos-x'} = $mon->{'rect'}{'x'};
 					$monitor_ids->{$id}{'pos-y'} = $mon->{'rect'}{'y'};
 				}
 				if ($mon->{'scale'}){
-					$monitor_ids->{$id}{'scale'} =$mon->{'scale'};
+					$monitor_ids->{$id}{'scale-type'} = 'swaymsg';
+					$monitor_ids->{$id}{'scale-percent'} = int(100*$mon->{'scale'});
+					$monitor_ids->{$id}{'scale-used'} = (sprintf('%.2f',$mon->{'scale'})) + 0;
 				}
 			}
 		}
@@ -16875,16 +17423,24 @@ sub swaymsg_data {
 		$b_wayland_data = 1 if scalar @data > 8;
 		foreach (@data){
 			if ($_ eq '~~' && $id){
+				if ($scale && $res_x){
+					$log_x = int(($res_x/$scale));
+					$log_y = int(($res_y/$scale));
+				}
 				$monitor_ids->{$id}{'hz'} = $hz;
+				$monitor_ids->{$id}{'log-x'} = $log_x;
+				$monitor_ids->{$id}{'log-y'} = $log_y;
 				$monitor_ids->{$id}{'model'} = $model if $model;
 				$monitor_ids->{$id}{'monitor'} = $id;
 				$monitor_ids->{$id}{'pos-x'} = $pos_x;
 				$monitor_ids->{$id}{'pos-y'} = $pos_y;
 				$monitor_ids->{$id}{'res-x'} = $res_x;
 				$monitor_ids->{$id}{'res-y'} = $res_y;
-				$monitor_ids->{$id}{'scale'} = $scale;
+				$monitor_ids->{$id}{'scale-type'} = 'wl';
+				$monitor_ids->{$id}{'scale-percent'} = int(100*$scale) if $scale;
+				$monitor_ids->{$id}{'scale-used'} = $scale;
 				$monitor_ids->{$id}{'serial'} = $serial if $serial;
-				($hz,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial) = ();
+				($hz,$log_x,$log_y,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial) = ();
 				$b_wayland_data = 1;
 			}
 			# Output VGA-1 '<Unknown> <Unknown> ' (focused)
@@ -16898,7 +17454,7 @@ sub swaymsg_data {
 			elsif (/^Current mode:\s+(\d+)x(\d+)\s+\@\s+([\d\.]+)\s+Hz/i){
 				$res_x = $1;
 				$res_y = $2;
-				$hz = (sprintf('%.0f',($3/1000)) + 0) if $3;
+				$hz = sprintf('%.0f',$3) if $3;
 			}
 			elsif (/^Position:\s+(\d+),(\d+)/i){
 				$pos_x = $1;
@@ -16918,14 +17474,16 @@ sub swaymsg_data {
 sub wlrrandr_data {
 	eval $start if $b_log;
 	my ($program) = @_;
-	my ($file,$hz,$id,$info,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial);
+	my ($file,$hz,$id,$info,$log_x,$log_y,$model,$pos_x,$pos_y,$res_x,$res_y,
+	$scale,$serial);
 	my ($data,@temp);
 	if (!$fake{'wlr-randr'}){
 		$data = main::grabber("$program 2>/dev/null",'','strip','ref');
 	}
 	else {
 		undef $monitor_ids;
-		$file = "$fake_data_dir/graphics/wayland/wlr-randr-2-monitor-1.txt";
+		# $file = "$fake_data_dir/graphics/wayland/wlr-randr-2-monitor-1.txt";
+		$file = "$fake_data_dir/graphics/wayland/wlr-randr-1-monitor-1.txt";
 		$data = main::reader($file,'strip','ref');
 	}
 	foreach (@$data){
@@ -16939,16 +17497,25 @@ sub wlrrandr_data {
 	main::log_data('dump','@$data', $data) if $b_log;
 	foreach (@$data){
 		if ($_ eq '~~' && $id){
+			if ($scale && $res_x){
+				$log_x = int($res_x/$scale);
+				$log_y = int($res_y/$scale);
+				$scale = sprintf('%.2f',$scale) + 0;
+			}
 			$monitor_ids->{$id}{'hz'} = $hz;
+			$monitor_ids->{$id}{'log-x'} = $log_x;
+			$monitor_ids->{$id}{'log-y'} = $log_y;
 			$monitor_ids->{$id}{'model'} = $model if $model && !$monitor_ids->{$id}{'model'};
 			$monitor_ids->{$id}{'monitor'} = $id;
 			$monitor_ids->{$id}{'pos-x'} = $pos_x;
 			$monitor_ids->{$id}{'pos-y'} = $pos_y;
 			$monitor_ids->{$id}{'res-x'} = $res_x;
 			$monitor_ids->{$id}{'res-y'} = $res_y;
-			$monitor_ids->{$id}{'scale'} = $scale;
+			$monitor_ids->{$id}{'scale-type'} = 'wlr-randr';
+			$monitor_ids->{$id}{'scale-percent'} = int($scale*100) if $scale;
+			$monitor_ids->{$id}{'scale-used'} = $scale;
 			$monitor_ids->{$id}{'serial'} = $serial if $serial && !$monitor_ids->{$id}{'serial'};
-			($hz,$info,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial) = ();
+			($hz,$info,$log_x,$log_y,$model,$pos_x,$pos_y,$res_x,$res_y,$scale,$serial) = ();
 			$b_wayland_data = 1;
 		}
 		# Output: VGA-1 '<Unknown> <Unknown> ' (focused)
@@ -16972,6 +17539,9 @@ sub wlrrandr_data {
 		}
 		elsif (/^Scale:\s+([\d\.]+)/i){
 			$scale = $1 + 0;
+		}
+		elsif (/^Serial:\s+(\S+)/i){
+			$serial = main::clean_dmi($1);
 		}
 	}
 	print 'wlr-randr: ', Data::Dumper::Dumper $monitor_ids if $dbg[46];
@@ -17000,7 +17570,7 @@ sub get_model_serial {
 	return ($model,$serial);
 }
 
-# DISPLAY DATA X.org ##
+## DISPLAY DATA: X11 ##
 sub display_data_x {
 	eval $start if $b_log;
 	my ($prog_xdpyinfo,$prog_xdriinfo,$prog_xrandr);
@@ -17173,7 +17743,7 @@ sub xrandr_data {
 	eval $end if $b_log;
 	my ($program) = @_;
 	my ($diagonal,$diagonal_m,$dpi,$monitor_id,$pos_x,$pos_y,$primary);
-	my ($res_x,$res_x_max,$res_y,$res_y_max);
+	my ($log_x,$log_y,$res_x,$res_x_max,$res_y,$res_y_max);
 	my ($screen_id,$set_as,$size_x,$size_x_i,$size_y,$size_y_i);
 	my (@ids,%monitors,@xrandr,@xrandr_screens);
 	if (!$fake{'xrandr'}){
@@ -17229,6 +17799,7 @@ sub xrandr_data {
 				'size-y-i' => undef,
 				'source' => 'xrandr',
 				});
+				($res_x,$res_y,$res_x_max,$res_y_max) = ();
 			}
 			if (%monitors){
 				push(@xrandr_screens,{%monitors});
@@ -17238,29 +17809,27 @@ sub xrandr_data {
 		# HDMI-2 connected 1920x1200+1080+0 (normal left inverted right x axis y axis) 519mm x 324mm
 		# DP-1 connected primary 2560x1440+1080+1200 (normal left inverted right x axis y axis) 598mm x 336mm
 		# HDMI-1 connected 1080x1920+0+0 left (normal left inverted right x axis y axis) 160mm x 90mm
+		# DVI-I-1 connected 1664x1332+0+0 (normal left inverted right x axis y axis) 338mm x 270mm
 		# disabled but connected: VGA-1 connected (normal left inverted right x axis y axis)
 		elsif (/^([\S]+)\s+connected\s(primary\s)?/){
 			$monitor_id = $1;
 			$set_as = $2;
 			if (/^[^\s]+\s+connected\s(primary\s)?([0-9]+)\s*x\s*([0-9]+)\+([0-9]+)\+([0-9]+)(\s[^(]*\([^)]+\))?(\s([0-9]+)mm\sx\s([0-9]+)mm)?/){
-				$res_x = $2;
-				$res_y = $3;
+				$log_x = $2;
+				$log_y = $3;
 				$pos_x = $4;
 				$pos_y = $5;
 				$size_x = $8;
 				$size_y = $9;
 				# flip size x,y if don't roughly  match res x/y ratio
 				if ($size_x && $size_y && $res_y){
-					flip_size_x_y(\$size_x,\$size_y,\$res_x,\$res_y);
+					flip_size_x_y(\$size_x,\$size_y,\$log_x,\$log_y);
 				}
 				$size_x_i = ($size_x) ? sprintf("%.2f", ($size_x/25.4)) + 0 : 0;
 				$size_y_i = ($size_y) ? sprintf("%.2f", ($size_y/25.4)) + 0 : 0;
-				$dpi = ($res_x && $size_x) ? sprintf("%.0f", $res_x * 25.4 / $size_x) : '';
-				$diagonal = ($res_x && $size_x) ? sprintf("%.2f", (sqrt($size_x**2 + $size_y**2)/25.4)) + 0 : '';
-				$diagonal_m = ($res_x && $size_x) ? sprintf("%.0f", (sqrt($size_x**2 + $size_y**2))) : '';
 			}
 			else {
-				($res_x,$res_y,$pos_x,$pos_y,$size_x,$size_x_i,$size_y,$size_y_i,$dpi,$diagonal,$diagonal_m) = ()
+				($log_x,$log_y,$pos_x,$pos_y,$size_x,$size_x_i,$size_y,$size_y_i) = ()
 			}
 			undef $primary;
 			push(@ids,[$monitor_id]);
@@ -17270,24 +17839,20 @@ sub xrandr_data {
 				$b_primary = 1;
 			}
 			$monitors{$monitor_id} = {
-			'screen' => $screen_id,
+			'log-x' => $log_x,
+			'log-y' => $log_y,
 			'monitor' => $monitor_id,
 			'pos-x' => $pos_x,
 			'pos-y' => $pos_y,
+			'position' => $set_as,
 			'primary' => $primary,
-			'res-x' => $res_x,
-			'res-y' => $res_y,
+			'screen' => $screen_id,
 			'size-x' => $size_x,
 			'size-x-i' => $size_x_i,
 			'size-y' => $size_y,
 			'size-y-i' => $size_y_i,
-			'dpi' => $dpi,
-			'diagonal' => $diagonal,
-			'diagonal-m' => $diagonal_m,
-			'position' => $set_as,
 			};
 			# print "x:$size_x y:$size_y rx:$res_x ry:$res_y dpi:$dpi\n";
-			($res_x,$res_y,$size_x,$size_x_i,$size_y,$size_y_i,$set_as) = (0,0,0,0,0,0,0,0,undef);
 		}
 		elsif (/^([\S]+)\s+disconnected\s/){
 			undef $monitor_id;
@@ -17302,8 +17867,21 @@ sub xrandr_data {
 				# print "$working[1] :: $working[2]\n";
 				$working[2] =~ s/\*|\+//g;
 				$working[2] = sprintf("%.0f",$working[2]);
+				($res_x,$res_y) = split(/x/,$working[1]);
+				$diagonal = ($res_x && $size_x) ? sprintf("%.2f", (sqrt($size_x**2 + $size_y**2)/25.4)) + 0 : '';
+				$diagonal_m = ($res_x && $size_x) ? sprintf("%.0f", (sqrt($size_x**2 + $size_y**2))) : '';
+				$dpi = ($res_x && $size_x) ? sprintf("%.0f", $res_x * 25.4 / $size_x) : '';
+				$monitors{$monitor_id}->{'diagonal'} = $diagonal;
+				$monitors{$monitor_id}->{'diagonal-m'} = $diagonal_m;
+				$monitors{$monitor_id}->{'dpi'} = $dpi;
+				$monitors{$monitor_id}->{'res-x'} = $res_x;
+				$monitors{$monitor_id}->{'res-y'} = $res_y;
+				$monitors{$monitor_id}->{'scale-type'} = 'x11';
+				$monitors{$monitor_id}->{'scale-percent'} = int(($res_x/$monitors{$monitor_id}->{'log-x'}) * 100);
+				$monitors{$monitor_id}->{'scale-used'} = ($monitors{$monitor_id}->{'log-x'}/$res_x) + 0;
 				$monitors{$monitor_id}->{'hz'} = $working[2];
-				($diagonal,$dpi) = ('','');
+				($diagonal,$diagonal_m,$dpi,$log_x,$log_y,$res_x,$res_y,$size_x,
+				$size_x_i,$size_y,$size_y_i,$set_as) = ();
 				# print Data::Dumper::Dumper \@monitors;
 			}
 			#	\tCONNECTOR_ID: 52
@@ -17326,6 +17904,8 @@ sub xrandr_data {
 	$graphics{'display-screens'} < scalar @{$graphics{'screens'}})){
 		$graphics{'display-screens'} = scalar @{$graphics{'screens'}};
 	}
+	print "xrandr_screens: " . Data::Dumper::Dumper \@xrandr_screens if $dbg[17];
+	main::log_data('dump','@xrandr_screens 1',\@xrandr_screens) if $b_log;
 	map_monitor_ids(\@ids) if @ids;
 	# print "xrandr_screens 1: " . Data::Dumper::Dumper \@xrandr_screens;
 	foreach my $main (@{$graphics{'screens'}}){
@@ -17353,8 +17933,7 @@ sub xrandr_data {
 		$i++;
 	}
 	undef $layouts;
-	# print "xrandr_screens 2: " . Data::Dumper::Dumper \@xrandr_screens;
-	print 'Data: xrandr: ', Data::Dumper::Dumper $graphics{'screens'} if $dbg[17];
+	print 'Data: graphics{screens}: ', Data::Dumper::Dumper $graphics{'screens'} if $dbg[17];
 	main::log_data('dump','$graphics{screens}',$graphics{'screens'}) if $b_log;
 	eval $end if $b_log;
 }
@@ -17383,6 +17962,7 @@ sub check_screens {
 	return $b_use;
 }
 
+## DISPLAY SERVER DATA ##
 # Case where no xpdyinfo display server/version data exists, or to set Wayland
 # Xwayland version, or Xvesa data.
 sub display_server_data {
@@ -17490,52 +18070,6 @@ sub tinyx_data {
 	eval $end if $b_log;
 }
 
-sub display_protocol {
-	eval $start if $b_log;
-	$graphics{'protocol'} = '';
-	if ($ENV{'XDG_SESSION_TYPE'}){
-		$graphics{'protocol'} = $ENV{'XDG_SESSION_TYPE'};
-	}
-	if (!$graphics{'protocol'} && $ENV{'WAYLAND_DISPLAY'}){
-		$graphics{'protocol'} = $ENV{'WAYLAND_DISPLAY'};
-	}
-	# can show as wayland-0
-	if ($graphics{'protocol'} && $graphics{'protocol'} =~ /wayland/i){
-		$graphics{'protocol'} = 'wayland';
-	}
-	# yes, I've seen this in 2019 distros, sigh
-	elsif ($graphics{'protocol'} eq 'tty'){
-		$graphics{'protocol'} = '';
-	}
-	# If no other source, get user session id, then grab session type.
-	# loginctl also results in the session id
-	# undef $graphics{'protocol'};
-	if (!$graphics{'protocol'}){
-		if (my $program = main::check_program('loginctl')){
-			my $id = '';
-			# $id = $ENV{'XDG_SESSION_ID'}; # returns tty session in console
-			my @data = main::grabber("$program --no-pager --no-legend 2>/dev/null",'','strip');
-			foreach (@data){
-				# some systems show empty or ??? for TTY field, but whoami should do ok
-				next if /(ttyv?\d|pts\/)/; # freebsd: ttyv3
-				# in display, root doesn't show in the logins
-				next if $client{'whoami'} && $client{'whoami'} ne 'root' && !/\b$client{'whoami'}\b/;
-				$id = (split(/\s+/, $_))[0];
-				# multiuser? too bad, we'll go for the first one that isn't a tty/pts
-				last; 
-			}
-			if ($id){
-				my $temp = (main::grabber("$program show-session $id -p Type --no-pager --no-legend 2>/dev/null"))[0];
-				$temp =~ s/Type=// if $temp;
-				# ssh will not show /dev/ttyx so would have passed the first test
-				$graphics{'protocol'} = $temp if $temp && $temp ne 'tty';
-			}
-		}
-	}
-	$graphics{'protocol'} = lc($graphics{'protocol'}) if $graphics{'protocol'};
-	eval $end if $b_log;
-}
-
 ## DRIVER DATA ##
 # for wayland display/monitor drivers, or if no display drivers found for x
 sub gpu_drivers_sys {
@@ -17582,13 +18116,15 @@ sub display_drivers_x {
 		# list is from sgfxi plus non-free drivers, plus ARM drivers. 
 		# Don't use ati. It's just a wrapper for: r128, mach64, radeon
 		my $list = join('|', qw(amdgpu apm ark armsoc atimisc
-		chips cirrus cyrix etnaviv fbdev fbturbo fglrx geode glide glint 
+		chips cirrus cyrix efifb etnaviv fbdev fbturbo fglrx geode glide glint 
 		i128 i740 i810-dec100 i810e i810 i815 i830 i845 i855 i865 i915 i945 i965 
 		iftv igs imstt intel ipaq ivtv mach64 mesa mga m68k modesetting neomagic 
 		newport nouveau nova nsc nvidia nv openchrome r128 radeonhd radeon rendition 
-		s3virge s3 savage siliconmotion sisimedia sisusb sis sis530 sunbw2 suncg14 
-		suncg3 suncg6 sunffb sunleo suntcx tdfx tga trident trio ts300 tseng 
-		unichrome v4l vboxvideo vesa vga via vmware vmwgfx voodoo));
+		s3virge s3 savage siliconmotion simpledrm simplefb 
+		sisimedia sisusb sis sis530 
+		sunbw2 suncg14 suncg3 suncg6 sunffb sunleo suntcx 
+		tdfx tga trident trio ts300 tseng 
+		unichrome v4l vboxvideo vesa vesafb vga via vmware vmwgfx voodoo));
 		# $list = qr/$list/i; # qr/../i only added perl 5.14, fails on older perls
 		my ($b_use_dri,$dri,$driver,%drivers);
 		my ($alternate,$failed,$loaded,$unloaded);
@@ -17891,29 +18427,29 @@ sub set_amd_data {
 	'years' => '2017-20',
 	},
 	{'arch' => 'RDNA-1',
-	'ids' => '13e9|13f9|13fe|1478|1479|1607|7310|7312|7318|7319|731a|731b|731e|' .
-	'731f|7340|7341|7343|7347|734f|7360|7362',
+	'ids' => '13e9|13f9|13fe|1607|7310|7312|7318|7319|731a|731b|731e|731f|7340|' .
+	'7341|7343|7347|734f|7360|7362',
 	'code' => 'Navi-1x',
 	'process' => 'TSMC n7 (7nm)',
 	'years' => '2019-20',
 	},
 	{'arch' => 'RDNA-2',
-	'ids' => '1435|1506|163f|164d|164e|1681|73a0|73a1|73a2|73a3|73a5|73ab|73ae|' .
-	'73af|73bf|73c0|73c1|73c3|73ce|73df|73e0|73e1|73e3|73ef|73ff|7420|7421|7422|' .
-	'7423|7424|743f',
+	'ids' => '13c0|1435|1506|163f|164d|164e|1681|73a0|73a1|73a2|73a3|73a5|73ab|' .
+	'73ae|73af|73bf|73c0|73c1|73c3|73ce|73df|73e0|73e1|73e3|73ef|73ff|7420|7421|' .
+	'7422|7423|7424|743f',
 	'code' => 'Navi-2x',
 	'process' => 'TSMC n7 (7nm)',
 	'years' => '2020-22',
 	},
 	{'arch' => 'RDNA-3',
-	'ids' => '73a8|73c4|73c5|73c8|7448|744c|745e|7460|7461|7470|7478|747e',
+	'ids' => '73a8|73c4|73c5|73c8|7448|744a|744c|745e|7460|7461|7470|7478|747e',
 	'code' => 'Navi-3x',
 	'process' => 'TSMC n5 (5nm)',
 	'years' => '2022+',
 	},
 	{'arch' => 'RDNA-3',
-	'ids' => '73f0|7480|7481|7483|7487|7489|748b|749f',
-	'code' => 'Navi-33',-
+	'ids' => '73f0|7480|7481|7483|7487|7489|748b|7499',
+	'code' => 'Navi-3x',
 	'process' => 'TSMC n6 (6nm)',
 	'years' => '2023+',
 	},
@@ -17936,7 +18472,7 @@ sub set_amd_data {
 	'years' => '2021-22+',
 	},
 	{'arch' => 'CDNA-3',
-	'ids' => '74a0|74a1',
+	'ids' => '74a0|74a1|74a2|74a5|74a9|74b5|74bd',
 	'code' => 'Instinct-MI3xx',
 	'process' => 'TSMC n5 (5nm)',
 	'years' => '2023+',
@@ -17947,7 +18483,7 @@ sub set_amd_data {
 sub set_intel_data {
 	$gpu_intel = [
 	{'arch' => 'Gen-1',
-	'ids' => '1132|7120|7121|7122|7123|7124|7125|7126|7128|712a',
+	'ids' => '1132|3577|7120|7121|7122|7123|7124|7125|7126|7128|712a',
 	'code' => '',
 	'process' => 'Intel 150nm',
 	'years' => '1998-2002',
@@ -17960,26 +18496,26 @@ sub set_intel_data {
 	'years' => '1998',
 	},
 	{'arch' => 'Gen-2',
-	'ids' => '2562|2572|3577|3582|358e',
+	'ids' => '2562|2572|2582|3577|3582|358e',
 	'code' => '',
 	'process' => 'Intel 130nm',
 	'years' => '2002-03',
 	},
 	{'arch' => 'Gen-3',
-	'ids' => '2582|2592|2780|2782|2792',
-	'code' => 'Intel 130nm',
-	'process' => '',
+	'ids' => '2582|258a|2592|2780|2782|2792',
+	'code' => '',
+	'process' => 'Intel 130nm',
 	'years' => '2004-05',
 	},
 	{'arch' => 'Gen-3.5',
-	'ids' => '2772|2776|27a2|27a6|27ae|2972|2973',
+	'ids' => '2772|2776|27a2|27a6|27ae|2972|2973|2982|29b2|29c2|29d2|a001|a011',
 	'code' => '',
 	'process' => 'Intel 90nm',
 	'years' => '2005-06',
 	},
 	{'arch' => 'Gen-4',
 	'ids' => '2982|2983|2992|2993|29a2|29a3|29b2|29b3|29c2|29c3|29d2|29d3|2a02|' .
-	'2a03|2a12|2a13',
+	'2a03|2a12|2a13|2a42|2e02|2e12|2e22|2e32|2e42|2e92',
 	'code' => '',
 	'process' => 'Intel 65n',
 	'years' => '2006-07',
@@ -17988,7 +18524,7 @@ sub set_intel_data {
 	'ids' => '4100|8108|8109|a001|a002|a011|a012',
 	'code' => '',
 	'process' => 'Intel 45-130nm',
-	'year' => '2008-10',
+	'years' => '2008-10',
 	},
 	{'arch' => 'Gen-5',
 	'ids' => '2a41|2a42|2a43|2e02|2e03|2e12|2e13|2e22|2e23|2e32|2e33|2e42|2e43|' .
@@ -18064,7 +18600,7 @@ sub set_intel_data {
 	'process' => 'Intel 14n',
 	'years' => '2015-16',
 	},
-	# gen10 was cancelled., 
+	# gen10 was cancelled.
 	{'arch' => 'Gen-11',
 	'ids' => '0d16|0d26|0d36|4541|4551|4555|4557|4571|4e51|4e55|4e57|4e61|4e71|' .
 	'8a50|8a51|8a52|8a53|8a54|8a56|8a57|8a58|8a59|8a5a|8a5b|8a5c|8a5d|8a70|8a71|' .
@@ -18073,66 +18609,76 @@ sub set_intel_data {
 	'process' => 'Intel 10nm',
 	'years' => '2019-21',
 	},
-	{'arch' => 'Gen-12.1',
-	'ids' => '4905|4907|4908|4c80|4c8a|4c8b|4c8c|4c90|4c9a|9a40|9a49|9a59|9a60|' .
-	'9a68|9a70|9a78|9ac0|9ac9|9ad9|9af8',
+	{'arch' => 'Xe',
+	'ids' => '4626|4628|462a|4636|4638|463a|4680|4682|4688|468a|468b|4690|4692|' .
+	'4693|46a1|46a2|46a3|46b2|46b3|46c2|46c3|46d0|46d1|46d2|4905|4907|4908|4909|' .
+	'4c8a|4c8b|4c90|4c9a|9a40|9a49|9a59|9a60|9a68|9a70|9a78|9ac0|9ad9|9af8|a720|' .
+	'a721|a780|a781|a782|a783|a788|a789|a78a|a78b|a7a8|a7a9',
 	'code' => '',
 	'process' => 'Intel 10nm',
 	'years' => '2020-21',
 	},
-	{'arch' => 'Gen-12.2',
-	'ids' => '4626|4628|462a|4636|4638|463a|4682|4688|468a|468b|4690|4692|4693|' .
-	'46a3|46a6|46a8|46aa|46b0|46b1|46b3|46b6|46b8|46ba|46c1|46c3|46d0|46d1|46d2|' .
+	{'arch' => 'Xe',
+	'ids' => '4626|46a0|46a1|46a6|46a8|46aa|46b0|46b1|46b6|46b8|46ba|46c0|46c1|' .
 	'46d3|46d4',
 	'code' => '',
 	'process' => 'Intel 10nm',
 	'years' => '2021-22+',
 	},
-	{'arch' => 'Gen-12.5',
-	'ids' => '0bd0|0bd5|0bd6|0bd7|0bd9|0bda|0bdb',
+	{'arch' => 'Xe',
+	'ids' => '0bd5|0bda',
 	'code' => '',
 	'process' => 'Intel 10nm',
 	'years' => '2021-23+',
 	},
-	# Jupiter Sound cancelled?
-	{'arch' => 'Gen-12.7',
+	{'arch' => 'Xe-HPG',
 	'ids' => '4f80|4f81|4f82|4f83|4f84|4f85|4f86|4f87|4f88|5690|5691|5692|5693|' .
-	'5694|5695|5696|5697|5698|56a0|56a1|56a3|56a4|56a5|56a6|56a7|56a8|56a9|56b0|' .
-	'56b1|56b2|56b3|56ba|56bb|56bc|56bd|56be|56bf',
+	'5694|5696|5697|5698|56a0|56a1|56a2|56a3|56a4|56a5|56a6|56a7|56a8|56a9|56b0|' .
+	'56b1|56b2|56b3|56ba|56bb|56bc|56bd|56c0|56c1',
 	'code' => 'Alchemist',
 	'process' => 'TSMC n6 (7nm)',
 	'years' => '2022+',
 	},
-	{'arch' => 'Gen-12.7',
-	'ids' => '56c0|56c1',
-	'code' => '',
-	'process' => 'TSMC n6 (7nm)',
-	'years' => '2022+',
-	},
-	{'arch' => 'Gen-13',
-	'ids' => 'a70d|a720|a721|a74d|a780|a781|a782|a783|a788|a789|a78a|a78b|a7a0|' .
-	'a7a1|a7a8|a7a9|a7aa|a7ab|a7ac|a7ad',
+	{'arch' => 'Xe',
+	'ids' => 'a70d|a74d|a7a0|a7a1|a7aa|a7ab|a7ac|a7ad',
 	'code' => '',
 	'process' => 'Intel 7 (10nm)',
 	'years' => '2022+',
 	},
-	{'arch' => 'Gen-13',
+	{'arch' => 'Xe-LPG',
 	'ids' => '7d40|7d45|7d55|7d60|7dd5',
 	'code' => '',
 	'process' => 'Intel 4 (7nm+)',
 	'years' => '2023+',
 	},
-	{'arch' => 'Gen-14',
-	'ids' => '6420|64a0|64b0',
+	{'arch' => 'Xe2',
+	'ids' => 'e202|e20b|e20c|e20d|e210|e212|e215|e216',
 	'code' => '',
-	'process' => 'TSMC 3nm',
+	'process' => 'TSMC n4 (4nm)',
 	'years' => '2024+',
 	},
-	{'arch' => 'Gen-15',
-	'ids' => '7d41|7d51|7d67|7dd1',
+	{'arch' => 'Xe2',
+	'ids' => '6420|64a0|64b0|b080|b081|b082|b083|b08f|b090|b0a0|b0b0',
+	'code' => '',
+	'process' => 'TSMC n3 (3nm)',
+	'years' => '2024+',
+	},
+	{'arch' => 'Xe-LPG',
+	'ids' => '7d41|7d51|7d67|7dd1|b640',
 	'code' => '',
 	'process' => 'TSMC 3nm?',
 	'years' => '2025+',
+	},
+	];
+}
+
+sub set_loongson_data {
+	$gpu_loongson = [
+	{'arch' => '?',
+	'ids' => '7a25',
+	'code' => '',
+	'process' => '12-14nm (STM)',
+	'years' => '2023+',
 	},
 	];
 }
@@ -18308,8 +18854,8 @@ sub set_nv_data {
 	'years' => '2010-2016',
 	},
 	## Legacy 470.xx
-	{'arch' => 'Fermi 2',
-	'ids' => '0fec|1281|1289|128b|1295|1298',
+	{'arch' => 'Fermi-2',
+	'ids' => '0fec|1281|1289|128b|1295',
 	'code' => 'GF119/GK208',
 	'kernel' => '',
 	'legacy' => 1,
@@ -18322,15 +18868,15 @@ sub set_nv_data {
 	},
 	# GT 720M and 805A/810A are the same cpu id.
 	# years: 2012-2018 Kepler 2013-2015 Kepler 2.0
-	{'arch' => 'Kepler',
-	'ids' => '0fc6|0fc8|0fc9|0fcd|0fce|0fd1|0fd2|0fd3|0fd4|0fd5|0fd8|0fd9|0fdf|' .
-	'0fe0|0fe1|0fe2|0fe3|0fe4|0fe9|0fea|0fed|0fee|0ff6|0ff8|0ff9|0ffa|0ffb|0ffc|' .
-	'0ffd|0ffe|0fff|1001|1004|1005|1007|1008|100a|100c|1021|1022|1023|1024|1026|' .
-	'1027|1028|1029|102a|102d|103a|103c|1180|1183|1184|1185|1187|1188|1189|118a|' .
-	'118e|118f|1193|1194|1195|1198|1199|119a|119d|119e|119f|11a0|11a1|11a2|11a3|' .
-	'11a7|11b4|11b6|11b7|11b8|11ba|11bc|11bd|11be|11c0|11c2|11c3|11c4|11c5|11c6|' .
-	'11c8|11cb|11e0|11e1|11e2|11e3|11fa|11fc|1280|1282|1284|1286|1287|1288|1290|' .
-	'1291|1292|1293|1295|1296|1299|129a|12b9|12ba',
+	 {'arch' => 'Kepler-2',
+	'ids' => '0fc1|0fc6|0fc8|0fc9|0fcd|0fce|0fd1|0fd2|0fd3|0fd4|0fd5|0fd8|0fd9|' .
+	'0fdf|0fe0|0fe1|0fe2|0fe3|0fe4|0fe9|0fea|0fed|0fee|0ff6|0ff8|0ff9|0ffa|0ffb|' .
+	'0ffc|0ffd|0ffe|0fff|1001|1004|1005|1007|1008|100a|100c|1021|1022|1023|1024|' .
+	'1026|1027|1028|1029|102a|102d|103a|103c|1180|1183|1184|1185|1187|1188|1189|' .
+	'118a|118e|118f|1193|1194|1195|1198|1199|119a|119d|119e|119f|11a0|11a1|11a2|' .
+	'11a3|11a7|11b4|11b6|11b7|11b8|11ba|11bc|11bd|11be|11c0|11c2|11c3|11c4|11c5|' .
+	'11c6|11c8|11cb|11e0|11e1|11e2|11e3|11fa|11fc|1280|1282|1284|1286|1287|1288|' .
+	'1290|1291|1292|1293|1295|1296|1298|1299|129a|12b9|12ba',
 	'code' => 'GKxxx',
 	'kernel' => '',
 	'legacy' => 1,
@@ -18354,7 +18900,7 @@ sub set_nv_data {
 	'legacy' => 0,
 	'process' => 'TSMC 28nm',
 	'release' => '',
-	'series' => '545.xx+',
+	'series' => '550-570.xx+',
 	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
 	'years' => '2014-2019',
@@ -18371,7 +18917,7 @@ sub set_nv_data {
 	'legacy' => 0,
 	'process' => 'TSMC 16nm',
 	'release' => '',
-	'series' => '545.xx+',
+	'series' => '550-570.xx+',
 	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
 	'years' => '2016-2021',
@@ -18383,7 +18929,7 @@ sub set_nv_data {
 	'legacy' => 0,
 	'process' => 'TSMC 12nm',
 	'release' => '',
-	'series' => '545.xx+',
+	'series' => '550-570.xx+',
 	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
 	'years' => '2017-2020',
@@ -18401,7 +18947,7 @@ sub set_nv_data {
 	'legacy' => 0,
 	'process' => 'TSMC 12nm FF',
 	'release' => '',
-	'series' => '550.xx+',
+	'series' => '550-570.xx+',
 	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
 	'years' => '2018-2022',
@@ -18412,43 +18958,56 @@ sub set_nv_data {
 	'2414|2420|2438|2460|2482|2484|2486|2487|2488|2489|248a|249c|249d|24a0|24b0|' .
 	'24b1|24b6|24b7|24b8|24b9|24ba|24bb|24c7|24c9|24dc|24dd|24e0|24fa|2503|2504|' .
 	'2507|2508|2520|2521|2523|2531|2544|2560|2563|2571|2582|2584|25a0|25a2|25a5|' .
-	'25ab|25ac|25b6|25b8|25b9|25ba|25bb|25bc|25bd|25e0|25e2|25e5|25ec|25f9|25fa|' .
-	'25fb|2838',
+	'25ab|25ac|25b0|25b2|25b6|25b8|25b9|25ba|25bb|25bc|25bd|25e0|25e2|25e5|25ec|' .
+	'25f9|25fa|25fb|2822|2838|28a3',
 	'code' => 'GAxxx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n7 (7nm)',
 	'release' => '',
-	'series' => '550.xx+',
+	'series' => '550-570.xx+',
 	'status' => main::message('nv-current-eol',$date,'2026-12-xx'),
 	'xorg' => '',
 	'years' => '2020-2023',
 	},
 	{'arch' => 'Hopper',
-	'ids' => '2321|2322|2324|2329|2330|2331|2339|233a|2342',
+	'ids' => '2321|2322|2324|2329|232c|2330|2331|2335|2339|233a|233b|2342|2348',
 	'code' => 'GH1xx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n4 (5nm)',
 	'release' => '',
-	'series' => '545.xx+',
+	'series' => '550-570.xx+',
 	'status' => $status_current,
 	'xorg' => '',
 	'years' => '2022+',
 	},
 	{'arch' => 'Lovelace',
-	'ids' => '2684|2685|26b1|26b2|26b3|26b5|26b9|26ba|2702|2704|2705|2709|2717|' .
-	'2730|2757|2770|2782|2783|2786|2788|27a0|27b0|27b1|27b2|27b6|27b8|27ba|27bb|' .
-	'27e0|27fb|2803|2805|2808|2820|2860|2882|28a0|28a1|28b9|28ba|28bb|28e0|28e1',
+	'ids' => '2684|2685|2689|26b1|26b2|26b3|26b5|26b9|26ba|2702|2704|2705|2709|' .
+	'2717|2730|2757|2770|2782|2783|2786|2788|27a0|27b0|27b1|27b2|27b6|27b8|27ba|' .
+	'27bb|27e0|27fb|2803|2805|2808|2820|2860|2882|28a0|28a1|28b0|28b9|28ba|28bb|' .
+	'28e0|28e1|2b85|2b87|2c02',
 	'code' => 'AD1xx',
 	'kernel' => '',
 	'legacy' => 0,
 	'process' => 'TSMC n4 (5nm)',
 	'release' => '',
-	'series' => '550.xx+',
+	'series' => '550-570.xx+',
 	'status' => $status_current,
 	'xorg' => '',
 	'years' => '2022+',
+	},
+	{'arch' => 'Blackwell',
+	'ids' => '2901',
+	'code' => 'GB2xx',
+	'kernel' => '',
+	'legacy' => 0,
+	'process' => 'TSMC 4np (5nm)',
+	'release' => '',
+	'series' => '550-570.xx+',
+	'status' => $status_current,
+	'xorg' => '',
+	'years' => '2024+',
 	},
 	],
 }
@@ -18464,6 +19023,10 @@ sub gpu_data {
 	elsif ($v_id eq '8086'){
 		set_intel_data() if !$gpu_intel;
 		$gpu = $gpu_intel;
+	}
+	elsif ($v_id eq '0014'){
+		set_loongson_data() if !$gpu_loongson;
+		$gpu = $gpu_loongson;
 	}
 	else {
 		set_nv_data() if !$gpu_nv;
@@ -18508,6 +19071,31 @@ sub get_gpu_data {
 	print "Raw \$info data: ", Data::Dumper::Dumper $info if $dbg[49];
 	eval $end if $b_log;
 	return $info;
+}
+
+## INFO DATA ##
+# args: 0: $tools, hash ref
+sub tools_data {
+	eval $start if $b_log;
+	my %items = (
+	'api' => [qw(clinfo eglinfo glxinfo vulkaninfo)],
+	'de' => [qw(gnome-monitor-config gnome-randr kscreen-console kscreen-doctor 
+	xfce4-display-settings xfce5-display-settings)],
+	'gpu' => [qw(amd-smi amdgpu_top aticonfig corectrl gputop intel_gpu_top lsgpu 
+	lact nvidia-settings nvidia-smi radeon_gpu_profiler radeontop tuxclocker umr)],
+	'wl' => [qw(kanshi nwg-displays swaymsg way-displays wayland-info wdisplays 
+	weston-info wlay wlr-randr)],
+	'x11' => [qw(xdriinfo xdpyinfo xprop xrandr)]
+	);
+	foreach my $key (keys %items){
+		foreach my $tool (@{$items{$key}}){
+			if (main::check_program($tool)){
+				push(@{$_[0]->{$key}},$tool);
+			}
+		}
+	}
+	# print Data::Dumper::Dumper $_[0];
+	eval $end if $b_log;
 }
 
 ## MONITOR DATA ##
@@ -18996,7 +19584,7 @@ sub tty_data {
 }
 }
 
-## LogicalItem
+## LogicalItem ##
 {
 package LogicalItem;
 
@@ -19361,7 +19949,7 @@ sub component_recursive_data {
 }
 }
 
-## MachineItem
+## MachineItem ##
 # public methods: get(), is_vm()
 {
 my $b_vm;
@@ -20278,7 +20866,7 @@ sub check_vm {
 }
 }
 
-## NetworkItem 
+## NetworkItem ##
 {
 package NetworkItem;
 my ($b_ip_run,@ifs_found);
@@ -20820,13 +21408,14 @@ sub wan_ip {
 		# 0.020s: http://whatismyip.akamai.com/
 		# 0.136s: https://get.geojs.io/v1/ip
 		# 0.024s: http://icanhazip.com/
-		# 0.027s: ifconfig.io
-		# 0.230s: https://smxi.org/opt/ip.php
+		# 0.027s: ifconfig.io ip page too big, too many lines, also returned ipv6 for some reason
+		# 0.230s: legacy: smxi ip tool, removed, too slow anyway
 		# 0.023s: https://api.ipify.org :: NOTE: hangs, widely variable times, don't use
 		my @urls = (!$wan_url) ? qw(http://whatismyip.akamai.com/ 
-		http://icanhazip.com/ https://smxi.org/opt/ip.php) : ($wan_url);
+		http://icanhazip.com/) : ($wan_url);
 		foreach (@urls){
-			$ua = 'ip' if $_ =~ /smxi/;
+			last if !$dl{'dl'};
+			# $ua = 'ip' if $_ =~ /smxi/;
 			$ip = main::download_file('stdout',$_,'',$ua);
 			if ($ip){
 				# print "$_\n";
@@ -20882,7 +21471,7 @@ sub check_wifi {
 }
 }
 
-## OpticalItem
+## OpticalItem ##
 {
 package OpticalItem;
 
@@ -21206,7 +21795,7 @@ sub drive_data_linux {
 }
 }
 
-## PartitionItem
+## PartitionItem ##
 {
 # these will be globally accessible via PartitionItem::filters()
 my ($fs_exclude,$fs_skip,$part_filter);
@@ -21307,14 +21896,14 @@ sub create_output {
 		 $fs !~ /^$fs_skip$/){
 			if ($show{'label'}){
 				if ($use{'filter-label'}){
-					$row->{'label'} = main::filter_partition('part', $row->{'label'}, '');
+					main::filter_partition('part', \$row->{'label'}, '');
 				}
 				$row->{'label'} ||= 'N/A';
 				$rows->[$j]{main::key($num++,0,2,'label')} = $row->{'label'};
 			}
 			if ($show{'uuid'}){
 				if ($use{'filter-uuid'}){
-					$row->{'uuid'} = main::filter_partition('part', $row->{'uuid'}, '');
+					main::filter_partition('part', \$row->{'uuid'}, '');
 				}
 				$row->{'uuid'} ||= 'N/A';
 				$rows->[$j]{main::key($num++,0,2,'uuid')} = $row->{'uuid'};
@@ -22122,7 +22711,7 @@ sub get_uuid {
 }
 }
 
-## ProcessItem 
+## ProcessItem ##
 {
 package ProcessItem;
 # header:
@@ -22299,7 +22888,7 @@ sub throttled {
 }
 }
 
-## RaidItem
+## RaidItem ##
 {
 package RaidItem;
 
@@ -23564,7 +24153,7 @@ sub check_zfs_status {
 }
 }
 
-## RamItem
+## RamItem ##
 {
 package RamItem;
 my ($speed_maps,$vendors,$vendor_ids);
@@ -25110,7 +25699,7 @@ sub ram_vendor {
 }
 }
 
-## RepoItem
+## RepoItem ##
 {
 package RepoItem;
 # easier to keep these package global, but undef after done
@@ -25160,7 +25749,7 @@ sub get {
 sub get_repos_linux {
 	eval $start if $b_log;
 	my $rows = $_[0];
-	my (@content,$data,@data2,@data3,@files,$repo,@repos);
+	my (@content,$data,@data2,@data3,@files,$pm_query,$repo,@repos);
 	my ($key,$path);
 	my $apk = '/etc/apk/repositories';
 	my $apt = '/etc/apt/sources.list';
@@ -25185,6 +25774,7 @@ sub get_repos_linux {
 	my $slackpkg_plus = '/etc/slackpkg/slackpkgplus.conf';
 	my $slapt_get = '/etc/slapt-get/';
 	my $slpkg = '/etc/slpkg/repositories.toml';
+	my $t2_src = '/usr/src/t2-src'; 
 	my $tazpkg = '/etc/slitaz/tazpkg.conf';
 	my $tazpkg_mirror = '/var/lib/tazpkg/mirror';
 	my $tce_app = '/usr/bin/tce';
@@ -25358,6 +25948,7 @@ sub get_repos_linux {
 	}
 	## sbopkg, sboui, slackpkg, slackpkg+, slapt_get, slpkg: Slackware + derived
 	# $slpkg = "$fake_data_dir/repo/slackware/slpkg-2.toml";
+	# $slpkg = "$fake_data_dir/repo/slackware/slpkg-new-format-1.toml";
 	# $sbopkg = "$fake_data_dir/repo/slackware/sbopkg-2.conf";
 	# $sboui_backend = "$fake_data_dir/repo/slackware/sboui-backend-1.conf";
 	if (-f $slackpkg || -f $slackpkg_plus || -d $slapt_get || -f $slpkg || 
@@ -25477,38 +26068,58 @@ sub get_repos_linux {
 			@content = ();
 		}
 		if (-f $slpkg){
-			my ($active,$name,$repo);
-			my $holder = '';
-			@data2 = main::reader($slpkg);
-			# We can't rely on the presence of empty lines as block separator.
-			push(@data2,'-eof-') if @data2;
+			my ($b_legacy,$b_new,$name,%repos);
+			@data2 = main::reader($slpkg,'strip');
 			# print Data::Dumper::Dumper \@data2;
 			# old: "https://download.salixos.org/x86_64/slackware-15.0/"
-			# new: ["https://slac...nl/people/alien/sbrepos/", "15.0/", "x86_64/"]
+			# old, new syntax: ["https://slac...nl/people/alien/sbrepos/", "15.0/", "x86_64/"]
+			# newest: each block starts with name, eg: [DEFAULT], [ALIEN]
 			foreach (@data2){
-				next if /^\s*([#\[]|$)/;
 				$_ = lc($_);
-				if (/^\s*(\S+?)_(repo(|_name|_mirror))\s*=\s*[\['"]{0,2}(.*?)[\]'"]{0,2}\s*$/ ||
-				$_ eq '-eof-'){
-					my ($key,$value) = ($2,$4);
-					if (($1 && $holder ne $1) || $_ eq '-eof-'){
-						$holder = $1;
-						if ($name && $repo){
-							if (!$active || $active =~ /^(true|1|yes)$/i){
-								push(@content,"$name ~ $repo");
-							}
-							($active,$name,$repo) = ();
-						}
-					}
-					if ($key){
-						if ($key eq 'repo'){
-							$active = $value;}
-						elsif ($key eq 'repo_name'){
-							$name = $value;}
-						elsif ($key eq 'repo_mirror'){
-							# map new form to a real url
-							$value =~ s/['"],\s*['"]//g;
-							$repo = $value;}
+				# first legacy line should be [REPO...]
+				if (!$b_legacy && !$b_new && /\[repositories\]/){
+					$b_legacy = 1;
+					next;
+				}
+				# otherwise [...] is repo name
+				if (!$b_legacy && /^\[(\S+)\]/){
+					$name = $1;
+					$b_new = 1;
+					next;
+				}
+				my ($key,$value) = split(/\s*=\s*/,$_);
+				next if !$key || !defined $value;
+				$value =~ s/^\[?["']|["']\]?$//g;
+				if ($b_legacy){
+					next if $key !~ /^(\S+?)_(repo(|_name|_mirror))$/;
+					$name = $1;
+					$key = $2;
+					if ($key eq 'repo'){
+						$repos{$name}->{'active'} = $value;}
+					elsif ($key eq 'repo_mirror'){
+						# map new form to a real url
+						$value =~ s/['"],\s*['"]//g;
+						$repos{$name}->{'repo'} = $value;}
+				}
+				elsif ($b_new){
+					if ($key eq 'repo' && $name eq 'default'){
+						$repos{'default'} = $value;
+						$name = '';
+						next;}
+					elsif ($key eq 'enable'){
+						$repos{$name}{'active'} = $value;}
+					elsif ($key eq 'mirror'){
+						$repos{$name}{'repo'} = $value;}
+				}
+			}
+			# print Data::Dumper::Dumper \%repos;
+			if (%repos){
+				foreach my $item (sort keys %repos){
+					next if ref $repos{$item} ne 'HASH';
+					if (!$repos{$item}->{'active'} || 
+					$repos{$item}->{'active'} =~ /^(true|1|yes)$/i){
+						my $default = ($repos{'default'} && $item eq $repos{'default'}) ? ' (default)' : '';
+						push(@content,$item . $default . ' ~ ' . $repos{$item}->{'repo'});
 					}
 				}
 			}
@@ -25734,6 +26345,30 @@ sub get_repos_linux {
 			push(@$rows,@$data);
 		}
 	}
+	## T2 Emerge
+	if (-d $t2_src){
+		if ($path = main::check_program('svn')){
+			@data2 = main::grabber("$path info $t2_src 2>/dev/null","\n",'strip');
+			main::writer("$debugger_dir/system-repo-data-t2-svn.txt",\@data2) if $debugger_dir;
+			if (@data2){
+				$repo = main::awk(\@data2,'URL:',2);
+				push(@content,$repo) if $repo;
+			}
+		}
+		if (!@content){
+			$key = repo_data('missing','t2-emerge');
+		}
+		else {
+			clean_url(\@content);
+			$key = repo_data('active','t2-emerge');
+			$pm_query = '';
+		}
+		push(@$rows, 
+		{main::key($num++,1,1,$key) => $t2_src},
+		[@content],
+		);
+		(@content,$pm_query,$repo) = ();
+	}
 	## xbps: Void 
 	if (-d $xbps_dir_1 || -d $xbps_dir_2){
 		@files = main::globber("$xbps_dir_1*.conf");
@@ -25750,6 +26385,8 @@ sub get_repos_linux {
 	if ($path = main::check_program('urpmq')){
 		@data2 = main::grabber("$path --list-media active --list-url 2>/dev/null","\n",'strip');
 		main::writer("$debugger_dir/system-repo-data-urpmq.txt",\@data2) if $debugger_dir;
+		# my $file = "$ENV{HOME}/bin/scripts/inxi/data/repo/urpmq/system-mrmazda-1.txt";
+		# @data2 = main::reader($file,'strip');
 		# Now we need to create the structure: repo info: repo path. We do that by 
 		# looping through the lines of the output and then putting it back into the
 		# <data>:<url> format print repos expects to see. Note this structure in the
@@ -25765,30 +26402,37 @@ sub get_repos_linux {
 			$_ =~ s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g;
 			$_ =~ s/\e\[([0-9];)?[0-9]+m//g;
 			# urpmq output is the same each line, repo name space repo url, can be:
-			# rsync://, ftp://, file://, http:// OR repo is locally mounted on FS in some cases
-			if (/(.+)\s([\S]+:\/\/.+)/){
+			# rsync://, ftp://, file://, http:// OR repo is locally mounted on /var FS in some cases
+			if (/(.+)\s(\S+:\/\/.+|\/var\/\S+)/){
 				# pack the repo url
-				push(@content, $1);
-				clean_url(\@content);
-				# get the repo
-				$repo = $2;
-				push(@$rows, 
-				{main::key($num++,1,1,'urpm repo') => $repo},
-				[@content],
-				);
-				@content = ();
+				push(@content, $1 . ' ~ ' . $2);
 			}
 		}
+		if (!@content){
+			$key = repo_data('missing','urpm');
+			$pm_query = main::message('pm-no-repos','urpmq');
+		}
+		else {
+			clean_url(\@content);
+			$key = repo_data('active','urpm');
+			$pm_query = '';
+		}
+		push(@$rows, 
+		{main::key($num++,1,1,$key) => $pm_query},
+		[@content],
+		);
+		@content = ();
 	}
-	# pisi: Pardus, Solus
+	# pisi: Pardus, Solus, Side
 	if ((-d $pisi_dir && ($path = main::check_program('pisi'))) || 
-	 (-d $eopkg_dir && ($path = main::check_program('eopkg')))){
-		#$path = 'eopkg';
+	(-d $eopkg_dir && ($path = main::check_program('eopkg')))){
+		# $path = 'eopkg';
 		my $which = ($path =~ /pisi$/) ? 'pisi': 'eopkg';
-		my $cmd = ($which eq 'pisi') ? "$path list-repo": "$path lr";
+		my $cmd = ($which eq 'pisi') ? "$path list-repo" : "$path lr";
 		# my $file = "$ENV{HOME}/bin/scripts/inxi/data/repo/solus/eopkg-2.txt";
 		# @data2 = main::reader($file,'strip');
 		@data2 = main::grabber("$cmd 2>/dev/null","\n",'strip');
+		push(@data2,'END') if @data2;
 		main::writer("$debugger_dir/system-repo-data-$which.txt",\@data2) if $debugger_dir;
 		# Now we need to create the structure: repo info: repo path
 		# We do that by looping through the lines of the output and then putting it 
@@ -25804,36 +26448,34 @@ sub get_repos_linux {
 		foreach (@data2){
 			next if /^\s*$/;
 			# need to dump leading/trailing spaces and clear out color codes for irc output
-			$_ =~ s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g;
-			$_ =~ s/\e\[([0-9];)?[0-9]+m//g;
-			if (/^\/|:\/\//){
-				push(@content, $_) if $repo;
-			}
-			# Local [inactive] Unstable [active]
-			elsif (/^(.*)\s\[([\S]+)\]/){
-				$repo = $1;
-				$repo = ($2 =~ /^activ/i) ? $repo : '';
-			}
-			if ($repo && @content){
-				clean_url(\@content);
-				$key = repo_data('active',$which);
-				push(@$rows, 
-				{main::key($num++,1,1,$key) => $repo},
-				[@content],
-				);
-				$repo = '';
-				@content = ();
+			if ($_ ne 'END'){
+				$_ =~ s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[m|K]//g;
+				$_ =~ s/\e\[([0-9];)?[0-9]+m//g;
+				if (/^\/|:\/\// && $repo){
+					push(@content, $repo . ' ~ ' . $_);
+					$repo = '';
+				}
+				# Local [inactive] Unstable [active]
+				elsif (/^(.*)\s\[([\S]+)\]/){
+					$repo = $1;
+					$repo = ($2 =~ /^activ/) ? $repo : '';
+				}
 			}
 		}
-		# last one if present
-		if ($repo && @content){
+		if (!@content){
+			$key = repo_data('missing',$which);
+			$pm_query = main::message('pm-no-repos',$which);
+		}
+		else {
 			clean_url(\@content);
 			$key = repo_data('active',$which);
-			push(@$rows, 
-			{main::key($num++,1,1,$key) => $repo},
-			[@content],
-			);
+			$pm_query = '';
 		}
+		push(@$rows, 
+		{main::key($num++,1,1,$key) => $pm_query},
+		[@content],
+		);
+		(@content,$repo) = ();
 	}
 	## nix: General pm for Linux/Unix
 	if (-f $nix && ($path = main::check_program('nix-channel'))){
@@ -26010,7 +26652,7 @@ sub set_repo_keys {
 	'cards-missing' => 'No active CARDS collections in',
 	'dnf-active' => 'Active dnf repos in',
 	'dnf-missing' => 'No active dnf repos in',
-	'eopkg-active' => 'Active eopkg repo',
+	'eopkg-active' => 'Active eopkg repos',
 	'eopkg-missing' => 'No active eopkg repos found',
 	'files-missing' => 'No repo files found in',
 	'freebsd-active' => 'FreeBSD update server',
@@ -26034,7 +26676,7 @@ sub set_repo_keys {
 	'pacman-missing' => 'No active pacman repos in',
 	'pacman-g2-active' => 'Active pacman-g2 repo servers in',
 	'pacman-g2-missing' => 'No active pacman-g2 repos in',
-	'pisi-active' => 'Active pisi repo',
+	'pisi-active' => 'Active pisi repos',
 	'pisi-missing' => 'No active pisi repos found',
 	'portage-active' => 'Enabled portage sources in',
 	'portage-missing' => 'No enabled portage sources in',
@@ -26055,10 +26697,14 @@ sub set_repo_keys {
 	'slaptget-missing' => 'No active slapt-get repos in',
 	'slpkg-active' => 'Active slpkg repos in',
 	'slpkg-missing' => 'No active slpkg repos in',
+	't2-emerge-active' => 'Active T2 Emerge URL in',
+	't2-emerge-missing' => 'No active T2 Emerge URLs in',
 	'tazpkg-active' => 'tazpkg mirrors in',
 	'tazpkg-missing' => 'No tazpkg mirrors in',
 	'tce-active' => 'tce mirrors in',
 	'tce-missing' => 'No tce mirrors in',
+	'urpm-active' => 'Active urpm repos',
+	'urpm-missing' => 'No active urpm repos found',
 	'xbps-active' => 'Active xbps repos in',
 	'xbps-missing' => 'No active xbps repos in',
 	'yum-active' => 'Active yum repos in',
@@ -26077,6 +26723,7 @@ sub repo_data {
 	return $repo_keys{$type . '-' . $status};
 }
 
+# Args: 0: repo file; 1: pm type; 2: repo line search, 3: split; 4: count
 sub repo_builder {
 	eval $start if $b_log;
 	my ($file,$type,$search,$split,$count) = @_;
@@ -26137,7 +26784,7 @@ sub file_path {
 }
 }
 
-## SensorItem
+## SensorItem ##
 {
 package SensorItem;
 my $gpu_data = [];
@@ -26692,8 +27339,8 @@ sub linux_sensors_data {
 				$sensors->{'temp-unit'} = set_temp_unit($sensors->{'temp-unit'},$working_unit) if $working_unit;
 			}
 			elsif ($_ =~ /^T?(dimm|mem|sodimm).*?:([0-9\.]+)[\s°]*(C|F)/i){
-				$sensors->{'sodimm-temp'} = $1;
-				$working_unit = $2;
+				$sensors->{'sodimm-temp'} = $2;
+				$working_unit = $3;
 				$sensors->{'temp-unit'} = set_temp_unit($sensors->{'temp-unit'},$working_unit) if $working_unit;
 			}
 			# for temp1/2 only use temp1/2 if they are null or greater than the last ones
@@ -27545,7 +28192,7 @@ sub gpu_sensor_data {
 }
 }
 
-## SlotItem
+## SlotItem ##
 {
 package SlotItem;
 my ($sys_slots);
@@ -27855,7 +28502,7 @@ sub slot_children_recursive {
 }
 }
 
-## SwapItem 
+## SwapItem ##
 {
 package SwapItem;
 
@@ -27962,14 +28609,14 @@ sub create_output {
 		}
 		if ($show{'label'} && ($row->{'label'} || $row->{'swap-type'} eq 'partition')){
 			if ($use{'filter-label'}){
-				$row->{'label'} = main::filter_partition('part', $row->{'label'}, '');
+				 main::filter_partition('part', \$row->{'label'}, '');
 			}
 			$row->{'label'} ||= 'N/A';
 			$rows->[$j]{main::key($num++,0,2,'label')} = $row->{'label'};
 		}
 		if ($show{'uuid'} && ($row->{'uuid'} || $row->{'swap-type'} eq 'partition')){
 			if ($use{'filter-uuid'}){
-				$row->{'uuid'} = main::filter_partition('part', $row->{'uuid'}, '');
+				main::filter_partition('part', \$row->{'uuid'}, '');
 			}
 			$row->{'uuid'} ||= 'N/A';
 			$rows->[$j]{main::key($num++,0,2,'uuid')} = $row->{'uuid'};
@@ -27979,7 +28626,7 @@ sub create_output {
 }
 }
 
-## UnmountedItem
+## UnmountedItem ##
 {
 package UnmountedItem;
 
@@ -28077,14 +28724,14 @@ sub create_output {
 		if (($show{'label'} || $show{'uuid'}) && $fs !~ /^$fs_skip$/){
 			if ($show{'label'}){
 				if ($use{'filter-label'}){
-					$row->{'label'} = main::filter_partition('part', $row->{'label'}, '');
+					main::filter_partition('part', \$row->{'label'}, '');
 				}
 				$row->{'label'} ||= 'N/A';
 				$rows->[$j]{main::key($num++,0,2,'label')} = $row->{'label'};
 			}
 			if ($show{'uuid'}){
 				if ($use{'filter-uuid'}){
-					$row->{'uuid'} = main::filter_partition('part', $row->{'uuid'}, '');
+					main::filter_partition('part', \$row->{'uuid'}, '');
 				}
 				$row->{'uuid'} ||= 'N/A';
 				$rows->[$j]{main::key($num++,0,2,'uuid')} = $row->{'uuid'};
@@ -28285,7 +28932,7 @@ sub unmounted_filesystem {
 }
 }
 
-## UsbItem
+## UsbItem ##
 {
 package UsbItem;
 
@@ -28431,7 +29078,7 @@ sub usb_output {
 }
 }
 
-## WeatherItem
+## WeatherItem ##
 # add metric / imperial (us) switch
 {
 package WeatherItem;
@@ -29121,6 +29768,7 @@ sub get_location {
 		$loc_arg = $loc{'zip'};
 	}
 	$country = ($loc{'country3'}) ? $loc{'country3'} : $loc{'country'};
+	$country ||= 'Country N/A';
 	$city = ($loc{'city'}) ? $loc{'city'} : 'City N/A';
 	$state = ($loc{'region-id'}) ? $loc{'region-id'} : 'Region N/A';
 	$loc_string = main::filter("$city, $state, $country");
@@ -29409,7 +30057,7 @@ sub set_dboot_data {
 	eval $end if $b_log;
 }
 
-## DesktopData
+## DesktopData ##
 # returns array:
 # 0: desktop name
 # 1: version
@@ -29643,7 +30291,9 @@ sub de_kde_tde_data {
 	if ($desktop_session eq 'trinity' || $xdg_desktop eq 'trinity' || 
 	(!$desktop_session && !$xdg_desktop && @{$ps_data{'de-ps-detect'}} && 
 	(grep {/^tde/} @{$ps_data{'de-ps-detect'}}))){
-		if ($program = main::check_program('kdesktop')){
+		# 14.2 moved kdesktop to location not in PATH in some distros, so either of these will fail
+		if (($program = main::check_program('kdesktop')) || 
+		($program = main::check_program('twin'))){
 			($desktop->[0],$desktop->[1],$v_data) = ProgramData::full('kdesktop-trinity',$program,0,'raw');
 		}
 		if ($extra > 1 && $v_data && @$v_data){
@@ -29799,9 +30449,11 @@ sub de_env_data {
 		my @desktops =(
 		[1,'unity','unity','',''],
 		[0,'budgie','budgie-desktop','','gtk'],
+		[1,'cosmic','cosmic-session','','iced'],
 		# debian package: lxde-core. 
 		# NOTE: some distros fail to set XDG data for root, ps may get it
 		[1,'lxde','lxpanel','','gtk-na',',^lxsession$'], # no gtk v data, not same as system
+		[1,'sde','sde','','gtk-na',''], # no lxpanel, nothing returns version
 		[1,'razor','razor-session','','qt','^razor-session$'],
 		# BAD: lxqt-about opens dialogue, sigh. 
 		# Checked, lxqt-panel does show same version as lxqt-about/session
@@ -29937,7 +30589,7 @@ sub tk_gtk_data {
 	eval $end if $b_log;
 }
 
-# This handles stray tooltips that won't get versions, yet anyway.
+# This handles stray toolkits that won't get versions, yet anyway.
 sub tk_misc_data {
 	eval $start if $b_log;
 	if ($tk_test eq 'gtk-na'){
@@ -30267,7 +30919,7 @@ sub set_xprop {
 }
 }
 
-## DeviceData
+## DeviceData ##
 # creates arrays: $devices{'audio'}; $devices{'graphics'}; $devices{'hwraid'}; 
 # $devices{'network'}; $devices{'timer'} and local @devices for logging/debugging
 # 0: type
@@ -31059,7 +31711,7 @@ sub get_device_temp {
 	return $temp;
 }
 
-## DiskDataBSD
+## DiskDataBSD ##
 # handles disks and partition extra data for disks bsd, raid-zfs, 
 # partitions, swap, unmounted
 # glabel: partID, logical/physical-block-size, uuid, label, size
@@ -31374,7 +32026,7 @@ sub set_gpart_data {
 }
 }
 
-## DmData
+## DmData ##
 # Public method: get()
 # returns hash ref of array of arrays for dm/lm
 # hash: dm, lm
@@ -31439,9 +32091,11 @@ sub get_dm_lm {
 		lightdm loginx lxdm ly mdm mlogind nodm pcdm qingy sddm slim slimski tdm 
 		udm wdm x3dm xdm xdmctl xenodm);
 	}
-	# greetd frontends: agreety dlm gtkgreet qtgreet tuigreet wlgreet
+	# greetd frontends: agreety cosmic-greeter dlm gtkgreet qtgreet tuigreet 
+	# wlgreet
+	# slick, elephant greeters for lightdm so aren't really lm
 	else {
-		@dms = qw(elogind greetd seatd tbsm);
+		@dms = qw(elogind greetd qtgreet seatd tbsm);
 	}
 	# print Data::Dumper::Dumper \@glob;
 	# used to test for .pid/lock type file or directory, now just see if the 
@@ -31495,7 +32149,7 @@ sub test_ps_dm {
 }
 }
 
-## DistroData
+## DistroData ##
 {
 package DistroData;
 my ($id_src,@osr,@working);
@@ -31610,10 +32264,11 @@ sub get_distro_linux {
 	# order matters!
 	my @derived = qw(antix-version aptosid-version bodhibuilder.conf kanotix-version 
 	knoppix-version pclinuxos-release mandrake-release manjaro-release mx-version 
-	pardus-release porteus-version q4os_version sabayon-release 
+	pardus-release porteus-version q4os_version sabayon-release side-release
 	siduction-version sidux-version slax-version slint-version slitaz-release 
 	solusos-release turbolinux-release zenwalk-version);
 	my $derived_str = join('|', @derived);
+	# if t2 ever adds a standard distro file name, add here. Ideally it adds os-release
 	my @primary = qw(altlinux-release arch-release gentoo-release redhat-release 
 	slackware-version SuSE-release);
 	my $primary_str = join('|', @primary);
@@ -31622,7 +32277,7 @@ sub get_distro_linux {
 	my $lsb_good_str = 'mandrake-release|mandriva-release|mandrakelinux-release|';
 	$lsb_good_str .= 'manjaro-release';
 	my $osr_good_str = 'altlinux-release|arch-release|mageia-release|';
-	$osr_good_str .= 'pclinuxos-release|rpi-issue|SuSE-release';
+	$osr_good_str .= 'pclinuxos-release|rpi-issue|side-release|SuSE-release';
 	# We need these empirically verified one by one as they appear, but always remember
 	# that stuff changes, legacy, deprecated, but these ideally are going to be right
 	my $osr_good = 'antergos|chakra|fedora|guix|mageia|manjaro|oracle|pclinuxos|';
@@ -31637,19 +32292,28 @@ sub get_distro_linux {
 	$etc_issue = main::reader($issue,'strip',0) if -r $issue;
 	# debian issue can end with weird escapes like \n \l 
 	# antergos: Antergos Linux \r (\l)
-	$etc_issue = main::clean_characters($etc_issue) if $etc_issue;
+	main::clean_characters(\$etc_issue) if $etc_issue;
 	# Note: always exceptions, so wild card after release/version: 
 	# /etc/lsb-release-crunchbang
 	# Wait to handle since crunchbang file is one of the few in the world that 
 	# uses this method
-	@{$distro->{'files'}} = main::globber('/etc/{*[-_]{[rR]elease,[vV]ersion}*,issue}');
-	push(@{$distro->{'files'}}, '/etc/bodhibuilder.conf') if -r '/etc/bodhibuilder.conf'; # legacy
+	@{$distro->{'files'}} = main::globber('/etc/{*[-_]{[rR]elease,[vV]ersion}*,VERSION,issue}');
 	@osr = main::reader($os_release) if -r $os_release;
+	# a few with custom distro file locations
+	if (-r '/etc/bodhibuilder.conf'){
+		push(@{$distro->{'files'}}, '/etc/bodhibuilder.conf'); # legacy
+	}
 	if (-f '/etc/bodhi/info'){
 		$lsb_release = '/etc/bodhi/info';
 		$distro->{'file'} = $lsb_release;
 		$distro->{'issue-skip'} = 1;
 		push(@{$distro->{'files'}}, $lsb_release);
+	}
+	# their issue is full of ascii art, and they use irregular distro file name
+	elsif (-d '/usr/src/t2-src' && -s '/etc/VERSION'){
+		$distro->{'file'} = '/etc/VERSION';
+		push(@{$distro->{'files'}}, $distro->{'file'});
+		$distro->{'issue-skip'} = 1;
 	}
 	$distro->{'issue'} = $issue if -f $issue;
 	$distro->{'lsb'} = $lsb_release if -f $lsb_release;
@@ -31696,7 +32360,8 @@ sub get_distro_linux {
 			# Special case, to force manjaro/antergos which also have arch-release
 			# manjaro should use lsb, which has the full info, arch uses os release
 			# antergos should use /etc/issue. We've already checked os-release above
-			if ($distro->{'id'} eq 'antergos' || (grep {/antergos|chakra|manjaro/} @{$distro->{'files'}})){
+			if ($distro->{'id'} eq 'antergos' || 
+			(grep {/antergos|chakra|manjaro/} @{$distro->{'files'}})){
 				@{$distro->{'files'}} = grep {!/arch-release/} @{$distro->{'files'}};
 			}
 			my $dist_files_str = join('|', @{$distro->{'files'}});
@@ -31727,7 +32392,7 @@ sub get_distro_linux {
 	if (-r '/etc/antiX'){
 		@working = main::reader('/etc/antiX');
 		$distro->{'name'} = main::awk(\@working,'antix.*\.iso') if @working;
-		$distro->{'name'} = main::clean_characters($distro->{'name'}) if $distro->{'name'};
+		main::clean_characters(\$distro->{'name'}) if $distro->{'name'};
 		push(@{$distro->{'method'}},'file: /etc/antiX');
 	}
 	# This handles case where only one release/version file was found, and it's lsb-release. 
@@ -31773,9 +32438,7 @@ sub get_distro_linux {
 			}
 			push(@{$distro->{'method'}},'default: distro file');
 		}
-		if ($distro->{'name'}){
-			$distro->{'name'} = main::clean_characters($distro->{'name'});
-		}
+		main::clean_characters(\$distro->{'name'}) if $distro->{'name'};
 	}
 	# Otherwise try  the default debian/ubuntu/distro /etc/issue file
 	elsif ($distro->{'issue'}){
@@ -31803,8 +32466,14 @@ sub get_distro_linux {
 				push(@{$distro->{'method'}},'issue-id; from program version');
 			}
 			else {
-				$distro->{'name'} =  $etc_issue;
-				push(@{$distro->{'method'}},'issue: source');
+				# make sure it has letters in name!
+				if (($lc_issue =~ tr/[a-z]/[a-z]/) > 3){
+					$distro->{'name'} = $etc_issue;
+					push(@{$distro->{'method'}},'issue: source');
+				}
+				else {
+					push(@{$distro->{'method'}},'issue: invalid distro value');
+				}
 				# This handles an arch bug where /etc/arch-release is empty and /etc/issue 
 				# is corrupted only older arch installs that have not been updated should 
 				# have this fallback required, new ones use os-release
@@ -32063,7 +32732,7 @@ sub system_base_linux {
 		foreach my $key (keys %base_version){
 			if (-r $base_version{$key} && $distro->{'name'} =~ /($key)/i){
 				$distro->{'base'} = main::reader($base_version{$key},'strip',0);
-				$distro->{'base'} = main::clean_characters($distro->{'base'}) if $distro->{'base'};
+				main::clean_characters(\$distro->{'base'}) if $distro->{'base'};
 				push(@{$distro->{'base-method'}},"base_version: file: $key");
 				last;
 			}
@@ -32465,7 +33134,7 @@ sub dbg_distro_files {
 }
 }
 
-## DmidecodeData 
+## DmidecodeData ##
 {
 package DmidecodeData;
 
@@ -32574,7 +33243,8 @@ sub get_driver_modules {
 	return $modules;
 }
 
-## GlabelData: public methods: get()
+## GlabelData ##
+# public methods: get()
 # Used to partitions, swap, RAID ZFS gptid path standard name, like ada0p1
 {
 package GlabelData;
@@ -32638,7 +33308,7 @@ sub get_hostname {
 	return $hostname;
 }
 
-## InitData
+## InitData ##
 {
 package InitData;
 my ($init,$init_version,$program) = ('','','');
@@ -32849,7 +33519,7 @@ sub get_runlevel_default {
 }
 }
 
-## IpData
+## IpData ##
 {
 package IpData;
 
@@ -32867,7 +33537,8 @@ sub set {
 
 sub set_ip_addr {
 	eval $start if $b_log;
-	my @data = main::grabber($alerts{'ip'}->{'path'} . " addr 2>/dev/null",'\n','strip');
+	my ($b_skip,$broadcast,$if,$if_id,$ip,$scope,$type);
+	my (@data,@ips,@temp);
 	if ($fake{'ip-if'}){
 		# my $file = "$fake_data_dir/if/scope-ipaddr-1.txt";
 		# my $file = "$fake_data_dir/network/ip-addr-blue-advance.txt";
@@ -32876,7 +33547,9 @@ sub set_ip_addr {
 		# my $file = "$fake_data_dir/network/ppoe/ppoe-ip-addr-3.txt";
 		# @data = main::reader($file,'strip') or die $!;
 	}
-	my ($b_skip,$broadcast,$if,$if_id,$ip,@ips,$scope,$type,@temp,@temp2);
+	else {
+		@data = main::grabber($alerts{'ip'}->{'path'} . " addr 2>/dev/null",'\n','strip');
+	}
 	foreach (@data){
 		if (/^[0-9]/){
 			# print "$_\n";
@@ -32921,15 +33594,17 @@ sub set_ip_addr {
 
 sub set_ifconfig {
 	eval $start if $b_log;
+	my ($b_skip,$broadcast,$duplex,$if,$if_id,$ip,$mac,$scope,$speed,$state,$type);
+	my (@data,@ips,@ips_bsd,@temp);
 	# whitespace matters!! Don't use strip
-	my @data = main::grabber($alerts{'ifconfig'}->{'path'} . " 2>/dev/null",'\n','');
 	if ($fake{'ip-if'}){
 		#  my $file = "$fake_data_dir/network/ppoe/ppoe-ifconfig-all-1.txt";
 		# my $file = "$fake_data_dir/network/vps-ifconfig-1.txt";
 		# @data = main::reader($file) or die $!;
 	}
-	my ($b_skip,$broadcast,$if,@ips_bsd,$ip,@ips,$scope,$if_id,$type,@temp,@temp2);
-	my ($state,$speed,$duplex,$mac);
+	else {
+		@data = main::grabber($alerts{'ifconfig'}->{'path'} . " 2>/dev/null",'\n','');
+	}
 	foreach (@data){
 		if (/^[\S]/i){
 			# print "$_\n";
@@ -33064,7 +33739,7 @@ sub get_kernel_clocksource {
 	eval $end if $b_log;
 }
 
-## KernelCompiler
+## KernelCompiler ##
 {
 package KernelCompiler;
 
@@ -33120,23 +33795,36 @@ sub version_proc {
 		my $version;
 		if ($fake{'compiler'}){
 			# $result = $result =~ /\*(gcc|clang)\*eval\*/;
+			## CLANG ##
 			# $result='Linux version 5.4.0-rc1 (sourav@archlinux-pc) (clang version 9.0.0 (tags/RELEASE_900/final)) #1 SMP PREEMPT Sun Oct 6 18:02:41 IST 2019';
 			# $result='Linux version 5.8.3-fw1 (fst@x86_64.frugalware.org) ( OpenMandriva 11.0.0-0.20200819.1 clang version 11.0.0 (/builddir/build/BUILD/llvm-project-release-11.x/clang 2a0076812cf106fcc34376d9d967dc5f2847693a), LLD 11.0.0)';
+			# $result='Linux version 6.0.8-0-generic (chimera@chimera) (clang version 15.0.4, LLD 15.0.4) #1 SMP PREEMPT_DYNAMIC Fri Nov 11 13:45:29 UTC 2022';
+			## GCC BASIC LEGACY ##
+			# $result='Linux version 2.4.27-2-386 (horms@tabatha.lab.ultramonkey.org) (gcc version 3.3.5 (Debian 1:3.3.5-12)) #1 Mon May 16 16:47:51 JST 2005';
+			# $result='Linux version 2.6.18-5-686 (Debian 2.6.18.dfsg.1-17) (dannf@debian.org) (gcc version 4.1.2 20061115 (prerelease) (Debian 4.1.1-21)) #1 SMP Mon Dec 24 16:41:07 UTC 2007';
+			# $result='Linux version 4.3.6-1-ck (squishy@ease) (gcc version 5.3.0 (GCC) ) #1 SMP PREEMPT Fri Feb 19 20:14:58 EST 2016';
+			## GCC HURD ##
+			# $result='Linux version 2.6.1 (GNU 0.9 GNU-Mach 1.8+git20201007-486/Hurd-0.9 i686-AT386)';
+			## GCC BSDs ##
+			# $result='NetBSD version 9.1 (netbsd@localhost) (gcc version 7.5.0) NetBSD 9.1 (GENERIC) #0: Sun Oct 18 19:24:30 UTC 2020';
+			## GCC GENERAL ##
+			# $result='Linux version 5.8.0-2-amd64 (debian-kernel@lists.debian.org) (gcc-10 (Debian 10.2.0-9) 10.2.0, GNU ld (GNU Binutils for Debian) 2.35) #1 SMP Debian 5.8.10-1 (2020-09-19)';
 			# $result='Linux version 5.8.0-18-generic (buildd@lgw01-amd64-057) (gcc (Ubuntu 10.2.0-5ubuntu2) 10.2.0, GNU ld (GNU Binutils for Ubuntu) 2.35) #19-Ubuntu SMP Wed Aug 26 15:26:32 UTC 2020';
 			# $result='Linux version 5.8.9-fw1 (fst@x86_64.frugalware.org) (gcc (Frugalware Linux) 9.2.1 20200215, GNU ld (GNU Binutils) 2.35) #1 SMP PREEMPT Tue Sep 15 16:38:57 CEST 2020';
-			# $result='Linux version 5.8.0-2-amd64 (debian-kernel@lists.debian.org) (gcc-10 (Debian 10.2.0-9) 10.2.0, GNU ld (GNU Binutils for Debian) 2.35) #1 SMP Debian 5.8.10-1 (2020-09-19)';
 			# $result='Linux version 5.9.0-5-amd64 (debian-kernel@lists.debian.org) (gcc-10 (Debian 10.2.1-1) 10.2.1 20201207, GNU ld (GNU Binutils for Debian) 2.35.1) #1 SMP Debian 5.9.15-1 (2020-12-17)';
-			# $result='Linux version 2.6.1 (GNU 0.9 GNU-Mach 1.8+git20201007-486/Hurd-0.9 i686-AT386)';
-			# $result='NetBSD version 9.1 (netbsd@localhost) (gcc version 7.5.0) NetBSD 9.1 (GENERIC) #0: Sun Oct 18 19:24:30 UTC 2020';
-			 #$result='Linux version 6.0.8-0-generic (chimera@chimera) (clang version 15.0.4, LLD 15.0.4) #1 SMP PREEMPT_DYNAMIC Fri Nov 11 13:45:29 UTC 2022';
-			# 2023 ubuntu, sigh..
+			## 2023 ubuntu, sigh..
 			# $result='Linux version 6.5.8-1-liquorix-amd64 (steven@liquorix.net) (gcc (Debian 13.2.0-4) 13.2.0, GNU ld (GNU Binutils for Debian) 2.41) #1 ZEN SMP PREEMPT liquorix 6.5-9.1~trixie (2023-10-19)';
 			# $result='Linux version 6.5.0-9-generic (buildd@bos03-amd64-043) (x86_64-linux-gnu-gcc-13 (Ubuntu 13.2.0-4ubuntu3) 13.2.0, GNU ld (GNU Binutils for Ubuntu) 2.41) #9-Ubuntu SMP PREEMPT_DYNAMIC Sat Oct  7 01:35:40 UTC 2023';
 			# $result='Linux version 6.5.13-un-def-alt1 (builder@localhost.localdomain) (gcc-13 (GCC) 13.2.1 20230817 (ALT Sisyphus 13.2.1-alt2), GNU ld (GNU Binutils) 2.41.0.20230826) #1 SMP PREEMPT_DYNAMIC Wed Nov 29 15:54:38 UTC 2023';
+			## issue 310, 2024 redhat, returned: gcc v: 2.40-14.fc39
+			# $result='Linux version 6.11.2-300.fc41.x86_64 (mockbuild@b8af20a4150648399241be170922971e) (gcc (GCC) 14.2.1 20240912 (Red Hat 14.2.1-3), GNU ld version 2.43.1-2.fc41) #1 SMP PREEMPT_DYNAMIC Fri Oct  4 16:44:08 UTC 2024';
+			## note the new (x86_64-linux-gnu- in front of gcc, this is 2024-12-10 debian sid
+			# $result='Linux version 6.11.10-amd64 (debian-kernel@lists.debian.org) (x86_64-linux-gnu-gcc-14 (Debian 14.2.0-8) 14.2.0, GNU ld (GNU Binutils for Debian) 2.43.1) #1 SMP PREEMPT_DYNAMIC Debian 6.11.10-1 (2024-11-23)';
 		}
 		# Note: zigcc is only theoretical, but someone is going to try it!
 		# cleanest, old style: 'clang version 9.0.0 (' | 'gcc version 7.5.0'
-		if ($result =~ /(gcc|clang|zigcc).*?version\s([^,\s\)]+)/){
+		# note; issue 310 forces [^\d]*\s instead of old .*?
+		if ($result =~ /(gcc|clang|zigcc)[^\d]*\sversion\s([^,\s\)]+)/){
 			@$compiler = ($1,$2);
 		}
 		# new styles: compiler + stuff + x.y.z. Ignores modifiers to number: -4, -ubuntu
@@ -33177,7 +33865,7 @@ sub get_kernel_data {
 	return $kernel;
 }
 
-## KernelParameters
+## KernelParameters ##
 {
 package KernelParameters;
 
@@ -33212,7 +33900,8 @@ sub parameters_bsd {
 }
 }
 
-## LsblkData: public methods: set(), get()
+## LsblkData ##
+# public methods: set(), get()
 {
 package LsblkData;
 
@@ -33304,7 +33993,7 @@ sub set_mapper {
 	eval $end if $b_log;
 }
 
-## MemoryData
+## MemoryData ##
 {
 package MemoryData;
 
@@ -33952,7 +34641,7 @@ sub get_module_version {
 	return $version;
 }
 
-## PackageData
+## PackageData ##
 # Note: this outputs the key/value pairs ready to go and is
 # called from either -r or -Ix, -r precedes. 
 {
@@ -33982,7 +34671,10 @@ sub create_output {
 	}
 	else {
 		if ($type eq 'inner' || $pms{'disabled'}){
-			$total = 'N/A' if $extra < 2;
+			# only total key exists, which is 0.
+			if ($extra < 2 || scalar keys %pms == 1){
+				$total = 'N/A';
+			}
 		}
 		else {
 			$total = main::message('package-data');
@@ -33998,7 +34690,7 @@ sub create_output {
 				last;
 			}
 		}
-		$total = '' if !$b_mismatch;
+		$total = '' if !$b_mismatch && %pms;
 	}
 	$output->{main::key($$num++,1,1,'Packages')} = $total;
 	# if blocked pm secondary, only show if no total or improbable total
@@ -34045,6 +34737,7 @@ sub package_counts {
 	# 0: key; 1: program; 2: p/d [no-list]; 3: arg/path/no-list; 4: 0/1 use lib; 
 	# 5: lib slice; 6: lib splitter; 7: optional eval test; 
 	# 8: optional installed tool tests for -ra
+	# NOTE: 2 if p must have 3, option to use with command.
 	# needed: cards [nutyx], urpmq [mageia]
 	my @pkg_managers = (
 	['alps','alps','p','showinstalled',1,0,''],
@@ -34060,6 +34753,7 @@ sub package_counts {
 	['guix-sys','guix','p','package -p "/run/current-system/profile" -I',1,0,''],
 	['guix-usr','guix','p','package -I',1,0,''],
 	['kiss','kiss','p','list',1,0,''],
+	['mine','mine','p','-q',1,0,'','',['gasgui','gastone']],
 	['mport','mport','p','list',1,0,''],
 	# netpkg puts packages in same place as slackpkg, only way to tell apart
 	['netpkg','netpkg','d','/var/lib/pkgtools/packages/*',1,5,'\\/',
@@ -34075,8 +34769,9 @@ sub package_counts {
 	 ['argon','aura','aurutils','baph','cylon','octopi','pacaur','pacseek',
 	 'pakku','pamac','paru','pikaur','trizen','yaourt','yay','yup']], 
 	['pacman-g2','pacman-g2','p','-Q',1,0,'','',],
+	['pisi','pisi','p','li',1,0,'','',],
 	['pkg','pkg','d','/var/db/pkg/*',1,0,''], # 'pkg list' returns non programs
-	['pkg_add','pkg_info','p','',1,0,''], # OpenBSD has set of tools, not 1 pm
+	['pkg_add','pkg_info','p','-a',1,0,''], # OpenBSD has set of tools, not 1 pm
 	# like cards, avoid pkginfo directly due to python pm being so slow
 	# but pkgadd is also found in scratch
 	['pkgutils','pkginfo','p','-i',1,0,'','main::check_program(\'pkgadd\')'],
@@ -34089,14 +34784,11 @@ sub package_counts {
 	 ['sbopkg','sboui','slackpkg','slapt-get','slpkg','swaret']],
 	# rpm way too slow without nodigest/sig!! confirms packages exist
 	# but even with, MASSIVELY slow in some cases, > 20, 30 seconds!!!!
-	# find another way to get rpm package counts or don't show this feature for rpm!!
-	['rpm','rpm','force','-qa --nodigest --nosignature',1,0,'',
-	 'main::check_program(\'apt-get\') && main::check_program(\'dpkg\')',
+	# Find another way to get rpm package counts to get rid of --rpm requirement!
+	['rpm','rpm','force','-qa --nodigest --nosignature',1,0,'','skip_pm($pm)',
 	 ['dnf','packagekit','up2date','urpmi','yast','yum','zypper']],
-	# uncommon case where apt-get frontend for rpm, w/o dpkg, like AltLinux did
-	['rpm-apt','rpm','p','-qa',1,0,'',
-	 'main::check_program(\'apt-get\') && !main::check_program(\'dpkg\')',
-	 ['apt-get','rpm']],
+	# uncommon case where apt-get frontend for rpm, w/o dpkg, eg AltLinux
+	['rpm-apt','rpm','p','-qa',1,0,'','skip_pm($pm)',['apt-get','rpm']],
 	# scratch is a programming language too, with software called scratch
 	['scratch','pkgbuild','d','/var/lib/scratchpkg/index/*/.pkginfo',1,5,'\\/',
 	 '-d \'/var/lib/scratchpkg\''],
@@ -34106,8 +34798,6 @@ sub package_counts {
 	# ['spkg','spkg','p','--installed',1,0,''],
 	['tazpkg','tazpkg','p','list',1,0,'','',['tazpkgbox','tazpanel']],
 	['tce','tce-status','p','-i',1,0,'','',['apps','tce-load']],
-	# note: I believe mageia uses rpm internally but confirm
-	# ['urpmi','urpmq','p','??',1,0,''], 
 	['xbps','xbps-query','p','-l',1,1,''],
 	# ['xxx-brew','brew','p','--cellar',0,0,''], # verify how this works
 	['zzz-flatpak','flatpak','p','list',0,0,''],
@@ -34116,9 +34806,11 @@ sub package_counts {
 	my ($program);
 	foreach my $pm (@pkg_managers){
 		if ($program = main::check_program($pm->[1])){
+			print "0: test: $pm->[0]: $pm->[1]\n" if $dbg[67];
 			next if $pm->[7] && !eval $pm->[7];
-			my ($disabled,$libs,@list,$pmts);
-			if ($pm->[2] eq 'p' || ($pm->[2] eq 'force' && check_run($pm))){
+			print "1: use:  $pm->[0]: $pm->[1]\n" if $dbg[67];
+			my ($disabled,$libs,@list,$pm_tools);
+			if ($pm->[2] eq 'p' || ($pm->[2] eq 'force' && use_pm($pm))){
 				chomp(@list = qx($program $pm->[3] 2>/dev/null)) if $pm->[3];
 			}
 			elsif ($pm->[2] eq 'd'){
@@ -34154,14 +34846,14 @@ sub package_counts {
 					}
 				}
 				if (@tools){
-					main::make_list_value(\@tools,\$pmts,',','sort');
+					main::make_list_value(\@tools,\$pm_tools,',','sort');
 				}
 			}
 			$pms{$pm->[0]} = {
 			'disabled' => $disabled,
 			'pkgs' => $count,
 			'libs' => $libs,
-			'tools' => $pmts,
+			'tools' => $pm_tools,
 			};
 			$pms{'total'} += $count if defined $count;
 			# print Data::Dumper::Dumper \%pms;
@@ -34184,20 +34876,51 @@ sub appimage_counts {
 	}
 }
 
-sub check_run {
+# skip is if false, so skip conditions must be false, non skip true.
+# args: 0: $pm ref, used directly
+sub skip_pm {
+	my $b_use;
+	# print Data::Dumper::Dumper $_[0];
+	if (${_[0]}->[1] eq 'rpm'){
+		# use only if not urpmi and not rpm-apt, this covers most cases, and use_pm
+		# fine tunes the coverage.
+		if (${_[0]}->[0] eq 'rpm'){
+			if (!(main::check_program('apt-get') && !main::check_program('dpkg'))){
+				$b_use = 1;
+			}
+		}
+		# this covers corner case of alt linux, that has apt-get but not dpkg
+		elsif (${_[0]}->[0] eq 'rpm-apt'){
+			if (main::check_program('apt-get') && !main::check_program('dpkg')){
+				$b_use = 1;
+			}
+		}
+	}
+	return $b_use;
+}
+
+# args: 0: $pm ref, use directly
+sub use_pm {
 	if ($force{'pkg'}){
+		print " use_pm: --rpm force\n" if $dbg[67];
 		return 1;
 	}
 	elsif (${_[0]}->[1] eq 'rpm'){
 		# testing for core wrappers for rpm, these should not be present in non
-		# redhat/suse based systems. mageia has urpmi, dnf, yum
+		# mageia/redhat/suse based systems. mageia has urpmi, dnf, yum
 		foreach my $tool (('dnf','up2date','urpmi','yum','zypper')){
-			return 0 if main::check_program($tool);
+			if (main::check_program($tool)){
+				print " use_pm: $tool match\n" if $dbg[67];
+				return 0;
+			}
 		}
-		# Note: test fails: apt-rpm (pclinuxos,alt linux), unknown how to detect
+		# Note: test fails: apt-rpm (pclinuxos,alt linux), but apt-rpm should pass
 		# Add pm test if known to have rpm available.
 		foreach my $tool (('dpkg','pacman','pkgtool','tce-load')){
-			return 1 if main::check_program($tool);
+			if (main::check_program($tool)){
+				print " use_pm: $tool match\n" if $dbg[67];
+				return 1;
+			}
 		}
 	}
 }
@@ -34217,7 +34940,7 @@ sub count_libs {
 }
 }
 
-## ParseEDID
+## ParseEDID ##
 {
 package ParseEDID;
 # CVT_ratios:
@@ -34925,7 +35648,8 @@ sub _round {
 }
 }
 
-## PartitionData: public methods: set(), get()
+## PartitionData ##
+# public methods: set(), get()
 # for /proc/partitions only, see DiskDataBSD for BSD partition data.
 {
 package PartitionData;
@@ -35072,7 +35796,8 @@ sub get_pcie_data {
 	eval $end if $b_log;
 }
 
-## PowerData: public method: get()
+## PowerData ##
+# public method: get()
 # No BSD support currently. Test by !$bsd_type. Should any BSD data source 
 # appear, make bsd_data() and add $bsd_type switch here, remove from caller.
 {
@@ -35137,7 +35862,7 @@ sub sys_data {
 }
 }
 
-# ProgramData 
+# ProgramData ##
 # public methods: 
 # full(): returns (print name, version nu, [full version data output]).
 # values(): returns program values array
@@ -35238,7 +35963,8 @@ sub set_values {
 	'comfc' => ['^comfc',0,'0','comfc',0,1,0,'',''], # unverified
 	'compiz' => ['^compiz',2,'--version','Compiz',0,1,0,'',''],
 	'compton' => ['^\d',1,'--version','Compton',0,1,0,'',''],
-	'cosmic-comp' => ['^cosmic-comp',0,'0','cosmic-comp',0,1,0,'',''], # unverified
+	'cosmic-comp' => ['^cosmic-comp',0,'0','cosmic-comp',0,1,0,'',''], # cosmic alpha, no versions
+	'cosmic-session' => ['^cosmic-session',0,'0','Cosmic',0,1,0,'',''], # cosmic alpha, no versions
 	'ctwm' => ['^\S',1,'-version','ctwm',0,1,0,'',''],
 	'cwm' => ['^cwm',0,'0','CWM',0,1,0,'',''], # no version
 	'dawn' => ['^dawn',1,'-v','dawn',0,1,1,'^dawn-',''], # to stderr, not verified
@@ -35301,7 +36027,7 @@ sub set_values {
 	'kded2' => ['^KDE( Development Platform)?:',2,'--version','KDE',0,0,0,'\sDevelopment Platform',''],
 	'kded3' => ['^KDE( Development Platform)?:',2,'--version','KDE',0,0,0,'\sDevelopment Platform',''],
 	'kded4' => ['^KDE( Development Platform)?:',2,'--version','KDE Plasma',0,0,0,'\sDevelopment Platform',''],
-	'kdesktop-trinity' => ['^TDE:',2,'--version','TDE (Trinity)',0,0,0],
+	'kdesktop-trinity' => ['^TDE:',2,'--version','TDE (Trinity)',0,0,0], # kdesktop/twin
 	'kiwmi' => ['^kwimi',0,'0','kiwmi',0,1,0,'',''], # unverified
 	'ksmcon' => ['^ksmcon',0,'0','ksmcon',0,1,0,'',''],# no version
 	'kwin' => ['^kwin',0,'0','kwin',0,1,0,'',''],# no version, same as kde
@@ -35324,6 +36050,7 @@ sub set_values {
 	'lxqt-session' => ['^lxqt-session',2,'--version','LXQt',0,1,0,'',''],
 	'lxqt-variant' => ['^lxqt-panel',0,'0','LXQt-Variant',0,1,0,'',''],
 	'lxsession' => ['^lxsession',0,'0','lxsession',0,1,0,'',''],
+	'magmawm' => ['^magma',0,'0','MagmaWM',0,1,0,'',''], # unverified
 	'mahogany' => ['^mahogany',0,'0','Mahogany',0,1,0,'',''], # unverified, from stumpwm
 	'manokwari' => ['^manokwari',0,'0','Manokwari',0,1,0,'',''],
 	'marina' => ['^marina',0,'0','Marina',0,1,0,'',''], # unverified
@@ -35333,6 +36060,7 @@ sub set_values {
 	'mate-about' => ['^MATE[[:space:]]DESKTOP',-1,'--version','MATE',0,1,0,'',''],
 	# note, mate-session when launched with full path returns full path in version string
 	'mate-session' => ['mate-session',-1,'--version','MATE',0,1,0,'',''], 
+	'maxx' => ['^maxx',0,'0','MaXX',0,1,0,'',''], # unverified, 5Dwm recreation
 	'maynard' => ['^maynard',0,'0','maynard',0,1,0,'',''], # unverified
 	'maze' => ['^maze',0,'0','Maze',0,1,0,'',''], # unverified
 	'mcompositor' => ['^mcompositor',0,'0','MCompositor',0,1,0,'',''], # unverified
@@ -35354,6 +36082,8 @@ sub set_values {
 	'mwm' => ['^mwm',0,'0','MWM',0,1,0,'',''],# no version
 	'nawm' => ['^nawm',0,'0','nawm',0,1,0,'',''],# unverified
 	'newm' => ['^newm',0,'0','newm',0,1,0,'',''], # unverified
+	'newm-atha' => ['^newm',0,'0','new-atha',0,1,0,'',''], # unverified
+	'niri' => ['^niri',0,'0','niri',0,1,0,'',''], # unverified
 	'notion' => ['^.',1,'--version','Notion',0,1,0,'',''],
 	'nscde' => ['^(fvwm|nscde)',2,'--version','NsCDE',0,1,0,'',''],
 	'nucleus' => ['^nucleus',0,'0','Nucleus',0,1,0,'',''], # unverified
@@ -35367,6 +36097,7 @@ sub set_values {
 	'perceptia' => ['^perceptia',0,'0','perceptia',0,1,0,'',''],
 	'phoc' => ['^phoc',0,'0','phoc',0,1,0,'',''], # unverified
 	'picom' => ['^\S',1,'--version','Picom',0,1,0,'^v',''],
+	'pinnacle' => ['^pinnacle',0,'0','Pinnacle',0,1,0,'',''], # unverified
 	'plasmashell' => ['^plasmashell',2,'--version','KDE Plasma',0,1,0,'',''],
 	'polonium' => ['^polonium',0,'0','polonium',0,1,0,'',''], # unverified
 	'pywm' => ['^pywm',0,'0','pywm',0,1,0,'',''], # unverified
@@ -35380,6 +36111,7 @@ sub set_values {
 	'sapphire' => ['^version sapphire',3,'-version','sapphire',0,1,0,'',''],
 	'sawfish' => ['^sawfish',3,'--version','Sawfish',0,1,0,'',''],
 	'scrotwm' => ['^scrotwm',2,'-v','scrotwm',0,1,1,'welcome to scrotwm',''],
+	'sde' => ['^sde',0,'0','SDE',0,1,0,'',''], # no detectable version, lxde based
 	'simulavr' => ['simulavr^',0,'0','SimulaVR',0,1,0,'',''], # unverified
 	'skylight' => ['^skylight',0,'0','Skylight',0,1,0,'',''], # unverified
 	'smithay' => ['^smithay',0,'0','Smithay',0,1,0,'',''], # unverified
@@ -35389,9 +36121,9 @@ sub set_values {
 	# out of stump, 2 --version, but in tries to start new wm instance endless hang
 	'stumpwm' => ['^SBCL',0,'--version','StumpWM',0,1,0,'',''], # hangs when run in wm
 	'subtle' => ['^subtle',2,'--version','subtle',0,1,0,'',''],
-	'surfaceflinger' => ['surfaceflinger^',0,'0','SurfaceFlinger',0,1,0,'',''], # Android, unverified
+	'surfaceflinger' => ['surfaceflinger^',0,'0','SurfaceFlinger',0,1,0,'',''], # unverified, Android
 	'sway' => ['^sway',3,'-v','Sway',0,1,0,'',''],
-	'swayfx' => ['^swayfx',0,'0','SwayFX',0,1,0,'',''], # probably same as sway, unverified
+	'swayfx' => ['^swayfx',0,'0','SwayFX',0,1,0,'',''], # unverified, probably same as sway
 	'swayfx' => ['^sway',3,'-v','SwayFX',0,1,0,'',''], # not sure if safe
 	'swc' => ['^swc',0,'0','swc',0,1,0,'',''], # unverified
 	'swvkc' => ['^swvkc',0,'0','swvkc',0,1,0,'',''], # unverified
@@ -35402,7 +36134,7 @@ sub set_values {
 	'tinywm' => ['^tinywm',0,'0','TinyWM',0,1,0,'',''], # no version
 	'trinkster' => ['^trinkster',0,'0','Trinkster',0,1,0,'',''], # unverified
 	'tvtwm' => ['^tvtwm',0,'0','tvtwm',0,1,0,'',''], # unverified
-	'twin' => ['^Twin:',2,'--version','Twin',0,0,0,'',''],
+	'twin' => ['^Twin:',2,'--version','Twin',0,0,0,'',''], 
 	'twm' => ['^twm',0,'0','TWM',0,1,0,'',''], # no version
 	'ukui' => ['^ukui-session',2,'--version','UKUI',0,1,0,'',''],
 	'ukwm' => ['^ukwm',2,'--version','ukwm',0,1,0,'',''],
@@ -35415,7 +36147,7 @@ sub set_values {
 	'vimway' => ['^vimway',0,'0','vimway',0,1,0,'',''], # unverified
 	'vivarium' => ['^vivarium',0,'0','Vivarium',0,1,0,'',''], # unverified
 	'vtwm' => ['^vtwm',0,'0','vtwm',0,1,0,'',''], # no version
-	'w9wm' => ['^w9wm',3,'-version','w9wm',0,1,0,'',''], # fork of 9wm, unverified
+	'w9wm' => ['^w9wm',3,'-version','w9wm',0,1,0,'',''], # unverified, fork of 9wm
 	'wavy' => ['^wavy',0,'0','wavy',0,1,0,'',''], # unverified
 	'waybox' => ['^way',0,'0','waybox',0,1,0,'',''], # unverified
 	'waycooler' => ['^way',3,'--version','way-cooler',0,1,0,'',''],
@@ -35440,7 +36172,7 @@ sub set_values {
 	'wmx' => ['^wmx',0,'0','wmx',0,1,0,'',''], # no version
 	'wxrc' => ['^wx',0,'0','',0,1,0,'WXRC',''], # unverified
 	'wxrd' => ['^wx',0,'0','',0,1,0,'WXRD',''], # unverified
-	'x9wm' => ['^x9wm',3,'-version','x9wm',0,1,0,'',''], # fork of 9wm, unverified
+	'x9wm' => ['^x9wm',3,'-version','x9wm',0,1,0,'',''], # unverified, fork of 9wm
 	'xcompmgr' => ['^xcompmgr',0,'0','xcompmgr',0,1,0,'',''], # no version
 	'xfce-panel' => ['^xfce-panel',2,'--version','Xfce',0,1,0,'',''],
 	'xfce4-panel' => ['^xfce4-panel',2,'--version','Xfce',0,1,0,'',''],
@@ -35471,6 +36203,8 @@ sub set_values {
 	'cdm' => ['^cdm',0,'0','CDM',0,1,0,'',''],
 	# might be xlogin, unknown output for -V
 	'clogin' => ['^clogin',0,'-V','clogin',0,1,0,'',''], # unverified, cysco router
+	'cosmic-greeter' => ['^cosmic-greeter',0,'0','cosmic-greeter',0,1,0,'',''], # no version, uses greetd
+	'elephant-greeter' => ['^elephant',0,'0','elephant-greeter',0,1,0,'',''], # unverified, lightdm greeter
 	'elogind' => ['^elogind',0,'0','elogind',0,1,0,'',''], # no version
 	'emptty' => ['^emptty',0,'0','EMPTTY',0,1,0,'',''], # unverified
 	'entranced' => ['^entrance',0,'0','Entrance',0,1,0,'',''],
@@ -35487,12 +36221,14 @@ sub set_values {
 	'lxdm' => ['^lxdm',0,'0','LXDM',0,1,0,'',''],
 	'ly' => ['^ly',3,'--version','Ly',0,1,0,'',''],
 	'mdm' => ['^mdm',0,'0','MDM',0,1,0,'',''],
-	'mlogind' => ['^mlogind',3,'-v','mlogind',0,1,0,'',''], # guess, unverified, BSD SLiM fork
+	'mlogind' => ['^mlogind',3,'-v','mlogind',0,1,0,'',''], # unverified, guess. BSD SLiM fork
 	'nodm' => ['^nodm',0,'0','nodm',0,1,0,'',''],
 	'pcdm' => ['^pcdm',0,'0','PCDM',0,1,0,'',''],
 	'qingy' => ['^qingy',0,'0','qingy',0,1,0,'',''], # unverified
+	'qtgreet' => ['^qtgreet',0,'0','qtgreet',0,1,0,'',''], # unverified
 	'seatd' => ['^seatd',3,'-v','seatd',0,1,0,'',''],
 	'sddm' => ['^sddm',0,'0','SDDM',0,1,0,'',''],
+	'slick-greeter' => ['^slick',0,'0','slick-greeter',0,1,0,'',''], # unverified, , lightdm greeter
 	'slim' => ['slim version',3,'-v','SLiM',0,1,0,'',''],
 	'slimski' => ['slimski version',3,'-v','slimski',0,1,0,'',''], # slim fork
 	'tbsm' => ['^tbsm',0,'0','tbsm',0,1,0,'',''], # unverified
@@ -35508,7 +36244,6 @@ sub set_values {
 	## See ShellData::shell_test() for unhandled but known shells
 	'ash' => ['',3,'pkg','ash',1,0,0,'',''], # special; dash precursor
 	'bash' => ['^GNU[[:space:]]bash',4,'--version','Bash',1,1,0,'',''],
-	'busybox' => ['^busybox',0,'0','BusyBox',1,0,0,'',''], # unverified, hush/ash likely
 	'cicada' => ['^\s*version',2,'cmd','cicada',1,1,0,'',''], # special
 	'csh' => ['^tcsh',2,'--version','csh',1,1,0,'',''], # mapped to tcsh often
 	'dash' => ['',3,'pkg','DASH',1,0,0,'',''], # no version, pkg query
@@ -35540,7 +36275,9 @@ sub set_values {
 	'pulseaudio' => ['^pulseaudio',2,'--version','PulseAudio',0,1,0,'',''],
 	'roaraudio' => ['^roaraudio',0,'0','RoarAudio',0,1,0,'',''], # no version/unknown?
 	## Tools: Compilers ##
-	'clang' => ['clang',3,'--version','clang',1,1,0,'',''],
+	# T2 SED clang version 18.1
+	# clang version 18.1
+	'clang' => ['clang',2,'--version','clang',1,1,0,'^.*clang',''], 
 	# gcc (Debian 6.3.0-18) 6.3.0 20170516
 	# gcc (GCC) 4.2.2 20070831 prerelease [FreeBSD]
 	'gcc' => ['^gcc',2,'--version','GCC',1,0,0,'\([^\)]*\)',''],
@@ -35725,7 +36462,7 @@ sub version_pkg  {
 }
 }
 
-## PsData
+## PsData ##
 # public methods: 
 # set(): sets @ps_aux, @ps_cmd
 # set_dm(): sets $ps_data{'dm-active'}
@@ -35737,14 +36474,21 @@ package PsData;
 
 sub set {
 	eval $start if $b_log;
-	my ($b_busybox,$header,$ps,@temp);
+	my ($b_busybox,$header,$link,$path,$ps,@temp);
 	$loaded{'ps-data'} = 1;
 	my $args = 'wwaux';
-	my $path = main::check_program('ps');
-	my $link = readlink($path);
-	if ($link && $link =~ /busybox/i){
-		$b_busybox = 1;
-		$args = '';
+	# it's possible ps isn't even installed
+	if ($path = main::check_program('ps')){
+		$link = readlink($path);
+		if ($link && $link =~ /busybox/i){
+			$b_busybox = 1;
+			$args = '';
+		}
+	}
+	else {
+		main::log_data('data','No ps installed.') if $b_log;
+		eval $end if $b_log;
+		return;
 	}
 	# note: some ps cut output based on terminal width, ww sets width unlimited
 	# old busybox returns error with args, new busybox ignores auxww
@@ -35756,6 +36500,8 @@ sub set {
 		@temp = split(/\s+/, $header);
 	}
 	else {
+		main::log_data('data','@$ps is empty.') if $b_log;
+		eval $end if $b_log;
 		return;
 	}
 	$ps_data{'header'}->[0] = $#temp; # the indexes, not the scalar count
@@ -35820,7 +36566,7 @@ sub set_de_wm {
 	if ($show{'system'}){
 		# some desktops detect via ps as fallback
 		process_items(\@{$ps_data{'de-ps-detect'}},join('|', qw(
-		razor-desktop razor-session lxsession lxqt-session nscde
+		cosmic-session razor-desktop razor-session lxsession lxqt-session nscde
 		tdelauncher tdeinit_phase1)));
 		# order matters!
 		process_items(\@{$ps_data{'wm-parent'}},join('|', qw(xfdesktop icewm fluxbox 
@@ -35833,7 +36579,7 @@ sub set_de_wm {
 		dawn dtwm dusk dwm echinus evilwm flwm flwm_topside 
 		fvwm.*-crystal\S* fvwm1 fvwm2 fvwm3 fvwm95 fvwm
 		hackedbox herbstluftwm i3 instantwm ion3 jbwm jwm larswm leftwm lwm 
-		matchbox-window-manager mcwm mini miwm mlvwm monsterwm musca mvwm mwm 
+		matchbox-window-manager maxx mcwm mini miwm mlvwm monsterwm musca mvwm mwm 
 		nawm notion openbox nscde pekwm penrose qvwm ratpoison 
 		sapphire sawfish scrotwm snapwm spectrwm stumpwm subtle tinywm tvtwm twm 
 		uwm vtwm windowlab [wW]indo[mM]aker w9wm wingo wm2 wmfs wmfs2 wmii2 wmii 
@@ -35848,14 +36594,16 @@ sub set_de_wm {
 	if ($show{'graphic'}){
 		$b_de_wm_comp = 1;
 		$b_wm_comp = 1;
-		process_items(\@{$ps_data{'compositors-pure'}},join('|',qw(cairo compton dcompmgr 
-		mcompositor picom steamcompmgr surfaceflinger xcompmgr unagi)));
+		process_items(\@{$ps_data{'compositors-pure'}},join('|',qw(cairo compton 
+		cosmic-comp dcompmgr mcompositor picom steamcompmgr surfaceflinger 
+		xcompmgr unagi)));
 	}
 	if ($b_de_wm_comp){
 		process_items(\@{$ps_data{'de-wm-compositors'}},join('|',qw(budgie-wm compiz 
-		deepin-kwin_wayland deepin-kwin_x11 deepin-wm enlightenment gala gnome-shell 
-		twin kwin_wayland kwin_x11 kwinft kwin marco deepin-metacity metacity 
-		metisse mir moksha muffin deepin-mutter mutter ukwm xfwm[345]?)));
+		deepin-kwin_wayland deepin-kwin_x11 deepin-wm enlightenment 
+		gala gnome-shell twin kwin_wayland kwin_x11 kwinft kwin marco 
+		deepin-metacity metacity metisse mir moksha muffin deepin-mutter mutter 
+		ukwm xfwm[345]?)));
 	}
 	if ($b_wm_comp){
 		# x11: 3dwm, qtile [originally], rest wayland
@@ -35865,8 +36613,9 @@ sub set_de_wm {
 		cage cagebreak cardboard chameleonwm clayland comfc 
 		dwl dwc epd-wm fireplace feathers fenestra glass gamescope greenfield grefson 
 		hikari hopalong [Hh]yprland inaban japokwm kiwmi labwc laikawm lipstick liri 
-		mahogany marina maze maynard motorcar newm nucleus 
-		orbital orbment perceptia phoc polonium pywm qtile river rootston rustland 
+		magmawm mahogany marina maze maynard motorcar newm(-atha)? niri nucleus 
+		orbital orbment perceptia phoc pinnacle polonium pywm 
+		qtile river rootston rustland 
 		simulavr skylight smithay sommelier sway swayfx swc swvkc 
 		tabby taiwins tinybox tinywl trinkster velox vimway vivarium 
 		wavy waybox way-?cooler wayfire wayhouse waymonad westeros westford 
@@ -35878,23 +36627,25 @@ sub set_de_wm {
 		albert alltray awesomebar awn 
 		bar barpanel bbdock bbpager bemenu bipolarbar bmpanel bmpanel2 budgie-panel 
 		cairo-dock dde-dock deskmenu dmenu(-wayland)? dockbarx docker docky dzen dzen2 
-		fbpanel fspanel fuzzel glx-dock gnome-panel hpanel 
+		fbpanel fspanel fuzzel gmenu glx-dock gnome-panel hpanel hybridbar
 		i3bar i3-status(-rs|-rust)? icewmtray jgmenu kdocker kicker krunner ksmoothdock
-		latte lavalauncher latte-dock lemonbar ltpanel luastatus lxpanel lxqt-panel 
+		latte latte-dock lavalauncher lemonbar ltpanel luastatus 
+		lxpanel lxqt-panel 
 		matchbox-panel mate-panel mauncher mopag nwg-(bar|dock|launchers|panel) 
-		openbox-menu ourico perlpanel plank polybar pypanel razor(qt)?-panel rofi rootbar 
+		onagre openbox-menu ourico perlpanel plank polybar pypanel 
+		razor(qt)?-panel rofi rootbar 
 		sfwbar simplepanel sirula some_sorta_bar stalonetray swaybar 
-		taffybar taskbar tint2 tofi trayer ukui-panel vala-panel 
-		wapanel waybar wbar wharf wingpanel witray wldash wmdocker wmsystemtray wofi 
-		xfce[45]?-panel xmobar yambar yabar yofi)));
+		taffybar taskbar tint2 tofi trayer ukui-panel ulauncher vala-panel 
+		wapanel waybar wbar wharf wingpanel witray wldash wmdocker wmenu 
+		wmsystemtray wofi xfce[45]?-panel xmobar yambar yabar yofi)));
 		# Generate tools: power manager daemons, then screensavers/lockers. 
 		# Note that many lockers may not be services
 		@{$ps_data{'tools-test'}}=qw(away boinc-screensaver budgie-screensaver 
 		cinnamon-screensaver gnome-screensaver gsd-screensaver-proxy gtklock 
-		hyprlock i3lock kscreenlocker light-locker lockscreen lxlock 
+		hypridle hyprlock i3lock kscreenlocker light-locker lockscreen lxlock 
 		mate-screensaver nwg-lock 
 		physlock rss-glx slock swayidle swaylock ukui-screensaver unicode-screensaver 
-		xautolock xfce4-screensaver xlock xlockmore xscreensaver 
+		waylock xautolock xfce4-screensaver xlock xlockmore xscreensaver 
 		xscreensaver-systemd xsecurelock xss-lock xtrlock);
 		process_items(\@{$ps_data{'tools-active'}},join('|',@{$ps_data{'tools-test'}}));
 	}
@@ -35929,7 +36680,8 @@ sub set_power {
 	process_items(\@{$ps_data{'power-services'}},join('|', qw(apmd csd-power
 	gnome-power-manager gsd-power kpowersave org\.dracolinux\.power
 	org_kde_powerdevil mate-power-manager power-profiles-daemon powersaved 
-	tdepowersave thermald tlp upowerd ukui-power-manager xfce4-power-manager)));
+	system76-power tdepowersave thermald tlp upowerd ukui-power-manager 
+	xfce4-power-manager)));
 	print '$ps_data{power-daemons}: ', Data::Dumper::Dumper $ps_data{'power-services'} if $dbg[5];
 	main::log_data('dump','$ps_data{power-daemons}',$ps_data{'power-services'}) if $b_log;
 	eval $end if $b_log;
@@ -35959,7 +36711,7 @@ sub get_self_version {
 	return $self_version . $patch;
 }
 
-## ServiceData
+## ServiceData ##
 {
 package ServiceData;
 my ($key,$service,$type);
@@ -36165,7 +36917,7 @@ sub set {
 }
 # $dbg[29] = 1; set_path(); print ServiceData::get('status','bluetooth'),"\n";
 
-## ShellData
+## ShellData ##
 {
 package ShellData;
 my $b_debug = 0; # disable all debugger output in case forget to comment out!
@@ -36643,7 +37395,7 @@ sub get_uptime {
 	return $uptime;
 }
 
-## UsbData
+## UsbData ##
 # %usb array indexes
 # 0: bus id / sort id
 # 1: device id
@@ -37793,7 +38545,7 @@ sub process_power {
 #### GENERATE OUTPUT
 ########################################################################
 
-## OutputGenerator
+## OutputGenerator ##
 # Also creates Short, Info, and System items
 {
 package OutputGenerator;
@@ -38120,7 +38872,6 @@ sub info_item {
 	$index++ if $extra > 0;
 	if ($extra > 0 && !$loaded{'package-data'}){
 		my $packages = PackageData::get('inner',\$num);
-		
 		for (keys %$packages){
 			$data->{$data_name}[$index]{$_} = $packages->{$_};
 		}
@@ -38244,10 +38995,12 @@ sub system_item {
 	if ($b_admin && (my $params = KernelParameters::get())){
 		# print "$params\n";
 		if ($use{'filter-label'}){
-			$params = main::filter_partition('system', $params, 'label');
+			main::filter_partition('system', \$params, '=LABEL=');
 		}
 		if ($use{'filter-uuid'}){
-			$params = main::filter_partition('system', $params, 'uuid');
+			main::filter_partition('system', \$params, '=UUID=');
+			main::filter_partition('system', \$params, 'systemd.machine_id=');
+			
 		}
 		$data->{$data_name}[$index]{main::key($num++,0,2,'parameters')} = $params;
 		

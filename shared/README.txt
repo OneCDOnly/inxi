@@ -10,7 +10,7 @@ master branch. All support for versions prior to 3.0 is ended.
 
 Make sure to update to the current inxi from the master branch before filing any 
 issue reports. Bugs from earlier versions cannot usually be solved in the new 
-version since too much changes intnernally release to release.
+version since too much changes internally release to release.
 
 --------------------------------------------------------------------------------
 CODEBERG SOURCE REPO

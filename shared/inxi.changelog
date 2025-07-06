@@ -1,4 +1,917 @@
 ================================================================================
+Version: 3.3.38
+Patch: 00
+Date: 2025-04-06
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+A small fix/glitch release, nothing exciting. 
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. Codeberg user dtl131 in issue #314 for noticing Vulkan gpu device driver 
+field always had N/A value. See fix 3.
+
+2. Anonymous OpenBSD vm dataset, some value were unset that were expected, which 
+tripped a few errors, those are all now more explicitly tested for.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. If 2>/dev/null is used with tput, in FreeBSD it changes output to 80x24, 
+but with OpenBSD error using xterm-ghostty, it says unknown terminal error.
+
+If I suppress the error correctly, FreeBSD breaks, but if I don't, some corner 
+cases of some terminals show error.
+
+Since the FreeBSD behavior is wrong, and the OpenBSD behavior is right, I opted 
+to restore the 2>/dev/null to the tput items. It doesn't really matter that much 
+now that inxi defaults to 80 col widths, which is the default replacement when a 
+bad value for tput cols is found.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. SENSORS: small bug: lm sensors data for sodimm was getting the wrong values
+($1 and $2 instead of $2 and $3).
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. PackageData: failed to show Packages: N/A when pm not supported and a total 
+count == 0 for -Ixx and greater verbosity. Did show for -Ix, and always showed
+for -rxx and greater.
+
+2. Issue #315 pointed out two typos in error message. Thanks for noticing!
+
+3. GRAPHICS: GraphicItem::vulkan_data() used VkPhysicalDeviceDriverProperties 
+to get driver data per device, but current vulkaninfo has dropped that data 
+block in favor of the VkPhysicalDeviceVulkan12Properties block, which has always 
+been there. This made the 'driver:' for device always show N/A. Solution was to
+just use the other field name, since it's always been there as far as I can 
+tell.
+
+4. MAIN: set_display_size OpenBSD showed errors, because error suppression not
+on for tput. Also is_jnt test passed for "" for some reason, resulting in more
+errors. 
+
+5. CPU: cpu_sysctl_data failed to test if $line[1] was set. This resulted in 
+OpenBSD errors since the value was 'unknown', which had been stripped out by
+cleaners. Now skips if $line[1] undefined.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1a. SYSTEM: DISTRO: added side ID. Oddly, despite being new, it uses old method,
+/etc/side-release. Added known good side-release in case they add os-release.
+
+1b. SYSTEM: DesktopData: Added SDE DE. Side uses that one. No version. GTK 2 
+based. This also fixes showing the wm as the DE, like Openbox.
+
+2. PackageData: Added pisi pm. No idea how that escaped notice. That was using
+side, which uses pisi.
+
+3. GRAPHICS: New gpu ids: amd, intel, nvidia. Added blackwell gpu ids. Added a 
+missing kepler gpu product ID via manual method.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+None.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+None.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1a. TOOLS: tools/gpu_ids.pl: added nvidia blackwell detections.
+
+1b. TOOLS: added un-id'ed nvidia kepler 470 gpu to manual file.
+
+2. MAIN: is_int, is_numeric: made code more readable and debuggable.
+
+3. CPU: cpu_vendor: return '' if the value passed is undefined. Another odd 
+OpenBSD error which I can't reproduce but a vm instance did since it was missing
+more data.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Tue, 07 Jan 2025 11:34:53 -0800
+
+================================================================================
+Version: 3.3.37
+Patch: 00
+Date: 2025-01-06
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+* This release is highlighted by a long overdue rewrite of the -b, -e, and -v[x] 
+man page and help options. And changing the long incorrect -F/--full to 
+-e/--expanded, which is more accurate. -e expands -b, that is, but is not full. 
+-v8 is full. -F/--full will keep working until this inxi is in the stable repos
+of the major distros.
+
+That change turned out to be surprisingly hard, but those options are now much 
+more clear and well defined. Some of the actions have not been valid for many 
+years, but escaped notice.
+
+This also makes the report generator options -b, -e, and -v [x] all make sense,
+and easily reference each other in the docs. And keeps them consistent by them 
+all be lower case options. Upper case is intended mainly for feature item 
+triggers.
+
+* Packagers: I reluctantly created and added the AppStream XML file:
+inxi.metainfo.xml
+so that GUI package managers that can't get package data from the packages can 
+manage to show inxi. Do I care? No, but sometimes not everything in inxi is 
+stuff I care about.
+
+https://freedesktop.org/software/appstream/docs/chap-Metadata.html
+"Upstream projects can ship one or more metainfo files in 
+/usr/share/metainfo/%{id}.metainfo.xml, where id is a unique identifier of this 
+specific component."
+
+The ID must be exactly the same as the Application-ID: org.smxi.inxi (but many 
+of the file names I checked don't, so that could just be specific to certain 
+package collector tools like flatpak). 
+
+Translation: the inxi.metainfo.xml file must be stored here:
+/usr/share/metainfo/org.smxi.inxi.metainfo.xml
+
+Note that these are not enforced standards, and a quick look in that directory 
+shows many don't follow the file naming convention. So do what you want. And 
+most applications do not ship this file, for good reason: it's a waste of time.
+
+* Another longstanding mrmazda graphics enhancement request, handling scaling
+per monitor. Adding this exposed some failures in wayland-info, and false 
+assumptions in xrandr parsing. Now with -Gxxx shows current mode, scaling, and
+if scaling not 1, the scaled monitor display size.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. Codeberg issue #311 poster jkirk for doggedly noting that the use of the word 
+'full' as an option and man/help term for -F/--full was confusing and wrong. 
+It's other eyes that can see what my eyes are too used to, and have ignored for 
+years. See Changes 1 for -e/--expanded solution.
+
+2. mrmazda, for his continuing thoughts and suggestions to make Graphics and 
+System better, and more helpful to support people such as him. Also for finding
+that obscure and arcane eglinfo hang issue 
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1a. GRAPHICS: StarFive VisionFive 2 apparently uses the Imagination BXE GPU, 
+maybe img-bxe, but that does not show up in any of the pci or device data for 
+the soc. Result is -G and -A show no device even though there is an HDMI GPU and 
+MIPI graphics. This may show in a future kernel however.
+
+1b. GRAPHICS: Very old Intel Pentium 4 and gen-2 GPU system intermittently fails 
+to fully execute eglinfo. Since this combination is largely useless, inxi now 
+detects those Gen 2 and earlier Intel GPU product IDs and skips running eglinfo
+and shows message.
+
+2. SYSTEM: KernelCompiler: the tendency to add in more gibberish nonsense to the 
+old and clean and simple /proc/version continues unabated, almost like a 
+competition between distros who can make the silliest strings. Last year's 
+winner if I remember right was Ubuntu, but Redhat is not to be outdone with 
+their 2024 contribution!
+
+3. DISTRO PACKAGING: thanks mrmazda for spotting what appears to be an OpenSuse 
+packaging bug, which inxi can't fix or work around. It's likely this is also in 
+RHEL and related, but I don't know: 
+* The core modules package which has been incorrectly split out from Perl for 
+File::Find spits out an 'uninitalized value $space in concatenation in pinxi 
+line 1620 is actually File::Find->import action exposing the undefined value. 
+This does not happen in current Debian Testing, or any other distro I've tested 
+on.
+* There may be a second issue with eglinfo, but there is simply not enough data 
+to pinpoint causes.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. PackageData: didn't have option for OpenBSD pkg_info, which made inxi skip 
+that package counter, and show no packages. Ooops. Switched to use -a, for all
+non system package. Could use -A to include system packages,but I think pkg_add
+implies you added them outside of core base.
+
+2a. GRAPHICS: not so much a bug as a syntax change in wayland-info led to some 
+data not being grabbed, but it would not have worked anyway due to more wrong
+assumptions. xrandr also had an assumption about what the 'connected' value was
+that was not right.
+
+2b. GraphicsItem::wlinfo_data(): unset monitor data in active, not fake data,
+logic, which resulted in removing the EDID data. Ooops.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. SYSTEM: KernelCompiler: issue 310 adds another convoluted /proc/version 
+syntax, these seem to be coming along every year now. Let's hope the kernel guys
+create a /sys kernel compiler directory with key value pairs for this absurd 
+jumble of data that is being tossed into /proc/version string.
+
+Note that these types of random new strings will never be called bugs when they 
+fail, but they do require fixing, at least until we get a better data source for 
+the kernel compiler data.
+
+2. OPTIONS: See Changes 1. Changed -F/--full to -e/--expanded to more accurately
+reflect what -e actually does. -F/--full will work for a long time however since
+many online inxi docs suggest that option. First step will be deprecation 
+notice, then eventually removal. But not for a few years, until this inxi is in
+stable repo pools.
+
+3a. GRAPHICS: GraphicsItem::wlinfo_data() had a subtle failure because 
+wayland-info used random numbers of spaces in one key string. Amusingly, the 
+comments above that said to expect the data to alter, which it did. This caused
+the resolution to show the logical, scaled, not the actual physical, as 
+intended.
+
+3b. GRAPHICS: GraphicsItem::xrandr_data() had a false assumption about what the
+dimensions following 'connected' were. Those turned out to the logical monitor 
+size, not the modes. This was not obvious until scaling became used more. Now
+uses the actual current mode from the mode list, which is what we want, and 
+uses the logical size to create the scaling data.
+
+3c. GRAPHICS: GraphicsItem::swaymsg_data(): fixed hz for non json version, that 
+would never work due to logic vs data error.
+
+3d. GRAPHICS: EGL API tool eglinfo hangs on some very old Intel GPUs, so added 
+a blacklist which skips running tool unless --egl flag is also used to force it.
+
+4. UPDATER: Fixed error which made --no-man for -U on inxi not work.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1a. GRAPHICS: X Driver detections. Added, per:
+https://lwn.net/Articles/558104/
+Some more possible fb and drm drivers: vesafb, efifb, simplefb, and simpledrm.
+
+1b. GRAPHICS: rolled out first attempt to have real scaling data per monitor.
+This uses the logical size, aka, the scaled size, and the actual active mode 
+resolution, to generate the scaling factor.
+
+There had been a weak effort for wayland to do this, but the way wayland does 
+scaling is weird, so it's better to show the actual factor. I don't know the 
+status of the wayland scaling issues, but they used a real convoluted hack of
+wayland only doing integer scaling, which forced compositors to up the integer
+then divide it by something to get the desired fractional scaling. So that data 
+in inxi had always been wrong, though it's still being captured and stored 
+internally in case I can ever think of something useful to use it for.
+
+If a positive scaling is calculated with logical and physical, -Gxxx will show 
+that information. If scaling != 1, also showed scaled dimensions.
+
+For scaled (wayland):
+res:
+   mode: 1680x1050
+   scale: 125% (1.25)
+      to: 1344x840
+hz: 60
+
+For scaled (xrandr):
+res:
+   mode: 1680x1050
+   scale: 125% (0.8)
+      to: 1344x840
+hz: 60
+
+For scaling == 1:
+res:
+   mode: 1680x1050
+   scale: 100% (1)
+hz: 60
+      
+If no scaling data found, or if less than -Gxxx:
+  
+res: 1680x1050
+
+As far as I can tell, x11 Screen size is always scaled size.
+
+1c. GRAPHICS: -Ga now adds an Info: Tools: line, similar to what -n, -S, -I have 
+for services and tools. Shows detected (mostly) display control/info command 
+line tools from the following categories:
+* api
+* de (desktop environment)
+* gpu
+* wl (wayland)
+* x11
+
+1d. GRAPHICS: updated amd, intel, nvidia ids. 
+
+2. SYSTEM: added hypridle to locker list, not sure how I missed that one.
+
+3. INFO: Added conemu, contour, dolphin, ghostty, mintty, phyxis, rio, warp to
+start client white list. These are all terminals except dolphin, which is like 
+kate, has the embedded kde terminal.
+
+4. DRIVES: A few new disk vendors and IDs. Surprisingly few actually.
+
+5. CPU: A few new AMD cpu model IDs.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1a. MAN/OPTIONS: going with 1b, changed -F to -e. -F will keep on working for a
+long time, but the report shortcuts -b and -v are already lower case, so no 
+reason to continue with the use of the legacy -F for full when it hasn't been 
+full for ages. Also, it's nice to be consistent and keep all these lower case.
+
+1b. MAN/OPTIONS: removed reference to --full/-F for -e, though it will of course 
+keep working. Technically --full should be a synonym for -v8, since that's the
+full system report. After deprecating -F/--full on a future release, it will be 
+removed since it's not accurate, and can confuse people. But that will be in the 
+distant future given how many resources suggest -F, or, shudder, --full.
+
+This came about because a long time ago, -F actually did trip all the upper case 
+options, and only upper case. That however stopped being the case probably 10
+or more years ago, but the old full connotation for -F remained, and I foolishly
+maintained it when I did the perl inxi rewrite. That would have been the time to
+change it, but I was busy with the rewrite and it didn't register enough.
+
+2a. GRAPHICS: if -xxx and monitor scaling detectable shows if not scaling 1: 
+ res: mode: widthxheight scale: 80% (0.8) to: widthxheight 
+If scaling 1, just shows:
+ res: mode: widthxheight scale: 100% (1)
+ 
+So far scaling can only be detected with xrandr, swaymsg, wayland-info, 
+wlr-randr, and maybe weston-info. This translates the real terms used internally 
+by x11 and wayland.
+ 
+This is a change from res: widthxheight. 
+
+2b. GRAPHICS: To show hz, now shows with -Gxx, not -Gxxx, it never made sense to
+treat the resolution and frequency as different verbosity levels.
+
+2c. GRAPHICS: For GPU arch: data, I stopped trying to use the convoluted post 
+Intel Gen11 architecture, and switched to the basic less granular arch that 
+Intel's own product ID docs use. Like Xe, Xe2, Xe-LPG, Xe-HPC, Xe-HPG. 
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. MAN/OPTIONS: changed -F/--full to -e/--expanded. And changed wording, 
+removed Full, which was wrong, it's not full. It used to be a long time ago, but 
+hasn't been for a long time, which caused confusion. -F/--full will still work, 
+but will not be shown anymore as the first step towards deprecation then 
+removal.
+
+Also added deprecated pointer to -e/--expanded for -F/--full so users can find 
+that easily.
+
+Also changed -b to reference -e for expanded output, and -e to point to -b for
+basic output. -b and -e are basically related, which was not obvious before.
+-e for example expands the minimalist CPU line of -b to the full -C CPU line, 
+and expands block devices Drives to -D and -P. And expands multimedia from -G to
+-G and -A. And expands -b's -N to -n.
+
+1b. MAN/OPTIONS: Refactored -b, -e, and -v completely. There were some legacy 
+items in -v that were not applicable anymore, or just plain wrong. It might be 
+worth checking to see if the simple forms of -d still are in the code. The -h 
+also had for -v 2 short RAID form, but I don't think that ever existed.
+
+These are all now much more readable and clear, and list items in the order they 
+appear in the output as they are added. 
+
+Also, -b and -e now point to each much more clearly, and -e notes where the 
+items have been expanded from -b.
+
+-b, -e, and -v are also now the same format and structure in man and options.
+
+1c. MAN/OPTIONS: Going along with the other 1 changes, I replaced the word 
+'output' in man and help where it refers to a report. That word was being 
+overused to refer to 3 different things. Now reports are reports, output is 
+output.
+
+1d. MAN/OPTIONS: Updated -G items for resolution changes.
+
+1e. MAN/OPTIONS: Added -Ga Info: Tools: feature.
+
+1f. MAN/OPTIONS: Added more missing force items. Fully redid these to make them 
+complete, which went along with making the internal use of them more consistent.
+
+2. DATA: Added nice wayland-info sample.
+
+3a. DOCS: docs/inxi-graphics.txt: added section for resolution/modes/scaling 
+because its' confusing and hard to explain.
+
+3b. DOCS: docs/inxi-graphics.txt: added DISPLAY TOOLS section to docuement the
+various tools I found for the new -Ga Info: Tools feature.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. OPTIONS: There's some legacy use of $show{'optical-basic'} and 
+$show{'raid-basic'} which the man/options refactor exposed. Neither actually 
+does anything anymore. I may check legacy binxi to see if I can find what they 
+used to do.
+
+-b/-v2 trip $show{'raid-basic'}, and -v5 tripped $show{'optical-basic'}.
+
+2. Added basic inxi.metainfo.xml to close issue #312. I was 99% certain that 
+when I told the issue poster he needed to do the research and work and provide 
+the xml required (because I don't care) that he would not do it. And he did not 
+let me down, as expected, he didn't do it. It's sad when things are that 
+predictable. So I did the research for the thing I don't care about, for gui 
+software installers I never use, and which have nothing to do with inxi.
+
+3a. GRAPHICS: corrected false assumptions about what monitor resolution vs 
+mode values are, which also exposed other bugs and errors in parsing for both
+x11 and wayland.
+
+3b. GRAPHICS: added --force swaymsg, wl-info, wlr-randr switches, to allow for
+testing each item, or for using fake data for one of them.
+
+3c. GRAPHICS: Rearranged some subs, and added better section comment headers
+to make the logic blocks more obvious. Graphics, like CPU, is very long.
+
+3d. GRAPHICS: Added --force no-egl, no-opengl, no-graphics-api, no-vulkan 
+switches. We've found some legacy systems where eglinfo hangs.
+
+4. main::clean_unset(): added null to cleaner.
+
+5. DEBUG: changed minimum width for --debug-y to 50, from 80.
+
+6a. TOOLS: pinxi/tools/gpu_raw.pl, gpu_ids.pl: Changed the Intel architecture 
+names to what they use in their docs, that gives up on trying to assign them 
+generation numbers after 11.
+
+6b. TOOLS: pinxi/tools/gpu_raw.pl: changed to aadjust to possible extra columns 
+in the gpu.intel.com data source, they have added 1 column to most rows, and 2 
+to some, so now it just looks for anything after 5 with .*.
+
+7. INTERNAL: switched $use{'no-ssl'} and $use{'no-man'} to $force, it was not 
+consistent, just use --force for all the --no-xxx options. This goes along with
+adding more force switches and shortcuts.
+
+8. INFO: Going with enhancement 3, redid the white list regex for terminals, 
+there were a bunch of [xx]tty type names.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Mon, 6 Jan 2025 12:15:07 -0700
+
+================================================================================
+Version: 3.3.36
+Patch: 00
+Date: 2024-09-04
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+Phase 2 of the big CPU upgrade a few years back is now done, I'd left one part 
+inadequate in terms of the data structures, mainly because I did not have data 
+samples to test, but also because no corner cases that required a more robust 
+data structure for die > cluster > core counts showed up duing the initial 
+development phase. This led to somewhat predictable issues and bug reports when 
+someone had a CPU that did require that structure to show correct core/die type 
+data.
+
+So while most users will see very little difference, beyond dies: and clusters:
+items appearing where they did not before, the internal logic is now far more 
+robust.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. CPU: Codeberg issue #307 finally helped solve the old AMD ryzen wrong core 
+count issue, I believe. Thanks superkoning for the data and reporting the 
+RISC-V failure to show right core counts, and to show MT when it isn't, which
+was caused by same issue.
+
+2. RECOMMENDS: Codeberg user Ricky-Tigg in issue #309 for taking the time to 
+actually check --recommends output for inconsistencies. And finding them!
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. The old issue #293 about AMD Ryzen 2 die CPU showing wrong core counts is 
+probably fixed, but can't know until it's confirmed for that exact CPU. Fix 1a 
+should handle all variants, I hope. Tested on old OS VM installs, and found most 
+of this logic never fires since /sys had a very barebones topology section f for 
+CPUs back then.
+
+2. DESKTOP: No known way to get Cosmic DE version, or Iced toolkit version. If 
+you know of a non-hackish way to get that version info, let me know.
+
+3. DRIVES: The disk vendor pinxi/tools/lists/disks.unhandled list keeps getting 
+longer, but most are not possible match, either not unique, or unknown models.
+Doing these matches is incredibly tedious, so I only do it every few releases, 
+but this time there were a LOT of new matches and vendors.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. CPU: wrong core counts due to inadequate internal logic, and some new uses of
+clusters to categorize core ids. Since this is a pretty new change in the kernel 
+topology logic, this wasn't really a bug per se, but it looks like one to users.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1a. CPU: At long last, codeberg issue #307 supplied the data of a multi-die or 
+more accurately, a multi-cluster but no die_id, system. RISC-V in this case, 
+which tripped the wrong core count, and a false MT type, because it had > 1 
+cluster, but no die. Each cluster repeated the same core_ids. 
+
+That's the same issue I believe the old AMD Ryzen issue had, but I never got the 
+required data for that. Had to redo the entire /sys CPU data structure to be: 
+phyical_ids > die_ids > cluster_ids > core_ids, which was very tricky to do.
+
+1b. CPU: cpu_arch: fixed some AMD Zen generations, and process nodes, had 
+estimated from roadmap, updated with real.
+
+2a. RECOMMENDS: issue #309 notes ifconfig wasn't clearly ID'ed as:
+(deprecated, ip preferred)
+That's been corrected.
+
+2b. RECOMMENDS: issue #309 also noted that lspci is not listed, which was an
+oversight, given the equivalent BSD tools are tested for BSDs. I have no idea 
+how that was missed all these years!
+
+2c. RECOMMENDS: added ps test, found a case where that's not installed.
+
+3. GRAPHICS: GPU data: fixed an nvidia 470 Kepler2/Fermi2 ID error. And also 
+corrected the arch name, it's Kepler-2, not Kepler.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. MACHINE: Added systemd.machine_id to --filter-uuid filters. Thanks Malcolm 
+from Opensuse for pointing out that one.
+
+2a. CPU: Now shows clusters, if found. Clusters seem related to L2 assignment, 
+but not always. When no die_id or cluster_id found, won't show that item.
+
+2b. CPU: New AMD, Intel CPU arch models.
+
+3a. GRAPHICS: added cosmic-comp compositor support. No current known way to get 
+version.
+
+3b. GRAPHICS: new gpu ids for intel, nvidia.
+
+4. SYSTEM: Desktop: Added basic Cosmic DE detection. Uses XDG for detection,
+and cosmic-session for possible future version.
+
+5. INFO: Power: Added system76-power power manager.
+
+6. DRIVES: a huge disk vendor update. New vendors, new matches for existing! 
+It's surreal how many SSD and USB makers there are out in the world. It's like 
+running a corner store used to be or something. There are a LOT of new matches 
+and vendors this time around!
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. CPU: Moved the new dies:/clusters: block to right after the cpu physical 
+count, and before the core count. This makes the order of output match the order 
+of organization: physical cpus > dies > cluster > cores. Also if it got a 
+positive die_id or cluster_id, will show how many found always for -Ca. Before 
+it only showed if greater than 1 die.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. MAN: Debian Lintian tests found a typo! That's fixed. I would have expected 
+many more than 1 typos, so that's good to see.
+
+1b. MAN: A missing space and extra " slightly broke the header:
+.TH INXI 1 "2024\-06-27"inxi" "inxi manual"
+should be:
+.TH INXI 1 "2024\-06-27" inxi "inxi manual"
+All that happens due to this is bottom of man output shows:
+inxi"    2024-06-18            INXI(1)
+so no big deal, but it's corrected anyway.
+
+1c. MAN: Also added inxi version to man info line, I noticed other programs do
+that. One more thing to forget during upgrades heh. Maybe I'll add that to 
+release.pl since I'm sure to forget it.
+
+1d. MAN: Updated to show clusters added, and to show cluster sample for -C a. 
+Also added more complete explanation of when dies/clusters show, and how core
+and cluster counts work.
+
+2a. OPTIONS: Fixed typo, thanks codeberg PR. Note inxi branch is not for PR, 
+only pinxi. But good to catch typos anyway.
+
+2b. OPTIONS: Added dies, clusters to -Ca, now that dies/clusters always show if 
+found, regardless of number.
+
+3a. DOCS: docs/inxi-cpu.txt: had neglected to add in the advanced sys/cpuinfo 
+pairs debugger code from the initial Slackware LQ forums threads. Added in 
+CPU DEGUGGING primary section, with that code, which is 2 1 liners, could be 1.
+
+This is same basic logic the --debug 2x debugger collects, but sometimes it's 
+easier to just get the two files we need from people.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. simplified main::filter_partitions, main::filter_pci_long. Now takes string 
+by reference, and removes all copies, so those are more efficient now. 
+
+2a. CPU: finally added in advanced topology structure phys > dies > clusters > 
+cores to the main cpu_sys data structure, I'd avoided doing that in past because 
+it's hard, and I never found a data sample that had repeated core_ids per die, 
+until this one. Note while for RISC-V, this fix applies to the entire class of 
+possible repeating core_ids per die / cluster.
+
+2b. CPU: CpuItem:: sys_data_grabber(): Cleaned up, added more globbing items for 
+/sys data. Needed to get at least cluster_id, but made globbing easier to parse 
+and read, and since the cluster stuff is useful, added more related.
+
+This fix may have unintended consequences of breaking other logic, but I believe 
+it is only within the /sys data itself.
+
+2c. CPU: refactored ordering of cpu subs, renamed many to be less ambiguous, now
+ordered more consistently. The cpu code fixes made me realize that code was not
+easy to follow in terms of where things were arranged, now it's quite 
+consistent, with clear section headers, end section etc.
+
+3. NETWORK: cleaned up code in set_ifconfig(), set_ip();
+
+4. PsData: fixed corner case where no ps is present in system. This trips some 
+undefined errors in the grabber.
+
+5. DOWNLOADER: failed to handle case of no curl OR wget, and tried running -U
+without a downloader anyway.
+
+Made the following changes:
+* Network -i: if no dig, and no downloaders, just skips grabbing IPs.
+* Updater -U: if no downloader, exit with error message.
+* Weather -w: if no downloader, will just show no connection available.
+
+6. DATA: tools/lists/gpu.nv.560.raw added. tools/gpu_raw.pl, tools/gpu_ids.pl 
+updated for nv 560 files.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Wed, 4 September 2024 10:15:08 -0700
+
+================================================================================
+Version: 3.3.35
+Patch: 00
+Date: 2024-06-18
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+Added more Wayland wm/de updates: wm, tools, lockers, etc. This list will grow 
+slowly over time, I'm sure. A new but very old distro, T2 SDE added, for distro
+ID, mine package manager.
+
+Adding support for something as uncommon as T2 has a primary value that such 
+systems, particularly very old ones, tend to expose certain corner case data 
+alternate syntaxes (clang --version, /etc/issue), which then makes inxi overall 
+more robust. 
+
+For example, because T2 used /etc/issue to show an ascii login, the actual first 
+line was just two literal lines, so the distro name appeared as two lines. This 
+was because there was an assumption that the first line of /etc/issue would 
+always be the distro name. Added filters to not use issue value if it does not 
+contain at least 3 characters.
+
+Also added in premilinary Loongson CPU/GPU support, but for GPU, have only 1 
+product ID to match, and no other meaningful data. CPU may work, but needs real
+hardware based testing to confirm. Obviously I can't do it, so if any Loongson 
+users want to test and report, feel free. Or not, up to you. Framework for full
+support it there now.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. mrmazda, as is often the case, for tracking and spotting issues with graphics 
+and desktop data. He also noticed the weird output for urpm repos, which is now
+corrected, as well as finding some errors with rpm package counts, which led to
+a small refactor of the rpm logic in PackageData.
+
+2. GRAPHICS: gl_data(): gfxstrand on issue #303 for figuring out what was 
+breaking OpenGL Mesa driver version detection. (was extra (git-..commit-ID) at 
+end of version string).
+
+3. DistroData: codeberg user r1w1s1 in issue #304 for pointing out that the '+'
+part of the distro name can be meaningful, as in Slackware 15.0+, where the +
+means it's Slackware current.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1. GRAPHICS: GPU device IDs: Intel device ID sources are not being reliable, and 
+some IDs vanished from the raw data files. This is too hard to work around, so 
+leaving as is. In a sense, Intel is just getting too hard to support, though 
+I'll keep trying. But it's not cute anymore.
+
+This applies to Intel CPU Ids too, for some reason, Intel just can't seem to 
+manage to create a new CPU family ID, and so are actually running out of their 
+256 Family 6 model IDs (2^8, or 16x16 hex). This is bizarrre to see such a huge 
+corporation fail to do something so utterly trivial, and suggests that there may 
+still be internal engineering issues lingering despite the recent attemps to 
+resolve them.
+
+2. PACKAGES: RPM remains unacceptably slow to get a simple package count query, 
+even with --nodigest / --nosignature, on one fedora 39 took 7 seconds, and in 
+mageia/fedora takes 0.35-0.80 seconds without those flags, which is easily 10x 
+slower than most package managers. There is nothing I can do to fix this that I 
+am aware of. If anyone knows of other options I can pass rpm to get it to list 
+the packages in a sane timeframe, let me know. 
+
+During previous testing, nodigest/signature did speed it up, but that seems to 
+have regressed now again in one fedora test case, but does work in most others. 
+For now, --rpm flag will be required to see rpm package counts for core rpm 
+distros, otherwise people will blame inxi for being slow.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1. Nothing to speak of beyond some fixes.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1a. REPOS: For slpkg, adapted to new syntax for each repo. Retained support for 
+older syntaxes.
+
+1b. REPOS: Fixed output for urpm, pisi, and eopkg. These all had the same error,
+which was creating a new full repo type line per repo listed by these software 
+tools. Now shows as expected:
+
+[repo name] ~ [repo location]
+
+2. main::set_path: added hack to put back in /opt/trinity/bin if distro forgot
+to add it to PATH.
+
+3a. SYSTEM: DesktopData: Added fallback test for twin for Trinity version 
+detections. This goes along with path fix for this extreme corner case (so far
+mageia only one who didn't add trinity location to PATH).
+
+3b. SYSTEM: DistroData: Added filter in case line 1 of /etc/issue doesn't 
+contain any valid characters. That's for T2 failure.
+
+3c. SYSTEM: DistroData: main::clean_characters(): removed filter for '+' because 
+that can be a meaningful part of the name, as in r1w1s1's codeberg issue #304, 
+where the + indicates it's Slackware 15.0 Current, aka: Slackware 15.0+.
+
+4. GRAPHICS: gl_data(): Issue #303 exposed a possible syntax that inxi had not
+seen or handled before, the OpenGL core profile version string ending with a git 
+commit ID in parens: 
+OpenGL core profile version: 4.6 (Core Profile) Mesa 24.2.0-devel (git-f0620dae)
+as opposed to handled and expected:
+OpenGL core profile version: 4.6 (Core Profile) Mesa 24.2.0-devel
+
+This just required adding another 0 or 1 occurance test for that ending git 
+commit string. Really for anything tacked on to the end of the string after the
+mesa / nvidia driver version value.
+
+5. PACKAGES: Added support for Mageia's urpmi package counts, using rpm. That's 
+either not worked, or broke recently, I don't know which. 
+
+Note that rpm -qa is unacceptably slow (even using --nodigest --nosignature), so 
+requires use of --rpm flag for primarily rpm distros. Otherwise they will think 
+it's inxi that is slow.
+
+Just to document it, mageia also says they may move to dnf in the future. But 
+that should not matter with the redone logic.
+https://wiki.mageia.org/en/Ways_to_install_programs#.deb_packages
+
+6. INFO: compilers: made clang version detection more robust.
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. SYSTEM: DesktopData: Added the following items:
+
+* menus/launchers: wayland gmenu, onagre, ulauncher, wmenu.
+
+* greeters: slick-greeter/elephant-greeter lightdm, but those are not the same 
+as greetd/seatd type greeters so not using, but leaving in comments.
+
+* bars: hybridbar.
+
+* x11 wm: MaXX.
+
+* wayland compositors: MagmaWM, newm [already abandoned], newm-atha [fork of 
+newm], niri, Pinnacle. 
+
+2. INFO: PowerData: Added waylock
+
+3a. GRAPHICS: new AMD, Intel, Nvidia GPU IDs.
+
+4a. GRAPHICS: loongson GPU arch data. Note this data is extremely incomplete,
+but at least it's got the framework to support Loongson GPUs now. Hard to find
+this data in any reliable format beyond process nodes for each CPU, and since 
+most GPUs are iGPUs, in theory those should be the same. Maybe some Chinese 
+users will decide to provide this info. 
+
+Also see CODE 4b for the tools for this item.
+
+5. PACKAGES: added package manager type mine. That's used in T2, maybe others.
+Also added tools gastone, gasgui. 
+
+6. REPOS: added basic T2 svn repo URL handler. Not robust, but that's fine.
+
+7. CPU: added Loongon CPU arch support, that should work reasonably well out of 
+the box since also found sample set of cpuinfo files.
+
+Also see CODE 4d for the tool for this item.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. REPOS: See FIX 4. Output was silly for repo reports, that's always been 
+broken, now correctly shows expected (for urpm, eopkg, pisi):
+
+Active urpm repos:
+  1: [repo-name] ~ [repo location]
+  2: [repo-name] ~ [repo location]
+  
+lines per package manager tool, instead of one full repo line per repo in the 
+output:
+
+Active urpm repo: Stable
+  1: [repo location]
+Active urpm repo: Testing
+  1: [repo location]
+  
+2: MAIN::clean_characters(): removed filter for '+' because that can be part of 
+the distro name, like Slackware 15.0+ (current, that is). Hopefully this won't
+create any issues for other name strings, but it should be ok.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. DOCS: inxi-desktop-wm.txt, updated for new wm, bars, LM, launcher/menus.
+
+1b. DOCS: inxi-power.txt: added waylock to lockers sectsion.
+
+1c. DOCS: inxi-repo-package-manager.txt: updated for 3 syntaxes of slpkg, with
+samples. Also updated for mageia urpm, which has special package list rpm 
+requirements.
+
+1d. DOCS: inxi-cpu.txt: added more links and sources for Loongson.
+
+1e. DOCS: inxi-distros.txt: refactored a bit, added top distro names to section
+lists, added T2 instructions.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1a. MAIN: ProgramData: 
+
+* Had redundant busybox hash key data array, first one was replaced by explicit 
+busybox ash version logic in shell, and running one is for init data.
+
+I don't actually know what Perl does when you give it a second case of same key 
+name for a hash. Probably worth finding out. But it worked in testing.
+
+* Cleaned up, made consistent ', # unverified' program data key array comments 
+to make them easier to find/ Ideally one day we'll get people to help figure out 
+these unverified program version data items. Now to find a way to motivate 
+them...
+
+1b. MAIN: PackageData: Added --dbg 67 to make rpm packages handling debuggable.
+Also refactored a bit, again to make rpm stuff debuggable.
+
+1c. MAIN: clean_characters: refactored, now uses references, not copies, and 
+removed '+' from filter. This can be meaningful part of distro name.
+
+2. REPOS: refactored completely slpkg to handle 3 possible config file syntax,
+including the 2024-04-19 update which changes it completely. 
+
+It's tempting to apply this to all multi-line repo syntax handlers, though the
+cost is losing the order the repos appear in the file, since the data now goes 
+into a hash, which Perl does not have ordering, so it has to be sorted on
+constructing of repo line arrays.
+
+3. DEBUGGER: Added kdesktop, kwin_wayland, twin --version data, might be useful.
+kwin_wayland was an oversight, already had kwin_x11 so just never added wl.
+
+4a: TOOLS: made top comment header syntax consistent, added some GPL to ones 
+where I'd forgotten to do that. Updated copyright years. Also made empty line 
+use consistent in all the tool files.
+
+4b. TOOLS: gpu_raw.pl: Got rid of manually updated list of nv numeric keys, and 
+now extract it it automatically, so updates by itself when I add a new nv driver 
+series. Should have made it that way from start, but better late than never. 
+Always trying to chip away at anything manual I have to update for these 
+matching tables, makes maintaining the features easier.
+
+4c. TOOLS: gpu_raw.pl, gpu_ids.pl: added premilimary support for Loongson GPUs.
+Very little data, but did at least get some device IDs for Loongson, but not 
+very reliable or accurate. This will need updates in future. Anyone Chinese 
+users want to help? 
+
+4d. TOOLS: cpu_arch.pl: added Loongon support, first new CPU arch in a while!
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Tue, 18 June 2024 13:16:38 -0700
+
+================================================================================
 Version: 3.3.34
 Patch: 00
 Date: 2024-04-13
@@ -10,7 +923,7 @@ This is a nice point release that corrects and updates numerous smaller, and
 larger, features. Most pressing in terms of numbers affected was the failure
 to detect in display, non console, for Wayland without Xwayland running. But 
 updates will impact a fairly wide range of systems, though mostly are corner 
-case issues, but inxi is all about handling corner cases to make the handliing 
+case issues, but inxi is all about handling corner cases to make the handling 
 of core stuff more robust and less prone to failure or error.
 
 --------------------------------------------------------------------------------
@@ -65,7 +978,7 @@ culprit was forgetting the 'starts with ^ in:
 Thanks Codebergy issue poster thatso in issue #299 for pointing this out.
 
 2. NETWORK: services: was missing nfsd because it's a kernel process, that's 
-corrected. Showed as: [nfsd]
+corrected. Shows as: [nfsd], so its brackets have to be stripped off first.
 
 3. MAIN: primary DISPLAY test fails to check for WAYLAND_DISPLAY and other 
 desktop session environmental variables only present if X/Wayland are running 
@@ -111,12 +1024,19 @@ deepin-kwin_x11. Also for deepin-kwin_wayland.
 in kernel yet but may be. Also added in various filter lists just in case. 
 Search for'nouveau' to find occurances. 
 
-4. CPU: Added more AMD, Intel CPU Ids. The Intel stuff is getting really 
+4a. CPU: Added more AMD, Intel CPU Ids. The Intel stuff is getting really 
 difficult to track, they refuse to adopt sane family updates, keeping it always 
-at 6, and thus cram more and more into finite 2 hexadecimal numbers, leaving 
-marketing terms in place of actual die process engineering. There's only so much 
-I can do to work around this, so if you find errors, do the research, and submit
-corrections, keeping in mind these things are super fuzzy.
+at 6, and thus cram more and more into finite 2 hexadecimal model numbers, 
+leaving marketing terms in place of actual die process engineering. There's only 
+so much I can do to work around this, so if you find errors, do the research, 
+and submit corrections, keeping in mind these things are super fuzzy.
+
+4b. CPU: Added premilinary support for Loongson CPUs. Using regex to detect 
+arch/process info, but not positive how it will handle MIPS tests. No way to 
+fully test without running inxi on an actual Loongson system due to the early 
+MIPS/ARM type tests inxi runs. We'll see. So far only testing with fake cpuinfo 
+files. But it's a start. Any actual Loongson user should test and supply 
+datasets if gpu/cpu info is off.
 
 5. DRIVES: More disk vendors, the endless list. Unhandled list grows slowly, 
 maybe one day someone will step in and figure out what more of them are, 
@@ -153,6 +1073,11 @@ of the items would never have worked due to bad regex, and also simplified by
 shifting empty index 0 from @row to make values same as top sections for main 
 ZFS Array data. The regex was simply too convoluted to work reliably, so it 
 failed under certain cases, FreeBSD Linear ZFS mode for example.
+
+3. CPU: Added data/cpu/loongson cpuinfo data files; added loongson support to
+tools/cpu_arch.pl. We'll see if it works, won't know for a while since needs 
+a hardware run loongson test, this is just theoretical, but fixes should be 
+minor in case it doesn't work.
 
 --------------------------------------------------------------------------------
 -- Harald Hope - Sat, 13 March 2024 19:00:08 -0800
