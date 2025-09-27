@@ -98,3 +98,28 @@
 # All package specific functions shall call 'err_log MSG' if an error
 # is detected that shall terminate the installation.
 ######################################################################
+######################################################################
+# Define any package specific operations that shall be performed when
+# the package is installed.
+######################################################################
+pkg_post_install()
+	{
+
+	# If here, assume install/reinstall/upgrade worked OK. Reset service action.
+
+	readonly r_service_action_pathfile=/var/log/$QPKG_NAME.action
+	readonly r_service_result_pathfile=/var/log/$QPKG_NAME.result
+	local service_result=ok
+
+	if [[ ${REINSTALL_QPKG:=false} = true ]]; then
+		service_action=reinstall
+	elif [[ ${UPGRADE_QPKG:=false} = true ]]; then
+		service_action=upgrade
+	else
+		service_action=install
+	fi
+
+	echo "$service_action" > "$r_service_action_pathfile"
+	echo "$service_result" > "$r_service_result_pathfile"
+
+	}
