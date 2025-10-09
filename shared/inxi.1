@@ -15,7 +15,7 @@
 .\"  with this program; if not, write to the Free Software Foundation, Inc.,
 .\"  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 .\"  
-.TH INXI 1 "2025\-04\-06" "inxi 3.3.38" "inxi manual"
+.TH INXI 1 "2025\-08\-29" "inxi 3.3.39" "inxi manual"
 
 .SH NAME
 inxi \- Command line system information tool for console and IRC
@@ -182,11 +182,22 @@ available capacity of the battery is \fB22.2 Wh\fR.
 
 \fBcharge: 20.1 Wh (95.4%)\fR
 
+If charge percent > 100, adds \fBnote: check\fR. The causes from that can range 
+from driver bugs, hardware bugs, odd behaviors, so there's no way to know why.
+
 The \fBcondition:\fR item shows the remaining available capacity / original 
 design capacity, and then this figure as a percentage of original capacity 
 available in the battery.
 
 \fBcondition: 22.2/36.4 Wh (61%)\fR
+
+Corner cases of failing battery show < 1 Wh and percent values for charge, 
+capacity, and condition, and an alert.
+
+\fBcondition: 0.01/62.6 Wh (0.02%) alert: bad battery?\fR
+
+If health item is available and if it is not 'good', shows \fBhealth:\fR value.
+Always shows with \fB\-x\fR if present.
 
 With \fB\-x\fR, or if voltage difference is critical, \fBvolts:\fR item shows 
 the current voltage, and the \fBmin:\fR voltage. Note that if the current is 
@@ -297,7 +308,7 @@ unless you use those arguments in the command, e.g.: \fBinxi \-ermxx\fR
 
 The basic CPU line is expanded to full CPU data (\fB\-C\fR); the basic disk 
 information line is expanded to full drive information (\fB\-D\fR) plus primary 
-system partion data (\fB\-P\fR), along with adding, if found, RAID (\fB\-R\fR) 
+system partition data (\fB\-P\fR), along with adding, if found, RAID (\fB\-R\fR) 
 and Logical (\fB\-L\fR) items; the Network line (\fB\-N\fR) is expanded to 
 advanced network (\fB\-n\fR). 
 
@@ -1330,6 +1341,11 @@ vendor [product] information.
 
 .TP
 .B \-x \-B\fR
+\- Adds battery \fBhealth:\fR (uncommon. If other than 'good', always shows for
+\fB\-B\fR.
+ 
+\- Adds battery temperature, in C (uncommon).
+ 
 \- Adds vendor/model, battery status (if battery present).
 
 \- Adds attached battery powered peripherals (\fBDevice\-[number]:\fR) if 
@@ -1351,7 +1367,8 @@ data, which tends to be better, so in general don't do that.
 \- Adds \fBboost: [enabled|disabled]\fR if detected, aka \fBturbo\fR. Not all 
 CPUs have this feature.
 
-\- Adds CPU Flags (short list). Use \fB\-f\fR to see full flag/feature list.
+\- Adds CPU \fBFlags\-basic:\fR (short list). Use \fB\-f\fR to see full 
+flag/feature list.
 
 \- Adds CPU microarchitecture + revision (e.g. Sandy Bridge, K8, ARMv8, P6, 
 etc.). Only shows data if detected. Newer microarchitectures will have to be 
@@ -1591,9 +1608,16 @@ the sound API/server.
 
 .TP
 .B \-xx \-B\fR
-\- Adds current power use, in watts.
+\- Adds current power use, in watts (if available).
 
 \- Adds serial number.
+
+\- Adds a \fBcharging:\fR container for all charging specific information.
+
+\- Adds charge cycles (NOTE: there appears to be a problem with the Linux kernel 
+obtaining the cycle count, so this often shows \fB0\fR. There's nothing that can 
+be done about this glitch, the data is simply not available as of 
+2018\-04\-03), Since 0 isn't a real value, shows N/A if not found or 0.
 
 .TP
 .B \-xx \-D\fR
@@ -1864,11 +1888,15 @@ to observation time), if available.
 
 .TP
 .B \-xxx \-B\fR
-\- Adds battery chemistry (e.g. \fBLi\-ion\fR), cycles (NOTE: there appears to
-be a problem with the Linux kernel obtaining the cycle count, so this almost
-always shows \fB0\fR. There's nothing that can be done about this glitch, the
-data is simply not available as of 2018\-04\-03), location (only available from
-\fBdmidecode\fR derived output).
+\- Adds battery temperature (uncommon).
+
+\- Adds battery build date (uncommon).
+
+\- Adds battery chemistry (e.g. \fBLi\-ion\fR)).
+
+\- Adds location (only available from \fBdmidecode\fR derived output.
+
+\- Adds battery charging type (uncommon).
 
 \- Adds attached device \fBrechargeable: [yes|no]\fR information. 
 

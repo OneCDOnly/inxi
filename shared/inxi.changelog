@@ -1,4 +1,263 @@
 ================================================================================
+Version: 3.3.39
+Patch: 00
+Date: 2025-08-29
+--------------------------------------------------------------------------------
+RELEASE NOTES:
+--------------------------------------------------------------------------------
+
+Refactor and updated of the Battery item, that was sorely in need of tightening 
+and better testing and robustness. Now all math occurs either in data sources, 
+to set to consistent units, or in the processing function. Also long overdue 
+fixes for Chinese CPU makers Loongson and XhaoXin. Plus other general fixes and
+updates.
+
+Note the new section UPDATES:, which is for routnely updated data and matching
+tables. These were previously tossed into ENHANCEMENTS:, but that never seemed 
+quite right since they aren't really new features or anything, just ongoing
+updates. So now they go in their own section. This will also make ite easier to
+see what's actually new vs what is just updated.
+
+--------------------------------------------------------------------------------
+SPECIAL THANKS:
+
+1. MrMazda, for plugging away at thankless testing and tasks all these years, 
+keeping the desktop and graphics parts honest.
+
+2. matt-2025, codeberg issue #340, for giving enough data and feedback to expose
+that the Battery item needed a significant refactor to improve reliability and
+accuracy.
+
+3. iv-m, codeberg issue #342, for supplying data required to properly support 
+Loongson CPUs. I've waited a long time to find such data, so it was great to 
+finally get the real debugger data required.
+
+4. Ricky-Tigg: for finding some nice subtle things that needed fixing.
+
+--------------------------------------------------------------------------------
+KNOWN ISSUES:
+
+1a. CPU: cpu_arch is making some guesses about family of zen 7, but no data is 
+available. The guess is that amd is going to give 7 a new family ID. 6 did not 
+get a new family ID afterall, so that's back with 5 now.
+
+1b. CPU: ARCH: I'm finding it, as with GPU, increasingly difficult and tedious 
+to dig up Intel data. I may give up trying at some point because it's getting 
+too convoluted and boring to track. 
+
+2. GRAPHICS: GPU: I'm finding it increasingly difficult to track gpu product IDs
+and their relative architecture data. If you want this to be more accurate and
+reliable, it's probably time for someone other than me to step up and start 
+tracking this data. Intel in particular is extremmely difficult to track since 
+they blend marketing and engineering so badly, both in GPUs and CPUs.
+
+3. BATTERY: Sometimes charge_full is less than charge_now, or energy_full <
+energy_now. This is a bug with the battery, since the _full is supposed to show
+current max capacity when full, which is not the same as the original design 
+capacity, which is almost always more. Since it's not possible to know which
+value is wrong, inxi just shows them as is, which leads to sometimes charge:
+item showing a value > 100, like (110%)> There are too many possible reasons 
+to try to figure it out or guess. It does show note: check now though.
+
+One system that did this stopped immediately whenn I unplugged it, and when I 
+plugged it back in, it showed the correct 100%. So this is something that is 
+not updating, or is getting the wrong data at some times.
+
+--------------------------------------------------------------------------------
+BUGS:
+
+1a. BATTERY: in case /sys power file not readable, tested for is root, not is not
+root. That means the message would not have shown for non root  users, who are 
+who needed to see it.
+
+1b. BATTERY: See Fixes 4. The bug was dividing by zero, but that was just a 
+symptom of the core issue, which required fixing the entire battery item. inxi 
+had prematurely switched 0.01 Wh to 0 with sprintf, which then created the 
+divide by 0 condition, and also some other oddities.
+
+2. CPU: incorrect use of get_defined in one test led to useless result.
+
+--------------------------------------------------------------------------------
+FIXES:
+
+1. Downloader: Tiny::HTTP is supposed to default to no check ssl, but I found a 
+case where it has to be set explicitlly to not check or it does. 
+
+2a. CPU: cpu_arch() had the wrong family ID for amd zen 5 cpus, it had 20 instead
+of 1A, I forgot that was hex number. Also fixed comments there, and made more 
+clear how the hyper confusing amd cpu family matches to what you see in cpuinfo 
+and other places.
+
+2b. CPU: cpu_arch: corrected some Loongson Arch names; fixed glitch that made 
+features use -f message not appear for -Cx with Loongson CPUs. Overall added 
+loongsn to %risc ID method which solved most of the Loongson issues.
+
+3. DesktopData: Extreme corner case, it looks like OpenSuse now correctly does 
+not set the environmental variables used for desktop detection, which then broke 
+kde/tde detections. Note this condition only happens when the session is started 
+as root, AND when kde was started by tdelauncher. I believe the number of people 
+in the world this might affect numbers around 1, maybe 2 or 3 on the outside, 
+and only on new OpenSuse. 
+
+When started as non root, all the environmental variables are set as expected. 
+It is however faintly possible that kde detection might also have failed since 
+that required postiive matches to the environmental variables, but it might get 
+caught later on in a fallback test, I don't know.
+
+3. GRAPHICS: GPU: I changed some Intel GPU ids, with more recent data, but 
+tracking this stuff is getting tiresome, so if there are errors, do the research 
+and help, don't complain.
+
+4. BATTERY: Thanks codeberg issue #340 matt-2025 for noting a crash when his 
+values were 0 for energy_full. Due to premature rounding of 0.01 and connversion 
+to string with sprintf, 0.0 was being treated as a string and not 0.
+
+Also, if energy_full is less than 1, will show the actual energy and of_orig 
+values, using sprintf('%.1g', which trims to first signficant number in decimal.
+
+Battery:
+  ID-1: BAT0 charge: 0.01 Wh (100%) condition: 0.01/62.6 Wh (0.02%)
+    alert: bad battery? volts: 11.7 min: 10.8 model: SANYO 45N1172 type: Li-ion
+    serial: 3058 status: not charging
+    
+Adds an alert: item if percent of original capacity is < 5%, or if energy_full, 
+the current maximum real capacity, is less than 1 Wh.
+
+This is a corner case for sure, first time I'd ever seen a battery this degraded
+but still showing values for Wh available. 
+
+5. MACHINE: dmidecode sourced EEPROM size was in MB instead of having been 
+internally translated to KiB integers then correctly shown as MiB for output.
+
+--------------------------------------------------------------------------------
+UPDATES:
+
+1a. TOOLS: tools/cpu_arch.pl: Expanded Loongson section significantly.
+
+1b. TOOLS: tools/cpu_arch.pl: Added separate ZhaoXin section, before it was with 
+Centaur, which was useless since the two have developed separately. This allows 
+for detecting both types more accurately.
+
+1c: TOOLS: tools/gpu_raw.pl, tools/gpu_ids.pl: added nvidia 580.
+
+2. RAM: tools/ram_vendors.pl > set_ram_vendors(): added CXMT ChangXin Memory 
+Technologie ID.
+
+3. GRAPHICS: GPU: Added new AMD, Intel, Nvidia gpu IDs.
+
+4a. CPU: cp_cpu_arch(): New AMD, Intel cpu IDs, a few changed or fixed with new 
+data.
+
+4b. CPU: cp_cpu_arch(): Big expansion of ZhaoXin CPU arch data, and added 
+explicit detection for zhaozin $cpu->{type}, before fell into centaur.
+
+4c. CPU: cp_cpu_arch(): Big expansion of Loongson CPU arch data, and added 
+explicit detection for loongson $cpu->{type} and $risc{'loongson'} %risc type.,
+
+5. SYSTEM: DistroData: updated ubuntu_id() up to 25-10. Those had fallen behind; 
+updated debian_id() to 15.
+
+6. DRIVES: set_disk_vendors(): More vendors, ID matches. Less than usual, but
+it's getting more likely inxi has it handled. 
+
+--------------------------------------------------------------------------------
+ENHANCEMENTS:
+
+1. BATTERY: Added new fields/values:
+* -B - added note: check if capacity > 100%, causes unknown and inconsistent.
+* -x - health. String report. Always show if health not 'good'. Not common.
+* -x - battery temperature, in C. Not common.
+* -x - append capacity_level string if capacity is present. [not used due to 
+       weird string value critical on a near fully charged battery]
+* -xxx - manufacter date made:, Doesn't show if not available since not common.
+* -xxx - add temp_min/temp_max under temp if available
+* -xxx - add charge_type if found
+* -a - add charge_control_start_threshold/charge_control_end_threshold 
+       charge_behavior if found.
+* -a - add available charge_types list, if found. This will include the active
+       one.
+       
+Changed:
+* -xx - creates new 'charging:' block.
+* -xxx cycles to -xx cycles. And show N/A if not found, I think it's good to 
+know that info is not available.
+
+--------------------------------------------------------------------------------
+CHANGES:
+
+1. BATTERY: Switched voltage decimals to 2 places, and also added 0 to all 
+resultss to both convert back to numeric, and to get rid of extra 0s at end of
+the decimal. Some data sources already had 2 decimal voltages, like OpenBSD, so
+this just makes them all have them. Also slightly reordered output fields to 
+make them fit into somewhat logical sub catetories. Put main battery status 
+into a 'report' container.
+
+2. GRAPHICS: GPU: Changed RDNA-4 release data and process node size. Data for 
+this stuff is getting harder to find that is solid.
+
+3. CPU: For -Cx, shows Flags-basic: instead of Flags if -f is not used. It has
+never been intuitive that there might be more flags, you'd need to be into it
+to get that.
+
+--------------------------------------------------------------------------------
+DOCUMENTATION:
+
+1a. inxi.changelog/pinxi.changelog: fixed 3.3.38 date on bottom, ooops.
+
+1b. inxi.changelog/pinxi.changelog: Added UPDATES: section, this holds updates 
+to existing matching data tables and manually generated matching rules, like gpu 
+ids, cpu microarch data, disk vendors, ram data, etc. inxi has an unfortunately 
+large number of such manually generated rules, or tool generated, and updates to 
+that have never really been enhancements to inxi, it's just an update to 
+somoething that already exists but is missing matching sets.
+
+2a. MAN page: fixed typo.
+
+2b. MAN pages: Added info about bad battery data for -B Battery.
+
+3. MAN/OPTIONS: Updated for new battery features and changes.
+
+4a. DOCS: inxi-cpu.txt: updated the amd cpu family id list, that was not clear,
+but is hopefully more clear now.
+
+4b. DOCS: inxi-cpu.txt; inxi-values.txt: Added loongson docs, and loongson %risc
+values.
+
+4c. DOCS: inxi-cpu.txt: Added zhaoxin docs.
+
+4d: DOCS: inxi-battery.txt: upgraded, added more sections, /sys data types.
+
+--------------------------------------------------------------------------------
+CODE:
+
+1. BATTERY: refactored significantly. Moved all math out of output, remooved all 
+sprintf %.1f in early stages, and moved all advanced processing for all data 
+source types to one function, process_battery_data(), which also got rid of 
+redundant logic, and removed sources of error. It was very clear that Battery 
+item was one of the Bash > Perl literal translation items I did early on, and 
+quickly.
+
+Also got rid of random ways of testing for null data, and switched to using
+undefined as false, and left all numeric values as number types until the very
+last processing stage, where they are converted with sprintf for print output.
+
+Since 0 is now 0 and not the string '0.0', true/false tests work as expected, 
+with 0 values triggering the use of the smaller > 0, < 1 decimal numbers and 
+showing the alert message as well.
+
+2a. MAIN: clean_dmi: failed to filter for SerialNumber as unset value, but did
+oddly have SerNum. Made all default unset strings more robust.
+
+2b: MAIN: Added $risc{'id'} = 'loongson'. Turns out since 5000, it's its own 
+ISA. Also added --risc [available risc types] in case that is easier to remember
+for devs or me.
+
+2c. MAIN: clean_disk(): Added (name\s)?n\/a to cleaner.
+
+--------------------------------------------------------------------------------
+-- Harald Hope - Fri, 29 Aug 2025 15:37:40 -0700
+
+================================================================================
 Version: 3.3.38
 Patch: 00
 Date: 2025-04-06
@@ -53,9 +312,10 @@ been there. This made the 'driver:' for device always show N/A. Solution was to
 just use the other field name, since it's always been there as far as I can 
 tell.
 
-4. MAIN: set_display_size OpenBSD showed errors, because error suppression not
-on for tput. Also is_jnt test passed for "" for some reason, resulting in more
-errors. 
+4. MAIN: set_display_size OpenBSD showed errors, because error suppression not 
+on for tput. Also is_jnt test passed for "", resulting in more errors. Cause was 
+not first testing for 0 length, wnich made 0 occurances of tr/// result match 0 
+length of string.
 
 5. CPU: cpu_sysctl_data failed to test if $line[1] was set. This resulted in 
 OpenBSD errors since the value was 'unknown', which had been stripped out by
@@ -75,6 +335,11 @@ side, which uses pisi.
 
 3. GRAPHICS: New gpu ids: amd, intel, nvidia. Added blackwell gpu ids. Added a 
 missing kepler gpu product ID via manual method.
+
+4. BATTERY: Prompted by codeberg issue #341 checked and found newer battery 
+power data in /sys/class/power_supply.
+
+alarm ([t minimum Ah level]
 
 --------------------------------------------------------------------------------
 CHANGES:
@@ -100,7 +365,7 @@ OpenBSD error which I can't reproduce but a vm instance did since it was missing
 more data.
 
 --------------------------------------------------------------------------------
--- Harald Hope - Tue, 07 Jan 2025 11:34:53 -0800
+-- Harald Hope - Sat, 06 Apr 2025 11:34:53 -0800
 
 ================================================================================
 Version: 3.3.37
@@ -272,22 +537,22 @@ that information. If scaling != 1, also showed scaled dimensions.
 
 For scaled (wayland):
 res:
-   mode: 1680x1050
-   scale: 125% (1.25)
+  mode: 1680x1050
+  scale: 125% (1.25)
       to: 1344x840
 hz: 60
 
 For scaled (xrandr):
 res:
-   mode: 1680x1050
-   scale: 125% (0.8)
+  mode: 1680x1050
+  scale: 125% (0.8)
       to: 1344x840
 hz: 60
 
 For scaling == 1:
 res:
-   mode: 1680x1050
-   scale: 100% (1)
+  mode: 1680x1050
+  scale: 100% (1)
 hz: 60
       
 If no scaling data found, or if less than -Gxxx:
@@ -338,14 +603,14 @@ maintained it when I did the perl inxi rewrite. That would have been the time to
 change it, but I was busy with the rewrite and it didn't register enough.
 
 2a. GRAPHICS: if -xxx and monitor scaling detectable shows if not scaling 1: 
- res: mode: widthxheight scale: 80% (0.8) to: widthxheight 
+res: mode: widthxheight scale: 80% (0.8) to: widthxheight 
 If scaling 1, just shows:
- res: mode: widthxheight scale: 100% (1)
- 
+res: mode: widthxheight scale: 100% (1)
+
 So far scaling can only be detected with xrandr, swaymsg, wayland-info, 
 wlr-randr, and maybe weston-info. This translates the real terms used internally 
 by x11 and wayland.
- 
+
 This is a change from res: widthxheight. 
 
 2b. GRAPHICS: To show hz, now shows with -Gxx, not -Gxxx, it never made sense to
@@ -2975,7 +3240,7 @@ PC-2700 which then allows for mapping.
 
 9. RAM/PROCESSES/INFO/SHORT: Finally tracked down a long time oddity, where for 
 example:
- RAM: total: 31.28 GiB 
+RAM: total: 31.28 GiB 
 does not match 32 GiB physical installed. This is because that is the total 
 available after kernel and system reserved RAM is deducted, and in some cases, 
 GPU allocated RAM. There are also corner cases where the listed amount can be 
@@ -2987,7 +3252,7 @@ man -m/--memory.
 Changed -m, -tm to show: 
 
 System RAM: available: 31.28 GiB used 26.23 GiB (83.9%)
- 
+
 and -I to show: 
 
 Memory: available: 31.28 GiB used 26.23 GiB (83.9%)
@@ -3257,10 +3522,10 @@ version_data() function, which loads all the data based on what is calling it.
 This helps consolidate the logic across usb data sources.
 
 5a. GLOBAL: made functions/methods use same comment syntax for args:
- args: 0:...; 1:...
+args: 0:...; 1:...
 always starting with 0, to match array index. Same syntax for return array index 
 values. In some cases simply note a variable is passed by ref: 
- args: $value passed by reference.
+args: $value passed by reference.
 
 5b. GLOBAL: made all sub/functions/methods follow the same spacing syntax. This 
 seems to be a good compromise for space/readability. Note that adding in these 
@@ -3451,10 +3716,10 @@ pipewire: pw-cat pw-cli wpctl) [+pactl if pipewire-pulse and no pulseaudio
 pulse: pacat pactl pamix pamixer pavucontrol pulsemixer
 roar: roarcat roarctl
 sndiod: aucat midicat mixerctl sndioctl
-	
+  
 Note that inxi-perl/docs/inxi-audio.txt has lists of alternates or rejected
 helpers and tools, but we want to keep that output short and sane.
-	
+  
 3c. AUDIO: For BSDs, if sndiod is detected, adds an API line for sndio. Note 
 this may create 2 API lines for FreeBSD using OSS.
 
@@ -3703,28 +3968,28 @@ combination that may be causing issues.
 3. START: Removed this code block from set_konvi_data. I had left this in place 
 for a release or two to make sure no need for it was found, but it will never be 
 used since it never worked in the first place.
-	# my $config_cmd = '';
-	# there's no current kde 5 konvi config tool that we're aware of. Correct if changes.
-	# This part may never have worked, but I don't have legacy data to determine.
-	# The idea was to get inxi.conf files from konvi data stores, but that was never right.
-	# if (main::check_program('kde4-config')){
-	#	$config_cmd = 'kde4-config --path data';
-	# }
-	# kde5-coinfig never existed, was replaced by $XDG_DATA_HOME in KDE
-	# elsif (main::check_program('kde-config')){
-	# 	$config_cmd = 'kde-config --path data';
-	# }
-	# elsif (main::check_program('qtpaths')){
-	# 	$config_cmd = 'qtpaths --paths GenericDataLocation';
-	# }
-	# The section below is on request of Argonel from the Konversation developer team:
-	# it sources config files like $HOME/.kde/share/apps/konversation/scripts/inxi.conf
-	#  if ($config_cmd){
-	#	  my @data = main::grabber("$config_cmd 2>/dev/null",':');
-	# 	Configs::set(\@data) if @data;
-	#	 main::log_data('dump',"kde config \@data",\@data) if $b_log;
-	# }
-	
+  # my $config_cmd = '';
+  # there's no current kde 5 konvi config tool that we're aware of. Correct if changes.
+  # This part may never have worked, but I don't have legacy data to determine.
+  # The idea was to get inxi.conf files from konvi data stores, but that was never right.
+  # if (main::check_program('kde4-config')){
+  #	$config_cmd = 'kde4-config --path data';
+  # }
+  # kde5-coinfig never existed, was replaced by $XDG_DATA_HOME in KDE
+  # elsif (main::check_program('kde-config')){
+  # 	$config_cmd = 'kde-config --path data';
+  # }
+  # elsif (main::check_program('qtpaths')){
+  # 	$config_cmd = 'qtpaths --paths GenericDataLocation';
+  # }
+  # The section below is on request of Argonel from the Konversation developer team:
+  # it sources config files like $HOME/.kde/share/apps/konversation/scripts/inxi.conf
+  #  if ($config_cmd){
+  #	  my @data = main::grabber("$config_cmd 2>/dev/null",':');
+  # 	Configs::set(\@data) if @data;
+  #	 main::log_data('dump',"kde config \@data",\@data) if $b_log;
+  # }
+  
 4. OPTIONS: in OptionsHandler::post_process(), reorganized the various run and 
 exit triggers, help, configs, recommends, version, etc. All on top now.
 
@@ -4066,7 +4331,7 @@ failure to understand something about the core tech.
 
 2. Changed wrapping of values from 3 words or more to 3 or more words AND length 
 > 24 characters. Saw example of:
- .... used: 28.45 GiB 
+.... used: 28.45 GiB 
   (4.5%)
   
 which isn't desirable.
@@ -4663,14 +4928,14 @@ see it.
 
 # we want to handle ARM errors in main get
 if (!@$rows && !%risc){
-	my $key = 'Message';
-	my $type = 'pci-card-data';
-	if ($pci_tool && $alerts{$pci_tool}->{'action'} eq 'permissions'){
-		$type = 'pci-card-data-root';
-	}
-	@$rows = ({
-	main::key($num++,0,1,$key) => main::message($type,'')
-	});
+  my $key = 'Message';
+  my $type = 'pci-card-data';
+  if ($pci_tool && $alerts{$pci_tool}->{'action'} eq 'permissions'){
+    $type = 'pci-card-data-root';
+  }
+  @$rows = ({
+  main::key($num++,0,1,$key) => main::message($type,'')
+  });
 }
 
 --------------------------------------------------------------------------------
@@ -4932,7 +5197,7 @@ FIXES:
 1. Fixed some disk vendor detection rules.
 
 2. Failing to return default target for systemd/systemctl when no:
- /etc/systemd/system/default.target
+/etc/systemd/system/default.target
 file exists. Corrected to use systemctl get-default as fallback if file doesn't
 exist.
 
@@ -5883,21 +6148,21 @@ more than 1 place. Part of the ongoing process of avoiding extra hash and array
 copies globally. 
 
 2. Moved to consistent undef behaviors. 
- * For lists of variables use () to undefine, changed all of the the following: 
+* For lists of variables use () to undefine, changed all of the the following: 
     1. (@a,$b,$c,%d) = (undef,undef,undef,undef);
     2. (@a,$b,$c,%d) = (undef);
     3. (@a,$b,$c,%d) = undef;
-   to use: (@a,$b,$c,%d) = (); This undefines all the variables in the list.
-   Note that assigning undef to @a in the first example creates an array of 1 
-   key, with the value undef, and (@a,@b) = (undef,undef) creates arrays of 2
-   indexes, or something like that. Not what was wanted.
-   Examples 2 and 3 assign undef to @a: an array of 1 index, value undef, and 
-   undefine the others variables in the list. This was not the desired behavior!
- * For most scalars, arrays, and hashes, use: undef @a; undef $s; undef %h.
- * For some hash and array index values, use $h{a} = undef. These cases may want
-   the key itself to exist, with the value of undef, though I believe: 
+  to use: (@a,$b,$c,%d) = (); This undefines all the variables in the list.
+  Note that assigning undef to @a in the first example creates an array of 1 
+  key, with the value undef, and (@a,@b) = (undef,undef) creates arrays of 2
+  indexes, or something like that. Not what was wanted.
+  Examples 2 and 3 assign undef to @a: an array of 1 index, value undef, and 
+  undefine the others variables in the list. This was not the desired behavior!
+* For most scalars, arrays, and hashes, use: undef @a; undef $s; undef %h.
+* For some hash and array index values, use $h{a} = undef. These cases may want
+  the key itself to exist, with the value of undef, though I believe: 
     undef $h{a};
-   is synonymous, but still have to verify that. 
+  is synonymous, but still have to verify that. 
 
 I did some testing, and realized that some of the undef I had used in the 
 various previous ways of using undef were not actually resulting in the expected 
@@ -6393,7 +6658,7 @@ Options for -Y are:
 * -Y [1-xxx]: Set maximum block line height to given integer.
 * -Y -1: Print out one primary data block item at a time, with -F for example.
 * -Y -2: Do not remove color codes when piped or redirected. Mostly useful for 
-         piping to less -R, to preserve color codes.
+        piping to less -R, to preserve color codes.
 * -Y -3: Restore default unlimited height if LINES_MAX configuration item used.
 
 15. And finally, more disk vendors/vendor ids. As usual. As expected.
@@ -6403,13 +6668,13 @@ CHANGES:
 
 1. If /sys or /proc/cpuinfo speed data available: 
 * For -b CPU item:
-   speed: [speed MHz] min/max: [min]/[max] MHz
+  speed: [speed MHz] min/max: [min]/[max] MHz
   becomes:
-   speed (MHz): avg: [speed] min/max: [min]/[max]
+  speed (MHz): avg: [speed] min/max: [min]/[max]
 * For -C, Speed item 
-   Speed: [speed MHz] min/max: [min]/[max] MHz Cores (MHz): ...
+  Speed: [speed MHz] min/max: [min]/[max] MHz Cores (MHz): ...
   becomes:
-   Speed (MHz): avg: [speed] min/max: [min]/[max] cores: ...
+  Speed (MHz): avg: [speed] min/max: [min]/[max] cores: ...
 * For short form, shows speed/min/max but uses average speed if available.
 
 For -b and -C, only shows one MHz in Speed line starter, which slightly shortens
@@ -6428,8 +6693,8 @@ that's a verbose --admin option after all, no need to save lines!
 4. Going along with Fix 5, give up on trying to pretend we can guess at L2 
 cache, now if only 'cache' data was available from cpuinfo, will just say:
 cache: [cache size]
- note: check
- 
+note: check
+
 and call it a day.
 
 5a. Change default width to 80 columns in display, and 100 and out. Too many 
@@ -6446,15 +6711,15 @@ time to just force 80 column widths as default and call it a day.
 You can change these new defaults using configuration options (these are the 
 previous options, though due to a bug, COLS_MAX_CONSOLE was never being used):
 
- COLS_MAX_CONSOLE=115 # in display, terminal client max width 
- COLS_MAX_IRC=100 
- COLS_MAX_NO_DISPLAY=130 # not in display, no X/Wayland running
- 
+COLS_MAX_CONSOLE=115 # in display, terminal client max width 
+COLS_MAX_IRC=100 
+COLS_MAX_NO_DISPLAY=130 # not in display, no X/Wayland running
+
 5b. Made second and greater rows of a line indent +2 to make it more clear that 
 it is a child row of its parent row. Note that because no arg short form and -I 
 are special types of rows, this behavior is not used, they just print out as 
 usual. This makes for more readable and easy to follow flow of output data.
- 
+
 6. If > 1 physical cpu detected, no longer uses single/dual/triple/quad core 
 strings, rather uses: 2x 2-core. Also uses lower case -core, not -Core.
 
@@ -6983,7 +7248,7 @@ possible errors, and makes pci detections far more robust.
 inxi-legacy/xorg-c, moved branch xiin to /xiin, moved branch inxi-legacy (binxi) 
 to inxi-legacy/inxi-legacy. Those directories each contain all the files each 
 branch had in it. 
- 
+
 This gets rid of some branches clutter, and nobody needs to see those anymore, 
 but if they care, they can look at them. Note that to do this, I had to merge 
 their histories, which was not that nice, but git is just really bad at this 
@@ -7696,15 +7961,15 @@ that can be quite useful.
 
 Note that bluetooth is a real pain for users to debug because you can have:
 
- * Bluetooth Service: enabled/disabled 
- * Bluetooth Service: started/stopped 
- * bluetoothctl: start/stop 
- * bt-adapter: start/stop 
- * hciconfig: start/stop 
- * rfkill: software: block/unblock; hardware: block/unblock - however, for 
-   hardware, that means a physical button has been pressed to disable it, on the 
-   laptop that is.
-	
+* Bluetooth Service: enabled/disabled 
+* Bluetooth Service: started/stopped 
+* bluetoothctl: start/stop 
+* bt-adapter: start/stop 
+* hciconfig: start/stop 
+* rfkill: software: block/unblock; hardware: block/unblock - however, for 
+  hardware, that means a physical button has been pressed to disable it, on the 
+  laptop that is.
+  
 To make matters worse, one tool does not always even know when another tool has 
 changed something, for example, if I rfkill blocked hci0, then unblocked it, 
 hciconfig would keep seeing it as down until it was switched to on with 
@@ -8655,19 +8920,19 @@ difference.
 
 3. There were some missing cases for LVM missing data messages, so the 
 following fixes were added:
- * In cases where lsblk is installed and user is non root, or lvs is not 
- installed, but no lvm data is present, inxi now shows the expected 'Message: 
- No LVM data found.' instead of the permissions or missing program error that 
- showed before. If lsblk is not installed, and lvm is installed (or missing), 
- with lvs not root readable, the permissiosn message (or missing program) will 
- show since at that point, inxi has no way to know if there is lvm data or not.
- 
- * Not an inxi, but rather an Arch Linux packaging bug, the maintainer of lvm
- has made lvs and vgs fail to return error number on non root start, which is
- a bug (pvs does return expected error return). Rather than wait for this bug
- to be fixed, inxi will just test if lvs and lsblk lvm data, it will show 
- permissions message, otherwse the no lvm data message as expected.
- 
+* In cases where lsblk is installed and user is non root, or lvs is not 
+installed, but no lvm data is present, inxi now shows the expected 'Message: 
+No LVM data found.' instead of the permissions or missing program error that 
+showed before. If lsblk is not installed, and lvm is installed (or missing), 
+with lvs not root readable, the permissiosn message (or missing program) will 
+show since at that point, inxi has no way to know if there is lvm data or not.
+
+* Not an inxi, but rather an Arch Linux packaging bug, the maintainer of lvm
+has made lvs and vgs fail to return error number on non root start, which is
+a bug (pvs does return expected error return). Rather than wait for this bug
+to be fixed, inxi will just test if lvs and lsblk lvm data, it will show 
+permissions message, otherwse the no lvm data message as expected.
+
 I think these cover the last unhandled LVM cases I came across, so ideally, the 
 lvm data messages will be reasonably correct.
 
@@ -8937,7 +9202,7 @@ RAID running.
 
 Sample: inxi -D
 Drives:    Local Storage: total: raw: 340.19 GiB usable: 276.38 GiB 
-           lvm-free: 84.61 GiB used: 8.49 GiB (3.1%)
+          lvm-free: 84.61 GiB used: 8.49 GiB (3.1%)
 
 lvm-free is non assigned volume group size, that is, size not assigned to a 
 logical volume in the volume group, but available in the volume group. raw: is 
@@ -9896,17 +10161,17 @@ packages, repos, fits. Note that in some systems getting full package counts
 takes some time so it's an -x option not default. 
 If -rx, -rxx, -ra, package info moved to -r section, and if -Ix, -Ixx, or -Ia,
 the following data shows:
- * -Ix or -rx: show total package counts: Packages: 2429
- * -Ixx or -rxx: shows Packages then counts by package manager located. If there
- was only one package manager with packages, the total moves from right after 
- Packages: to the package manager, like: Packages: apt: 3241 but if there were
- for example 2 or more found, it would show the total then:
- Packages 3245 apt:3241 snap: 4
- * -Ia or -ra: adds package managers with 0 packages managed, those are not
- shown with -xx, and also shows how many of those packages per package manager
- is a library type lib file. 
- Sample: 
- inxi -Iay1
+* -Ix or -rx: show total package counts: Packages: 2429
+* -Ixx or -rxx: shows Packages then counts by package manager located. If there
+was only one package manager with packages, the total moves from right after 
+Packages: to the package manager, like: Packages: apt: 3241 but if there were
+for example 2 or more found, it would show the total then:
+Packages 3245 apt:3241 snap: 4
+* -Ia or -ra: adds package managers with 0 packages managed, those are not
+shown with -xx, and also shows how many of those packages per package manager
+is a library type lib file. 
+Sample: 
+inxi -Iay1
 Info:
   Processes: 470
   Uptime: 8d 10h 42m
@@ -10069,7 +10334,7 @@ Audio:
 CODE:
 
 1. Redo of all internal full key strings, added two new # separated items:
- xx#x#y#key-name:
+xx#x#y#key-name:
   * xx remains the main 0 padded 2 digit sorter per row/block.
   * x is a new 0/1 boolean, that shows if the value is a container or not. As 
     currently implemented probably not hugely useful since it won't say when
@@ -10304,21 +10569,21 @@ outside the post or issue report, which is hard to read. Hopefully support
 people will catch onto this one.
 
 4. This closes issue #217 - Adds dmidecode based extra data:
- -xxx - shows CPU voltage and external clock speeds
- -a - shows CPU socket type and base/boost: speed items. These are --admin
- options because neither is particularly reliable, sometimes they are right,
- sometimes they aren't, as usual with dmi data. As far as tests show, base 
- speed, what dmidecode misleadingly calls 'Current Speed', which it isn't,
- is the actual normal non throttled speed of the CPU / motherboard setup.
- boost is what dmidecode calls 'Max Speed', which it also isn't, though
- sometimes it is, as with AMD cpus with boost, and no overclocking. With
- overclocking, sometimes base will be higher, sometimes the actual real
- current cpu speeds will be higher than all the max/boost values.
- Motherboard CPU socket type is likewise randomly correct, incorrect, empty,
- misleading, depending on the age and type of the system, and the CPU
- vendor. It appears that in general, AMD CPUs will be more or less right
- if they have this data, and Intel CPUs will sometimes be right, sometimes
- not, or empty. For > 1 CPU systems, the data is much less reliable.
+-xxx - shows CPU voltage and external clock speeds
+-a - shows CPU socket type and base/boost: speed items. These are --admin
+options because neither is particularly reliable, sometimes they are right,
+sometimes they aren't, as usual with dmi data. As far as tests show, base 
+speed, what dmidecode misleadingly calls 'Current Speed', which it isn't,
+is the actual normal non throttled speed of the CPU / motherboard setup.
+boost is what dmidecode calls 'Max Speed', which it also isn't, though
+sometimes it is, as with AMD cpus with boost, and no overclocking. With
+overclocking, sometimes base will be higher, sometimes the actual real
+current cpu speeds will be higher than all the max/boost values.
+Motherboard CPU socket type is likewise randomly correct, incorrect, empty,
+misleading, depending on the age and type of the system, and the CPU
+vendor. It appears that in general, AMD CPUs will be more or less right
+if they have this data, and Intel CPUs will sometimes be right, sometimes
+not, or empty. For > 1 CPU systems, the data is much less reliable.
 
 --------------------------------------------------------------------------------
 -- Harald Hope - Sun, 31 May 2020 14:26:37 -0700
@@ -10731,15 +10996,15 @@ production systems. This issue report led to 2 new options: --memory-short,
 which only shows a basic RAM report.
 
 Memory:    RAM: total: 31.43 GiB used: 14.98 GiB (47.7%) 
-           Report: arrays: 1 slots: 4 modules: 2 type: DDR4
+          Report: arrays: 1 slots: 4 modules: 2 type: DDR4
 
 And a 2nd, --memory-modules, only shows the occupied slots. This can be useful 
 in situations where it's a server or vm with a lot of slots, most empty:
 
 Memory:    RAM: total: 31.43 GiB used: 15.44 GiB (49.1%) 
-           Array-1: capacity: 256 GiB slots: 4 EC: None 
-           Device-1: DIMM 1 size: 16 GiB speed: 2400 MT/s 
-           Device-2: DIMM 1 size: 16 GiB speed: 2400 MT/s
+          Array-1: capacity: 256 GiB slots: 4 EC: None 
+          Device-1: DIMM 1 size: 16 GiB speed: 2400 MT/s 
+          Device-2: DIMM 1 size: 16 GiB speed: 2400 MT/s
 
 Note that both of these options trigger -m, so -m itself is not required.
 
@@ -11416,12 +11681,12 @@ These options are to help debug debugger failures, and so far have been tested
 and solved the failures, so I'm adding them all to the main man and help menu, 
 thus raising them to the level of supported tools. These were enormously helpful 
 in solving proc or sys debugger hangs.
- * --debug-proc
- * --debug-proc-print
- * --debug-no-sys
- * --debug-sys
- * --debug-sys-print
- 
+* --debug-proc
+* --debug-proc-print
+* --debug-no-sys
+* --debug-sys
+* --debug-sys-print
+
 2. Added findmnt output to debugger, that may be useful in the future. Also 
 added df -kTPa to also catch hidden partitions in debugger.
 
@@ -11551,16 +11816,16 @@ database, somehow you have users that manage to use every obscure usb/ssd/hdd
 known to humanity.
 
 14. Big update to --admin, now has the following:
- A: partitions: shows 'raw size: ' of partition, this lets users see the amount 
- of file system overhead, along with the available size as usual.
- B: partitions: show percent of raw in size:
- C: partitions: show if root, block size of partition file system. Uses
- blockdev --getbsz <part>
- D: partition: swap: show swappiness and vfs cache pressure, with (default)
- or (default [default value]) added. This apparently can help debugging some 
- kernel issues etc. Whatever, I'll take someone's word for that.
- E: Disks: show block size: logical: physical: 
- 
+A: partitions: shows 'raw size: ' of partition, this lets users see the amount 
+of file system overhead, along with the available size as usual.
+B: partitions: show percent of raw in size:
+C: partitions: show if root, block size of partition file system. Uses
+blockdev --getbsz <part>
+D: partition: swap: show swappiness and vfs cache pressure, with (default)
+or (default [default value]) added. This apparently can help debugging some 
+kernel issues etc. Whatever, I'll take someone's word for that.
+E: Disks: show block size: logical: physical: 
+
 15. New option and configuration item: --partition-sort / PARTITION_SORT 
 This lets users change default mount point sort order to any available ordering
 in the partition item. Man page and help menu show options.
@@ -11579,12 +11844,12 @@ number, like 3.1. Note that this is going to be wrong for BSDs, but that's fine.
 
 2. Changed slightly the output of Memory item, now it follows the following 
 rules:
- A: if -m/--memory is triggered (> -v4, or -m) Memory line always shows in 
- Memory:  item, which makes sense. Note that -m overrides all other options of 
- where Memory minireport could be located.
- B: if -tm is triggered, and -I is not triggered, Memory shows in in -tm
- C: if -I is triggered, and -m is not triggered, Memory: shows in -I line.
- D: no change in short form inxi no arg output, Memory is there.
+A: if -m/--memory is triggered (> -v4, or -m) Memory line always shows in 
+Memory:  item, which makes sense. Note that -m overrides all other options of 
+where Memory minireport could be located.
+B: if -tm is triggered, and -I is not triggered, Memory shows in in -tm
+C: if -I is triggered, and -m is not triggered, Memory: shows in -I line.
+D: no change in short form inxi no arg output, Memory is there.
 
 --------------------------------------------------------------------------------
 -- Harald Hope - Mon, 24 Sep 2018 15:58:00 -0700
@@ -11949,37 +12214,37 @@ response to a second set of issues in #156 by gm10, USB drivers.
 Depending on the system, using only /sys data, while slightly less informative,
 is between 20 and 2000 milliseconds faster, so if you want speed, either use the 
 new --usb-sys option, or the configuration file USB_SYS=[true|false] option.
- 1. switched to cleaner more efficient data structures
- 2. added ports count to hub report, linux and BSD.
- 3. added [--usb|-A|-N] -xxx serial for Device items, if present.
- 4. added --usb -xx drivers, per interface, can be 1 or more drivers. 
- 5. fully refactored -A and -N usb device logic, far cleaner and simple now,
- much easier to work with, no more hacks to find things and match them.
- 6. USB type: now comes from /sys, and is in general going to be more accurate
- than the lsusb -v based method, which was always an ugly and incomplete hack.
- As with drivers, it also now lists all the interface types found per device, 
- not just the first one as with the previous method. Note that HID means the 
- more verbose: Human Interface Device, but I shortened it. Now that the type: 
- data is created by inxi reading the class/subclass/protocal IDs, and then 
- figuring out what to do itself, I can have quite a bit more flexibility in 
- terms of how type is generated.
- 7. added --usb -xxx interfaces: [count] for devices, which lists the device 
- interface count. This can be useful to determine if say, a usb/keyboard adapter 
- is a 2 interface device. Note that Audio devices generally have many interfaces, 
- since they do more than 1 thing (audio output, microphone input, etc.).
- 8. Support for user configuration file item: USB_SYS=[true|false]. This is 
- useful if you want to see only the /sys version of the data, or if you want the 
- significant speed boost not using lsusb offers, particularly on older systems 
- with a complex  USB setup, many buses, many devices, etc. 
- New option --usb-tool overrides USB_SYS value, and forces lsusb use.
- 9. New options: --usb-sys - forces all usb items to use /sys data, and skip 
- lsusb. Note that you still have to use the feature options, like --usb, -A, or 
- -N. This can lead to a significant improvement in execution time for inxi.
- 10. Rather than the previous bus:device ID string, to go along with the 
- internal sorting strings used, inxi now shows the real Bus / port /port ids, 
- like:
- 1-3.2.1:3 - Bus-Port[.port]:device id.
- 
+1. switched to cleaner more efficient data structures
+2. added ports count to hub report, linux and BSD.
+3. added [--usb|-A|-N] -xxx serial for Device items, if present.
+4. added --usb -xx drivers, per interface, can be 1 or more drivers. 
+5. fully refactored -A and -N usb device logic, far cleaner and simple now,
+much easier to work with, no more hacks to find things and match them.
+6. USB type: now comes from /sys, and is in general going to be more accurate
+than the lsusb -v based method, which was always an ugly and incomplete hack.
+As with drivers, it also now lists all the interface types found per device, 
+not just the first one as with the previous method. Note that HID means the 
+more verbose: Human Interface Device, but I shortened it. Now that the type: 
+data is created by inxi reading the class/subclass/protocal IDs, and then 
+figuring out what to do itself, I can have quite a bit more flexibility in 
+terms of how type is generated.
+7. added --usb -xxx interfaces: [count] for devices, which lists the device 
+interface count. This can be useful to determine if say, a usb/keyboard adapter 
+is a 2 interface device. Note that Audio devices generally have many interfaces, 
+since they do more than 1 thing (audio output, microphone input, etc.).
+8. Support for user configuration file item: USB_SYS=[true|false]. This is 
+useful if you want to see only the /sys version of the data, or if you want the 
+significant speed boost not using lsusb offers, particularly on older systems 
+with a complex  USB setup, many buses, many devices, etc. 
+New option --usb-tool overrides USB_SYS value, and forces lsusb use.
+9. New options: --usb-sys - forces all usb items to use /sys data, and skip 
+lsusb. Note that you still have to use the feature options, like --usb, -A, or 
+-N. This can lead to a significant improvement in execution time for inxi.
+10. Rather than the previous bus:device ID string, to go along with the 
+internal sorting strings used, inxi now shows the real Bus / port /port ids, 
+like:
+1-3.2.1:3 - Bus-Port[.port]:device id.
+
 6. Added support for Xvesa display server. Thanks for exposing that one, 
 TinyCore! 
 
@@ -12036,7 +12301,7 @@ USB:
   Hub: 4:1 usb: 3.1 type: Full speed (or root) hub 
   Hub: 5:1 usb: 2.0 type: Full speed (or root) hub 
   Hub: 6:1 usb: 3.0 type: Full speed (or root) hub
-           
+          
 Corrected: sort by BusID in 3.0.21:
 
 inxi --usb
@@ -13464,8 +13729,8 @@ BUGS:
 1. RAID - both mdraid and zfs bugs corrected. Issue #135
 
 2. EPYC cpu wrong die count corrected, and also added support for the EPYC type.
-   Issue #135
-   
+  Issue #135
+  
 3. Possible ARM data glitch that made reader fail on a non-existent file.
 
 --------------------------------------------------------------------------------
@@ -14560,8 +14825,8 @@ Note the following changes required to make the wraps more consistent:
 
 -S - the gcc/bits have been made separate, like: bits: 32 gcc: 5.3
 -C - the new microarchitecture -x option now is: arch: K7 [for example]
-     cache wraps to next line with arch. with -f, bmips now shows on same line 
-     as arch/cache
+    cache wraps to next line with arch. with -f, bmips now shows on same line 
+    as arch/cache
 
 --------------------------------------------------------------------------------
 -- Harald Hope - Sun, 30 Jul 2017 14:02:33 -0700
@@ -15110,9 +15375,9 @@ respectively.
 
 $HOME/.config $HOME/.local/share to place the inxi data directory, which was 
 previously here:
-   
+  
 $HOME/.inxi
-   
+  
 3. If neither of these cases are present, inxi will default to its legacy user 
 data: $HOME/.inxi as before
 
@@ -15134,7 +15399,7 @@ legacy man page would show up instead, which isn't good, but there was no
 perfect fix for the man issue so I just picked the easiest way, ignoring all man 
 pages installed into /usr/share/man/man1 and treating them as final location, 
 otherwise using if present the /usr/local/share/man/man1 location for new manual 
- install users.
+install users.
 
 Also, for users with existing man locations and an inxi manually installed, you 
 have to update to inxi current, then move your man file to 
@@ -15905,7 +16170,7 @@ New version, new tarball. Two great bug report, issues.
 
 1. Tightened runit init detection to use proc, note that if runit works on BSDs 
 inxi will require more data to properly detect it on BSDs..
-   
+  
 2. Use openrc runlevel tests natively if openrc detected.
 
 3. Fixed subtle issue with alias to inxi file and paths.
@@ -16240,7 +16505,7 @@ data.
 
 6. BSDs, maybe all, different syntax in xorg.0.log made unloaded gfx drivers not 
 show, that is fixed now.
-   
+  
 -p fixed file system type in -p/-P for openBSD, now shows.
 
 -I / inxi short - fixed used memory, did not show in openBSD, now does.
@@ -16931,27 +17196,27 @@ awk 'BEGIN {total=0} /^total/ {total = total + $4 }END {print total}'
 result:
 614562228
 
- df  -P -T --exclude-type=aufs --exclude-type=devfs --exclude-type=devtmpfs  \
- --exclude-type=fdescfs --exclude-type=iso9660 --exclude-type=linprocfs \
- --exclude-type=procfs --exclude-type=squashfs --exclude-type=sysfs \
- --exclude-type=tmpfs --exclude-type=unionfs | awk 'BEGIN {total=0} \
- {total = total + $4 }END {print total}'
+df  -P -T --exclude-type=aufs --exclude-type=devfs --exclude-type=devtmpfs  \
+--exclude-type=fdescfs --exclude-type=iso9660 --exclude-type=linprocfs \
+--exclude-type=procfs --exclude-type=squashfs --exclude-type=sysfs \
+--exclude-type=tmpfs --exclude-type=unionfs | awk 'BEGIN {total=0} \
+{total = total + $4 }END {print total}'
 
- result:
- 614562236
- 
- In my tests, using --total gives a greater disk user percentage than adding the 
+result:
+614562236
+
+In my tests, using --total gives a greater disk user percentage than adding the 
 results up manually, as inxi did before, and still does for systems without 
 --total for df.
- 
- df  --total  -P -T --exclude-type=aufs --exclude-type=devfs \
- --exclude-type=devtmpfs --exclude-type=fdescfs --exclude-type=iso9660 \
- --exclude-type=linprocfs --exclude-type=procfs --exclude-type=squashfs \
- --exclude-type=sysfs --exclude-type=tmpfs --exclude-type=unionfs
- 
+
+df  --total  -P -T --exclude-type=aufs --exclude-type=devfs \
+--exclude-type=devtmpfs --exclude-type=fdescfs --exclude-type=iso9660 \
+--exclude-type=linprocfs --exclude-type=procfs --exclude-type=squashfs \
+--exclude-type=sysfs --exclude-type=tmpfs --exclude-type=unionfs
+
 Filesystem Type 1024-blocks      Used Available Capacity Mounted on
 /dev/disk/by-label/root-data\
-           ext3    12479556  12015624    335816      98% /
+          ext3    12479556  12015624    335816      98% /
 /dev/sdc9  ext3    20410156  18013360   1979432      91% /home
 /dev/sdc7  ext3     4904448   3785460   1016672      79% /media/sdb2
 /dev/sdc5  ext3    30382896  27467220   2295720      93% /var/www/m
@@ -18489,8 +18754,8 @@ application the shell is running in.
 
 Example: 
 Info:      Processes: 271 Uptime: 5:36 Memory: 3255.8/4048.5MB Runlevel: 3 
-           Gcc sys: 4.7.2 alt: 4.0/4.2/4.4/4.5/4.6 
-           Client: Shell (bash 4.2.37 - started in konsole) inxi: 1.8.33
+          Gcc sys: 4.7.2 alt: 4.0/4.2/4.4/4.5/4.6 
+          Client: Shell (bash 4.2.37 - started in konsole) inxi: 1.8.33
 
 --------------------------------------------------------------------------------
 -- Harald Hope - Mon, 28 Jan 2013 15:57:15 -0800
